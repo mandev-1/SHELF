@@ -1,0 +1,35 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+@import "gridstack/dist/gridstack.min.css";
+
+:root {
+  --font-sans: "DM Sans", system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* GridStack overrides for ShELF dark theme */
+.shelf-grid.grid-stack {
+  --gridstack-background: transparent;
+}
+.shelf-grid .grid-stack-item .grid-stack-item-content {
+  border-radius: 0.75rem;
+  overflow: hidden;
+  left: 4px;
+  right: 4px;
+  top: 4px;
+  bottom: 4px;
+}
+.shelf-grid .grid-stack-item.ui-draggable-dragging .grid-stack-item-content,
+.shelf-grid .grid-stack-item.ui-resizable-resizing .grid-stack-item-content {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
