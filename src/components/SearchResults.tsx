@@ -29,7 +29,7 @@ export function SearchResults({ results, loading, query }: SearchResultsProps) {
     return (
       <Surface
         variant="secondary"
-        className="rounded-2xl border border-emerald-400/15 bg-black/40 p-8 text-center shadow-[0_0_0_1px_rgba(16,185,129,0.04)]"
+        className="results-glow rounded-2xl border border-emerald-400/15 bg-black/50 p-8 text-center"
       >
         <p className="text-sm uppercase tracking-[0.2em] text-emerald-300/70">No results</p>
         <p className="mt-2 text-zinc-300">No bookmarks match “{query}”.</p>
@@ -40,26 +40,26 @@ export function SearchResults({ results, loading, query }: SearchResultsProps) {
   return (
     <Surface
       variant="secondary"
-      className="rounded-2xl border border-white/10 overflow-hidden"
+      className="results-glow rounded-2xl border border-emerald-400/15 bg-black/45 overflow-hidden"
     >
-      <div className="p-3 border-b border-white/10">
-        <p className="text-zinc-400 text-sm">
+      <div className="border-b border-emerald-400/10 bg-white/5 p-3">
+        <p className="text-sm text-emerald-200/80">
           {results.length} result{results.length !== 1 ? "s" : ""}
         </p>
       </div>
-      <ul className="divide-y divide-white/10 max-h-[60vh] overflow-y-auto">
+      <ul className="divide-y divide-emerald-400/10 max-h-[60vh] overflow-y-auto">
         {results.map((node) => (
-          <li key={node.id} className="px-4 py-3 hover:bg-white/5 transition-colors">
+          <li key={node.id} className="px-4 py-3 transition-colors hover:bg-emerald-400/5">
             <Link
               href={node.url!}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 no-underline text-zinc-200 hover:text-white"
+              className="flex items-center gap-3 no-underline text-zinc-200 hover:text-emerald-100"
             >
               <img
                 src={faviconUrl(node.url!)}
                 alt=""
-                className="w-5 h-5 rounded shrink-0"
+                className="w-5 h-5 rounded shrink-0 ring-1 ring-emerald-300/20"
               />
               <span className="truncate flex-1">{node.title || node.url}</span>
             </Link>

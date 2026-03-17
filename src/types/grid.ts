@@ -14,9 +14,29 @@ export interface ShelfPrompt {
   id: string;
   title: string;
   body: string;
+  versions?: ShelfPromptVersion[];
+  activeVersionId?: string;
 }
 
 export type ShelfPromptMap = Record<string, ShelfPrompt>;
+
+export interface ShelfPromptVersion {
+  id: string;
+  code: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface ShelfBackupData {
+  version: number;
+  layout: ShelfLayoutItem[];
+  colors: ShelfSectionColors;
+  labels: Record<string, string>;
+  prompts: ShelfPromptMap;
+  shelfName: string;
+  gridLocked: boolean;
+  promptRows: 1 | 2;
+}
 
 export const ACCENT_COLORS = [
   "#ef4444",

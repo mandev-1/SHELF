@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createFolder,
   createBookmark,
+  deleteBookmarkNode,
   moveBookmark,
   useBookmarksTree,
 } from "../hooks/useBookmarks";
@@ -22,6 +23,19 @@ function isFolder(node: BookmarkTreeNode) {
 
 function folderChildren(node: BookmarkTreeNode) {
   return (node.children ?? []).filter((n) => n.url);
+}
+
+function collectFolders(nodes: BookmarkTreeNode[] | null): BookmarkTreeNode[] {
+  const out: BookmarkTreeNode[] = [];
+  const walk = (node: BookmarkTreeNode) => {
+    if (!isFolder(node)) return;
+    out.push(node);
+    (node.children ?? []).forEach((child) => {
+      if (child.url === undefined) walk(child);
+    });
+  };
+  (nodes ?? []).forEach(walk);
+  return out;
 }
 
 function getTitle(node: BookmarkTreeNode) {
@@ -46,15 +60,19 @@ function FolderCard({
   node,
   accentColor,
   label,
+  gridLocked,
   onColorChange,
   onLabelChange,
+  onDeleteFolder,
   onDropBookmark,
 }: {
   node: BookmarkTreeNode;
   accentColor?: string;
   label?: string;
+  gridLocked: boolean;
   onColorChange: (id: string, color: string | null) => void;
   onLabelChange: (id: string, label: string | null) => void;
+  onDeleteFolder: (id: string) => void;
   onDropBookmark: (bookmarkId: string, folderId: string) => void;
 }) {
   const links = folderChildren(node);
@@ -73,7 +91,7 @@ function FolderCard({
 
   return (
     <div
-      className="grid-stack-item-content h-full flex flex-row rounded-xl border border-white/10 bg-white/5 overflow-hidden min-h-0"
+      className="group grid-stack-item-content h-full flex flex-row rounded-xl border border-white/10 bg-white/5 overflow-hidden min-h-0"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
@@ -136,6 +154,29 @@ function FolderCard({
               </Popover.Dialog>
             </Popover.Content>
           </Popover>
+          {!["0", "1", "2"].includes(node.id) && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(`Delete "${label || getTitle(node)}"?`)) {
+                  onDeleteFolder(node.id);
+                }
+              }}
+              className={`rounded-full border border-red-400/15 bg-black/30 p-2 text-red-300 transition hover:border-red-300/40 hover:bg-red-500/10 hover:text-red-200 ${
+                gridLocked ? "hidden" : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
+              }`}
+              aria-label="Delete folder"
+              title="Delete folder"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-[1.8]">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 11v6" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14 11v6" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 7l1 13h10l1-13" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 7V4h6v3" />
+              </svg>
+            </button>
+          )}
         </div>
         <div className="flex-1 overflow-auto p-2 space-y-1">
           {links.length === 0 ? (
@@ -171,30 +212,59 @@ function FolderCard({
 
 export function BookmarkGrid() {
   const { tree, error, reload } = useBookmarksTree();
-  const { layout: savedLayout, colors, labels, ready, saveLayout, setSectionColor, setShelfLabel } = useShelfStorage();
+  const {
+    layout: savedLayout,
+    colors,
+    labels,
+    gridLocked,
+    ready,
+    saveLayout,
+    setSectionColor,
+    setShelfLabel,
+    setGridLocked,
+    exportBackup,
+    importBackup,
+  } = useShelfStorage();
   const gridRef = useRef<HTMLDivElement>(null);
   const gridInstanceRef = useRef<GridStack | null>(null);
   const [adding, setAdding] = useState(false);
   const [addingBookmark, setAddingBookmark] = useState(false);
   const [moving, setMoving] = useState(false);
-  const [locked, setLocked] = useState(false);
-
-  const folders = useMemo(() => (tree ?? []).filter(isFolder), [tree]);
+  const [showSettings, setShowSettings] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folders = useMemo(() => collectFolders(tree), [tree]);
   const layout = useMemo(() => {
     const byId = new Map<string, { id: string; x: number; y: number; w: number; h: number }>();
     savedLayout.forEach((item) => {
       const n = normalizeLayoutItem(item);
       if (n.id) byId.set(n.id, n);
     });
-    return folders.map((node, i) => byId.get(node.id) ?? { id: node.id, x: (i % 3) * 4, y: Math.floor(i / 3) * 3, w: DEFAULT_W, h: DEFAULT_H });
+    const existing = [...byId.values()];
+    const maxY = 1 + existing.length ? Math.max(...existing.map((item) => item.y + item.h)) : 0;
+    const maxXOnLastRow = 1 +existing
+      .filter((item) => item.y + item.h === maxY)
+      .reduce((max, item) => Math.max(max, item.x + item.w), 0);
+    let appendX = maxXOnLastRow;
+    let appendY = maxY;
+    return folders.map((node) => {
+      const existingItem = byId.get(node.id);
+      if (existingItem) return existingItem;
+      const item = { id: node.id, x: appendX, y: appendY, w: DEFAULT_W, h: DEFAULT_H };
+      appendX += DEFAULT_W;
+      if (appendX + DEFAULT_W > COLUMNS) {
+        appendX = 0;
+        appendY += DEFAULT_H;
+      }
+      return item;
+    });
   }, [folders, savedLayout]);
 
   useEffect(() => {
     if (!gridRef.current || !ready || folders.length === 0) return;
     gridInstanceRef.current?.destroy(false);
-    const grid = GridStack.init({ column: COLUMNS, cellHeight: 80, margin: 8, float: true, animate: true }, gridRef.current);
+    const grid = GridStack.init({ column: COLUMNS, cellHeight: 80, margin: "12px 10px 12px 10px", float: true, animate: true }, gridRef.current);
     gridInstanceRef.current = grid;
-    grid.enableMove(!locked);
+    grid.enableMove(!gridLocked);
     grid.enableResize(true);
     const handleChange = () => saveLayout(grid.save() as ShelfLayoutItem[]);
     grid.on("change", handleChange);
@@ -203,7 +273,13 @@ export function BookmarkGrid() {
       grid.destroy(false);
       gridInstanceRef.current = null;
     };
-  }, [folders.length, ready, saveLayout, locked]);
+  }, [folders.length, ready, saveLayout, gridLocked]);
+
+  const removeFolderWithCollapse = async (id: string) => {
+    saveLayout(savedLayout.filter((item) => item.id !== id));
+    await deleteBookmarkNode(id);
+    await reload();
+  };
 
   if (tree === null || !ready) {
     return (
@@ -226,59 +302,142 @@ export function BookmarkGrid() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-zinc-400">Drag cards to reorder them. Drop bookmarks into a folder card to move them.</p>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-zinc-100"
-          onPress={async () => {
-            setAdding(true);
-            try {
-              await createFolder("New Folder");
-            } finally {
-              setAdding(false);
-            }
-          }}
-          isDisabled={adding}
-        >
-          + Folder
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-zinc-100"
-          onPress={async () => {
-            const url = window.prompt("Bookmark URL");
-            if (!url) return;
-            const title = window.prompt("Bookmark title", new URL(url).hostname) || url;
-            setAddingBookmark(true);
-            try {
-              await createBookmark(title, url);
-            } finally {
-              setAddingBookmark(false);
-            }
-          }}
-          isDisabled={addingBookmark}
-        >
-          + Bookmark
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-zinc-100"
+            onPress={async () => {
+              setAdding(true);
+              try {
+                await createFolder("New Folder");
+                await reload();
+              } finally {
+                setAdding(false);
+              }
+            }}
+            isDisabled={adding}
+          >
+            + Folder
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-zinc-100"
+            onPress={async () => {
+              const url = window.prompt("Bookmark URL");
+              if (!url) return;
+              const title = window.prompt("Bookmark title", new URL(url).hostname) || url;
+              setAddingBookmark(true);
+              try {
+                await createBookmark(title, url);
+                await reload();
+              } finally {
+                setAddingBookmark(false);
+              }
+            }}
+            isDisabled={addingBookmark}
+          >
+            + Bookmark
+          </Button>
+        </div>
       </div>
-      <button
-        type="button"
-        onClick={() => {
-          const next = !locked;
-          setLocked(next);
-          gridInstanceRef.current?.enableMove(!next);
-          gridInstanceRef.current?.enableResize(true);
+      {showSettings && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowSettings(false)}
+        >
+          <div
+            className="absolute bottom-20 right-4 w-56 rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => {
+                const blob = new Blob([JSON.stringify(exportBackup(), null, 2)], {
+                  type: "application/json",
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `shelf-backup-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                setShowSettings(false);
+              }}
+            >
+              <span>Export backup</span>
+              <span className="text-xs text-emerald-300/60">JSON</span>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <span>Import backup</span>
+              <span className="text-xs text-emerald-300/60">Upload</span>
+            </button>
+          </div>
+        </div>
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const text = await file.text();
+          const parsed = JSON.parse(text) as Parameters<typeof importBackup>[0];
+          importBackup(parsed);
+          setShowSettings(false);
+          e.currentTarget.value = "";
         }}
-        className="fixed bottom-4 left-4 z-50 rounded-full border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-300 opacity-0 transition-opacity hover:opacity-100 focus:opacity-100"
-        aria-label={locked ? "Unlock grid movement" : "Lock grid movement"}
-        title={locked ? "Unlock grid movement" : "Lock grid movement"}
-      >
-        {locked ? "Locked" : "Unlocked"}
-      </button>
-      <div ref={gridRef} className="grid-stack shelf-grid" data-gs-column={COLUMNS}>
+      />
+      <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setShowSettings((v) => !v)}
+          className="rounded-full border border-white/10 bg-black/30 p-2 text-zinc-300 transition-all hover:border-white/20 hover:bg-black/45 hover:text-white"
+          aria-label="Open settings"
+          title="Settings"
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current stroke-[1.8]">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 3.75h3l.6 2.1a6.7 6.7 0 0 1 1.5.9l2.1-.7 1.5 2.6-1.5 1.5c.1.3.1.7.1 1s0 .7-.1 1l1.5 1.5-1.5 2.6-2.1-.7a6.7 6.7 0 0 1-1.5.9l-.6 2.1h-3l-.6-2.1a6.7 6.7 0 0 1-1.5-.9l-2.1.7-1.5-2.6 1.5-1.5c-.1-.3-.1-.7-.1-1s0-.7.1-1L4.8 9.3l1.5-2.6 2.1.7c.5-.4 1-.7 1.5-.9l.6-2.1Z" />
+            <circle cx="12" cy="12" r="2.5" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const next = !gridLocked;
+            setGridLocked(next);
+            gridInstanceRef.current?.enableMove(!next);
+            gridInstanceRef.current?.enableResize(true);
+          }}
+          className="rounded-full border border-white/10 bg-black/30 p-2 text-zinc-300 transition-all hover:border-white/20 hover:bg-black/45 hover:text-white"
+          aria-label={gridLocked ? "Unlock grid movement" : "Lock grid movement"}
+          title={gridLocked ? "Unlock grid movement" : "Lock grid movement"}
+        >
+          {gridLocked ? (
+            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current stroke-[1.8]">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 11V9a6 6 0 1 1 12 0v2" />
+              <rect x="5" y="11" width="14" height="10" rx="2.5" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current stroke-[1.8]">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 11V9a3 3 0 0 1 5.2-2.1" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 11h12" />
+              <rect x="5" y="11" width="14" height="10" rx="2.5" />
+            </svg>
+          )}
+        </button>
+      </div>
+      <div ref={gridRef} className="grid-stack shelf-grid pb-[2px]" data-gs-column={COLUMNS}>
         {folders.map((node, i) => {
           const pos = layout[i];
           if (!pos) return null;
@@ -288,8 +447,10 @@ export function BookmarkGrid() {
                 node={node}
                 accentColor={colors[node.id]}
                 label={labels[node.id]}
+                gridLocked={gridLocked}
                 onColorChange={setSectionColor}
                 onLabelChange={setShelfLabel}
+                onDeleteFolder={removeFolderWithCollapse}
                 onDropBookmark={async (bookmarkId, folderId) => {
                   setMoving(true);
                   try {

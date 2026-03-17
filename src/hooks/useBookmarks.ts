@@ -66,6 +66,11 @@ export async function createFolder(title: string, parentId = "1") {
   return chrome.bookmarks.create({ parentId, title });
 }
 
+export async function deleteBookmarkNode(id: string) {
+  if (!chrome?.bookmarks) return null;
+  return chrome.bookmarks.removeTree(id);
+}
+
 export async function moveBookmark(id: string, parentId: string) {
   if (!chrome?.bookmarks) return null;
   return chrome.bookmarks.move(id, { parentId });

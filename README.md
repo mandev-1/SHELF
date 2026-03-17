@@ -1,5 +1,11 @@
 # ShELF · Bookmarks
 
+```bash
+npm run release
+npm run updaterelease         ### <---- This will update the release in same folder
+```
+
+
 A minimal, serverless Chrome/Brave extension that turns your new tab into a bookmark organizer. Built with **HeroUI v3**, **React 19**, and **Tailwind v4**.
 
 ## Features

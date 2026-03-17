@@ -8,7 +8,7 @@ import { PromptLibraryCard } from "./components/PromptLibraryCard";
 
 function App() {
   const [searchQuery, setSearchQuery] = useState("");
-  const { shelfName, setShelfName, prompts, savePrompts } = useShelfStorage();
+  const { shelfName, setShelfName, prompts, savePrompts, updatePrompt, promptRows, setPromptRows } = useShelfStorage();
   const [editingName, setEditingName] = useState(false);
   const { results: searchResults, loading: searchLoading } =
     useBookmarksSearch(searchQuery);
@@ -71,9 +71,17 @@ function App() {
               onUpdatePrompt={(id, next) => {
                 savePrompts({
                   ...prompts,
-                  [id]: { id, title: next.title, body: next.body },
+                  [id]: next,
                 });
               }}
+              onDeletePrompt={(id) => {
+                const next = { ...prompts };
+                delete next[id];
+                savePrompts(next);
+              }}
+              onUpdatePromptMeta={(id, updater) => updatePrompt(id, updater)}
+              promptRows={promptRows}
+              onPromptRowsChange={setPromptRows}
             />
           </div>
           {showSearch ? (
