@@ -84,3 +84,11 @@ export async function createBookmark(
   if (!chrome?.bookmarks) return null;
   return chrome.bookmarks.create({ parentId, title, url });
 }
+
+export async function updateBookmark(
+  id: string,
+  changes: { title?: string; url?: string }
+) {
+  if (!chrome?.bookmarks) return;
+  await chrome.bookmarks.update(id, changes);
+}

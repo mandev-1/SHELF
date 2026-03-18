@@ -6,6 +6,7 @@ import {
   createBookmark,
   deleteBookmarkNode,
   moveBookmark,
+  updateBookmark,
   useBookmarksTree,
 } from "../hooks/useBookmarks";
 import { useShelfStorage } from "../hooks/useShelfStorage";
@@ -104,6 +105,7 @@ function FolderCard({
   onUpdateSeparators,
   bookmarkViews,
   onSetBookmarkExpanded,
+  onRenameBookmark,
 }: {
   node: BookmarkTreeNode;
   accentColor?: string;
@@ -118,6 +120,7 @@ function FolderCard({
   onUpdateSeparators: (folderId: string, seps: ShelfFolderSeparator[]) => void;
   bookmarkViews: Record<string, { expanded?: boolean }>;
   onSetBookmarkExpanded: (bookmarkId: string, expanded: boolean) => void;
+  onRenameBookmark: (bookmarkId: string, newTitle: string) => Promise<void>;
 }) {
   const items = renderFolderItems(node, separators);
   const [editingLabel, setEditingLabel] = useState(false);
@@ -125,9 +128,10 @@ function FolderCard({
   const [showMenu, setShowMenu] = useState(false);
   const [dropHint, setDropHint] = useState<{ overId: string; place: "before" | "after" } | null>(null);
   const [bookmarkMenu, setBookmarkMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [hoverExpandedId, setHoverExpandedId] = useState<string | null>(null);
   const bookmarkMenuOpen = bookmarkMenu !== null;
   const bookmarkMenuRef = useRef<HTMLDivElement | null>(null);
-  const hoverMenuTimerRef = useRef<number | null>(null);
+  const hoverExpandTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setDraftLabel(label ?? getTitle(node));
@@ -153,22 +157,12 @@ function FolderCard({
 
   useEffect(() => {
     return () => {
-      if (hoverMenuTimerRef.current !== null) {
-        window.clearTimeout(hoverMenuTimerRef.current);
-        hoverMenuTimerRef.current = null;
+      if (hoverExpandTimerRef.current !== null) {
+        window.clearTimeout(hoverExpandTimerRef.current);
+        hoverExpandTimerRef.current = null;
       }
     };
   }, []);
-
-  const openBookmarkMenuFromEl = (bookmarkId: string, el: HTMLElement) => {
-    const rect = el.getBoundingClientRect();
-    const menuW = 180; // min-w-44-ish
-    const menuH = 120;
-    const margin = 8;
-    const x = Math.min(window.innerWidth - menuW - margin, Math.max(margin, rect.right + 8));
-    const y = Math.min(window.innerHeight - menuH - margin, Math.max(margin, rect.top));
-    setBookmarkMenu({ id: bookmarkId, x, y });
-  };
 
   const readDragPayload = (dt: DataTransfer) => {
     const sepRaw = dt.getData("application/x-shelf-separator");
@@ -302,6 +296,22 @@ function FolderCard({
               }}
             >
               {bookmarkMenu && bookmarkViews[bookmarkMenu.id]?.expanded ? "Make normal" : "Make bigger"}
+            </button>
+            <button
+              type="button"
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10"
+              onClick={async () => {
+                const id = bookmarkMenu!.id;
+                const bookmark = (node.children ?? []).find((c: BookmarkTreeNode) => c.id === id);
+                const currentTitle = bookmark?.title ?? "";
+                const newTitle = window.prompt("Rename bookmark", currentTitle);
+                if (newTitle !== null && newTitle.trim() !== "") {
+                  await onRenameBookmark(id, newTitle.trim());
+                }
+                setBookmarkMenu(null);
+              }}
+            >
+              Rename
             </button>
             <button
               type="button"
@@ -476,21 +486,19 @@ function FolderCard({
                     e.stopPropagation();
                     setBookmarkMenu({ id: item.node.id, x: e.clientX, y: e.clientY });
                   }}
-                  onMouseEnter={(e) => {
-                    if (hoverMenuTimerRef.current !== null) window.clearTimeout(hoverMenuTimerRef.current);
-                    const el = e.currentTarget as HTMLDivElement;
-                    hoverMenuTimerRef.current = window.setTimeout(() => {
-                      hoverMenuTimerRef.current = null;
-                      // don't auto-open if a menu is already open
-                      if (bookmarkMenuOpen) return;
-                      openBookmarkMenuFromEl(item.node.id, el);
+                  onMouseEnter={() => {
+                    if (hoverExpandTimerRef.current !== null) window.clearTimeout(hoverExpandTimerRef.current);
+                    hoverExpandTimerRef.current = window.setTimeout(() => {
+                      hoverExpandTimerRef.current = null;
+                      setHoverExpandedId(item.node.id);
                     }, 1200);
                   }}
                   onMouseLeave={() => {
-                    if (hoverMenuTimerRef.current !== null) {
-                      window.clearTimeout(hoverMenuTimerRef.current);
-                      hoverMenuTimerRef.current = null;
+                    if (hoverExpandTimerRef.current !== null) {
+                      window.clearTimeout(hoverExpandTimerRef.current);
+                      hoverExpandTimerRef.current = null;
                     }
+                    setHoverExpandedId(null);
                   }}
                   onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
                     e.dataTransfer.setData("text/plain", item.node.id);
@@ -499,9 +507,9 @@ function FolderCard({
                       JSON.stringify({ id: item.node.id, parentId: node.id })
                     );
                     e.dataTransfer.effectAllowed = "move";
-                    if (hoverMenuTimerRef.current !== null) {
-                      window.clearTimeout(hoverMenuTimerRef.current);
-                      hoverMenuTimerRef.current = null;
+                    if (hoverExpandTimerRef.current !== null) {
+                      window.clearTimeout(hoverExpandTimerRef.current);
+                      hoverExpandTimerRef.current = null;
                     }
                   }}
                   onDragOver={(e: React.DragEvent<HTMLDivElement>) => {
@@ -555,7 +563,9 @@ function FolderCard({
                     }
                   }}
                   className={`cursor-move ${
-                    bookmarkViews[item.node.id]?.expanded ? "rounded-xl border border-emerald-400/15 bg-black/25 p-3" : ""
+                    (bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id)
+                      ? "rounded-xl border border-emerald-400/15 bg-black/25 p-3"
+                      : ""
                   }`}
                 >
                   {dropHint?.overId === item.node.id && dropHint.place === "before" && (
@@ -566,7 +576,7 @@ function FolderCard({
                     target="_blank"
                     rel="noopener noreferrer"
                     className={
-                      bookmarkViews[item.node.id]?.expanded
+                      bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id
                         ? "flex items-center gap-3 text-zinc-200 hover:text-white no-underline hover:underline underline-offset-2 w-full"
                         : "flex items-center gap-2 text-zinc-300 hover:text-white text-xs truncate no-underline hover:underline underline-offset-1 w-full"
                     }
@@ -574,13 +584,27 @@ function FolderCard({
                     <img
                       src={faviconUrl(item.node.url!)}
                       alt=""
-                      className={bookmarkViews[item.node.id]?.expanded ? "w-12 h-12 shrink-0 rounded-lg" : "w-4 h-4 shrink-0 rounded"}
+                      className={
+                        bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id
+                          ? "w-12 h-12 shrink-0 rounded-lg"
+                          : "w-4 h-4 shrink-0 rounded"
+                      }
                     />
-                    <div className={bookmarkViews[item.node.id]?.expanded ? "min-w-0" : ""}>
-                      <div className={bookmarkViews[item.node.id]?.expanded ? "truncate text-sm font-semibold" : "truncate"}>
+                    <div
+                      className={
+                        bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id ? "min-w-0" : ""
+                      }
+                    >
+                      <div
+                        className={
+                          bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id
+                            ? "truncate text-sm font-semibold"
+                            : "truncate"
+                        }
+                      >
                         {item.node.title || item.node.url}
                       </div>
-                      {bookmarkViews[item.node.id]?.expanded && (
+                      {(bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id) && (
                         <div className="mt-0.5 truncate text-xs text-zinc-400">{item.node.url}</div>
                       )}
                     </div>
@@ -1078,6 +1102,9 @@ export function BookmarkGrid() {
                   onUpdateSeparators={(folderId, seps) => setFolderSeparators(folderId, seps)}
                   bookmarkViews={bookmarkViews}
                   onSetBookmarkExpanded={setBookmarkExpanded}
+                  onRenameBookmark={async (bookmarkId, newTitle) => {
+                    await updateBookmark(bookmarkId, { title: newTitle });
+                  }}
                   onDropBookmark={async (bookmarkId, folderId) => {
                     setMoving(true);
                     try {

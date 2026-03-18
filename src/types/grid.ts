@@ -56,6 +56,13 @@ export interface ShelfPromptVersion {
   createdAt: string;
 }
 
+export interface ShelfPillarTodoItem {
+  id: string;
+  text: string;
+  done: boolean;
+  url?: string;
+}
+
 export interface ShelfBackupData {
   version: number;
   layout: ShelfLayoutItem[];
@@ -64,6 +71,8 @@ export interface ShelfBackupData {
   separators: ShelfFolderSeparatorMap;
   goals: ShelfGoalMap;
   showGoals: boolean;
+  pillarPins?: { top: string[]; list?: string[] };
+  pillarTodos?: ShelfPillarTodoItem[];
   prompts: ShelfPromptMap;
   shelfName: string;
   gridLocked: boolean;

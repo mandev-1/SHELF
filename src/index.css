@@ -13,6 +13,40 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Scrollbar styling – dark theme (Chrome/Edge Windows, WebKit) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(63 63 70) rgb(24 24 27);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgb(24 24 27); /* zinc-900 */
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgb(63 63 70); /* zinc-600 */
+  border-radius: 5px;
+  border: 2px solid rgb(24 24 27);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(82 82 91); /* zinc-500 */
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: rgb(113 113 122); /* zinc-400 */
+}
+
+*::-webkit-scrollbar-corner {
+  background: rgb(24 24 27);
+}
+
 #root {
   min-height: 100vh;
 }
