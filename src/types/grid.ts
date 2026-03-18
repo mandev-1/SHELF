@@ -23,9 +23,31 @@ export type ShelfPromptMap = Record<string, ShelfPrompt>;
 export interface ShelfFolderSeparator {
   id: string;
   createdAt: string;
+  /**
+   * Insert this separator before the bookmark link at this index (0-based).
+   * Values >= links.length render at the end of the list.
+   */
+  atIndex?: number;
 }
 
 export type ShelfFolderSeparatorMap = Record<string, ShelfFolderSeparator[]>;
+
+export interface ShelfGoal {
+  id: string;
+  title: string;
+  goal: string;
+  progress: number;
+  label?: string; // header label (default: "Goal")
+  linkUrl?: string; // optional "Continue" link
+}
+
+export type ShelfGoalMap = Record<string, ShelfGoal>;
+
+export interface ShelfBookmarkView {
+  expanded?: boolean;
+}
+
+export type ShelfBookmarkViewMap = Record<string, ShelfBookmarkView>;
 
 export interface ShelfPromptVersion {
   id: string;
@@ -40,6 +62,8 @@ export interface ShelfBackupData {
   colors: ShelfSectionColors;
   labels: Record<string, string>;
   separators: ShelfFolderSeparatorMap;
+  goals: ShelfGoalMap;
+  showGoals: boolean;
   prompts: ShelfPromptMap;
   shelfName: string;
   gridLocked: boolean;

@@ -71,9 +71,9 @@ export async function deleteBookmarkNode(id: string) {
   return chrome.bookmarks.removeTree(id);
 }
 
-export async function moveBookmark(id: string, parentId: string) {
+export async function moveBookmark(id: string, parentId: string, index?: number) {
   if (!chrome?.bookmarks) return null;
-  return chrome.bookmarks.move(id, { parentId });
+  return chrome.bookmarks.move(id, index === undefined ? { parentId } : { parentId, index });
 }
 
 export async function createBookmark(

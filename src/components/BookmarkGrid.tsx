@@ -10,12 +10,13 @@ import {
 } from "../hooks/useBookmarks";
 import { useShelfStorage } from "../hooks/useShelfStorage";
 import type { BookmarkTreeNode } from "../types/bookmarks";
-import type { ShelfLayoutItem } from "../types/grid";
+import type { ShelfFolderSeparator, ShelfGoal, ShelfLayoutItem } from "../types/grid";
 import { ACCENT_COLORS } from "../types/grid";
 
 const COLUMNS = 12;
 const DEFAULT_W = 4;
 const DEFAULT_H = 3;
+const GOAL_H = 1;
 
 function isFolder(node: BookmarkTreeNode) {
   return node.url === undefined;
@@ -25,24 +26,36 @@ function folderChildren(node: BookmarkTreeNode) {
   return (node.children ?? []).filter((n) => n.url);
 }
 
-function renderFolderItems(node: BookmarkTreeNode, separators: number[] = []) {
+function renderFolderItems(node: BookmarkTreeNode, separators: ShelfFolderSeparator[] = []) {
   const links = folderChildren(node);
   const items: Array<
     | { type: "link"; key: string; node: BookmarkTreeNode }
-    | { type: "separator"; key: string }
+    | { type: "separator"; key: string; sep: ShelfFolderSeparator }
   > = [];
-  let separatorIndex = 0;
-  const separatorSet = new Set(separators);
+  const bounded = separators
+    .filter(Boolean)
+    .map((s) => ({ ...s, atIndex: typeof s.atIndex === "number" ? s.atIndex : 999999 }))
+    .sort((a, b) => (a.atIndex ?? 0) - (b.atIndex ?? 0));
+
+  const byIndex = new Map<number, ShelfFolderSeparator[]>();
+  bounded.forEach((sep) => {
+    const at = Math.max(0, Math.min(links.length, Math.floor(sep.atIndex ?? links.length)));
+    const list = byIndex.get(at) ?? [];
+    list.push(sep);
+    byIndex.set(at, list);
+  });
+
+  const pushSeps = (at: number) => {
+    const seps = byIndex.get(at);
+    if (!seps?.length) return;
+    seps.forEach((sep) => items.push({ type: "separator", key: `sep-${sep.id}`, sep }));
+  };
+
   links.forEach((link, index) => {
-    if (separatorSet.has(index)) {
-      items.push({ type: "separator", key: `separator-${separatorIndex}` });
-      separatorIndex += 1;
-    }
+    pushSeps(index);
     items.push({ type: "link", key: link.id, node: link });
   });
-  if (separatorSet.has(links.length)) {
-    items.push({ type: "separator", key: `separator-${separatorIndex}` });
-  }
+  pushSeps(links.length);
   return items;
 }
 
@@ -88,26 +101,128 @@ function FolderCard({
   onDeleteFolder,
   onAddSeparator,
   onDropBookmark,
+  onUpdateSeparators,
+  bookmarkViews,
+  onSetBookmarkExpanded,
 }: {
   node: BookmarkTreeNode;
   accentColor?: string;
   label?: string;
   gridLocked: boolean;
-  separators: number[];
+  separators: ShelfFolderSeparator[];
   onColorChange: (id: string, color: string | null) => void;
   onLabelChange: (id: string, label: string | null) => void;
   onDeleteFolder: (id: string) => void;
   onAddSeparator: (id: string) => void;
   onDropBookmark: (bookmarkId: string, folderId: string) => void;
+  onUpdateSeparators: (folderId: string, seps: ShelfFolderSeparator[]) => void;
+  bookmarkViews: Record<string, { expanded?: boolean }>;
+  onSetBookmarkExpanded: (bookmarkId: string, expanded: boolean) => void;
 }) {
   const items = renderFolderItems(node, separators);
   const [editingLabel, setEditingLabel] = useState(false);
   const [draftLabel, setDraftLabel] = useState(label ?? getTitle(node));
   const [showMenu, setShowMenu] = useState(false);
+  const [dropHint, setDropHint] = useState<{ overId: string; place: "before" | "after" } | null>(null);
+  const [bookmarkMenu, setBookmarkMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const bookmarkMenuOpen = bookmarkMenu !== null;
+  const bookmarkMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setDraftLabel(label ?? getTitle(node));
   }, [label, node.id, node.title]);
+
+  useEffect(() => {
+    if (!bookmarkMenuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setBookmarkMenu(null);
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (bookmarkMenuRef.current && target && bookmarkMenuRef.current.contains(target)) return;
+      setBookmarkMenu(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("mousedown", onMouseDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("mousedown", onMouseDown, true);
+    };
+  }, [bookmarkMenuOpen]);
+
+  const readDragPayload = (dt: DataTransfer) => {
+    const sepRaw = dt.getData("application/x-shelf-separator");
+    if (sepRaw) {
+      try {
+        const parsed = JSON.parse(sepRaw) as { sepId?: string; folderId?: string };
+        if (parsed?.sepId && parsed?.folderId) {
+          return { kind: "separator" as const, sepId: parsed.sepId, folderId: parsed.folderId };
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const raw = dt.getData("application/x-shelf-bookmark");
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as { id?: string; parentId?: string };
+        if (parsed?.id) return { kind: "bookmark" as const, id: parsed.id, parentId: parsed.parentId };
+      } catch {
+        // ignore
+      }
+    }
+    const id = dt.getData("text/plain");
+    return id ? { kind: "bookmark" as const, id } : null;
+  };
+
+  const moveWithinFolder = async (
+    bookmarkId: string,
+    targetChildId: string,
+    place: "before" | "after",
+    sourceParentId?: string
+  ) => {
+    const children = node.children ?? [];
+    const fromIndex = children.findIndex((c) => c.id === bookmarkId);
+    const targetIndex = children.findIndex((c) => c.id === targetChildId);
+    if (targetIndex < 0) return;
+
+    // if we don't know the source parent, assume different => no index shift
+    const sameParent = sourceParentId ? sourceParentId === node.id : fromIndex >= 0;
+    let toIndex = targetIndex + (place === "after" ? 1 : 0);
+
+    if (sameParent && fromIndex >= 0 && fromIndex < toIndex) toIndex -= 1;
+    if (sameParent && fromIndex === toIndex) return;
+
+    await moveBookmark(bookmarkId, node.id, toIndex);
+  };
+
+  const commitSeparators = (next: ShelfFolderSeparator[]) => {
+    onUpdateSeparators(node.id, next);
+  };
+
+  const moveSeparator = (sepId: string, atIndex: number, place: "before" | "after") => {
+    const linksLen = folderChildren(node).length;
+    const boundedAt = Math.max(0, Math.min(linksLen, Math.floor(atIndex)));
+    const next = (separators ?? []).filter(Boolean).map((s) => ({ ...s }));
+    const from = next.findIndex((s) => s.id === sepId);
+    if (from < 0) return;
+    const [moved] = next.splice(from, 1);
+    moved.atIndex = boundedAt;
+
+    // insert into a stable order: by atIndex, then keep existing order, but honor before/after within the same atIndex
+    let insertAt = next.findIndex((s) => (s.atIndex ?? 999999) > boundedAt);
+    if (insertAt === -1) insertAt = next.length;
+    if (place === "after") {
+      while (insertAt < next.length && (next[insertAt].atIndex ?? 999999) === boundedAt) insertAt += 1;
+    }
+    next.splice(insertAt, 0, moved);
+    commitSeparators(next);
+  };
+
+  const deleteSeparator = (sepId: string) => {
+    commitSeparators((separators ?? []).filter((s) => s.id !== sepId));
+  };
 
   const commitLabel = () => {
     const next = draftLabel.trim();
@@ -126,8 +241,17 @@ function FolderCard({
       }}
       onDrop={(e) => {
         e.preventDefault();
-        const bookmarkId = e.dataTransfer.getData("text/plain");
-        if (bookmarkId) onDropBookmark(bookmarkId, node.id);
+        const payload = readDragPayload(e.dataTransfer);
+        if (!payload) return;
+        if (payload.kind === "separator") {
+          // move separator to end of list for this folder
+          if (payload.folderId !== node.id) return;
+          moveSeparator(payload.sepId, folderChildren(node).length, "after");
+          setDropHint(null);
+          return;
+        }
+        onDropBookmark(payload.id, node.id);
+        setDropHint(null);
       }}
     >
       <div className="shrink-0 w-1 min-w-[4px] self-stretch rounded-l-xl" style={{ backgroundColor: accentColor || "transparent" }} aria-hidden />
@@ -139,6 +263,35 @@ function FolderCard({
           setShowMenu(true);
         }}
       >
+        {bookmarkMenuOpen && (
+          <div
+            ref={bookmarkMenuRef}
+            className="fixed z-[80] min-w-44 rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16)]"
+            style={{ top: bookmarkMenu!.y, left: bookmarkMenu!.x }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10"
+              onClick={() => {
+                const id = bookmarkMenu!.id;
+                const isExpanded = !!bookmarkViews[id]?.expanded;
+                onSetBookmarkExpanded(id, !isExpanded);
+                setBookmarkMenu(null);
+              }}
+            >
+              {bookmarkMenu && bookmarkViews[bookmarkMenu.id]?.expanded ? "Make normal" : "Make bigger"}
+            </button>
+            <button
+              type="button"
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-white/5"
+              onClick={() => setBookmarkMenu(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
         {showMenu && (
           <div className="absolute z-20 mt-12 ml-3 rounded-2xl border border-emerald-400/15 bg-black/95 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16)]">
             <button
@@ -243,7 +396,57 @@ function FolderCard({
           ) : (
             items.map((item) =>
               item.type === "separator" ? (
-                <div key={item.key} className="my-2 h-px w-full bg-gradient-to-r from-transparent via-emerald-300/75 to-transparent" />
+                <div
+                  key={item.key}
+                  draggable
+                  onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
+                    e.dataTransfer.setData(
+                      "application/x-shelf-separator",
+                      JSON.stringify({ sepId: item.sep.id, folderId: node.id })
+                    );
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragOver={(e: React.DragEvent<HTMLDivElement>) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const payload = readDragPayload(e.dataTransfer);
+                    if (!payload || payload.kind !== "separator") return;
+                    if (payload.folderId !== node.id) return;
+                    if (payload.sepId === item.sep.id) return;
+                    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                    const place: "before" | "after" = e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+                    setDropHint({ overId: item.sep.id, place });
+                  }}
+                  onDragLeave={(e) => {
+                    const related = e.relatedTarget as Node | null;
+                    if (related && e.currentTarget.contains(related)) return;
+                    setDropHint(null);
+                  }}
+                  onDrop={(e: React.DragEvent<HTMLDivElement>) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const payload = readDragPayload(e.dataTransfer);
+                    if (!payload || payload.kind !== "separator") return;
+                    if (payload.folderId !== node.id) return;
+                    moveSeparator(payload.sepId, item.sep.atIndex ?? 0, dropHint?.place ?? "before");
+                    setDropHint(null);
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    deleteSeparator(item.sep.id);
+                  }}
+                  title="Click to delete separator"
+                  className="cursor-move select-none"
+                >
+                  {dropHint?.overId === item.sep.id && dropHint.place === "before" && (
+                    <div className="-mt-0.5 mb-1 h-0.5 w-full rounded bg-emerald-300/80 shadow-[0_0_18px_rgba(74,222,128,0.35)]" />
+                  )}
+                  <div className="my-2 h-px w-full bg-gradient-to-r from-transparent via-emerald-300/75 to-transparent" />
+                  {dropHint?.overId === item.sep.id && dropHint.place === "after" && (
+                    <div className="mt-1 h-0.5 w-full rounded bg-emerald-300/80 shadow-[0_0_18px_rgba(74,222,128,0.35)]" />
+                  )}
+                </div>
               ) : (
                 <div
                   key={item.key}
@@ -251,27 +454,258 @@ function FolderCard({
                   onContextMenu={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    setShowMenu(true);
+                    setBookmarkMenu({ id: item.node.id, x: e.clientX, y: e.clientY });
                   }}
                   onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
                     e.dataTransfer.setData("text/plain", item.node.id);
+                    e.dataTransfer.setData(
+                      "application/x-shelf-bookmark",
+                      JSON.stringify({ id: item.node.id, parentId: node.id })
+                    );
                     e.dataTransfer.effectAllowed = "move";
                   }}
-                  className="cursor-move"
+                  onDragOver={(e: React.DragEvent<HTMLDivElement>) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const payload = readDragPayload(e.dataTransfer);
+                    if (!payload) return;
+                    if (payload.kind === "separator") {
+                      if (payload.folderId !== node.id) return;
+                      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                      const place: "before" | "after" = e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+                      setDropHint({ overId: item.node.id, place });
+                      e.dataTransfer.dropEffect = "move";
+                      return;
+                    }
+
+                    if (payload.id === item.node.id) {
+                      setDropHint(null);
+                      return;
+                    }
+                    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                    const place: "before" | "after" = e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+                    setDropHint({ overId: item.node.id, place });
+                    e.dataTransfer.dropEffect = "move";
+                  }}
+                  onDragLeave={(e) => {
+                    // avoid flicker when moving between nested elements
+                    const related = e.relatedTarget as Node | null;
+                    if (related && e.currentTarget.contains(related)) return;
+                    setDropHint(null);
+                  }}
+                  onDrop={async (e: React.DragEvent<HTMLDivElement>) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const payload = readDragPayload(e.dataTransfer);
+                    if (!payload) return;
+                    if (payload.kind === "separator") {
+                      if (payload.folderId !== node.id) return;
+                      // compute link index of this item within folderChildren()
+                      const links = folderChildren(node);
+                      const linkIndex = links.findIndex((c) => c.id === item.node.id);
+                      if (linkIndex < 0) return;
+                      moveSeparator(payload.sepId, dropHint?.place === "after" ? linkIndex + 1 : linkIndex, "before");
+                      setDropHint(null);
+                      return;
+                    }
+                    try {
+                      await moveWithinFolder(payload.id, item.node.id, dropHint?.place ?? "before", payload.parentId);
+                    } finally {
+                      setDropHint(null);
+                    }
+                  }}
+                  className={`cursor-move ${
+                    bookmarkViews[item.node.id]?.expanded ? "rounded-xl border border-emerald-400/15 bg-black/25 p-3" : ""
+                  }`}
                 >
+                  {dropHint?.overId === item.node.id && dropHint.place === "before" && (
+                    <div className="-mt-0.5 mb-1 h-0.5 w-full rounded bg-emerald-300/80 shadow-[0_0_18px_rgba(74,222,128,0.35)]" />
+                  )}
                   <Link
                     href={item.node.url!}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-zinc-300 hover:text-white text-xs truncate no-underline hover:underline underline-offset-1 w-full"
+                    className={
+                      bookmarkViews[item.node.id]?.expanded
+                        ? "flex items-center gap-3 text-zinc-200 hover:text-white no-underline hover:underline underline-offset-2 w-full"
+                        : "flex items-center gap-2 text-zinc-300 hover:text-white text-xs truncate no-underline hover:underline underline-offset-1 w-full"
+                    }
                   >
-                    <img src={faviconUrl(item.node.url!)} alt="" className="w-4 h-4 shrink-0 rounded" />
-                    <span className="truncate">{item.node.title || item.node.url}</span>
+                    <img
+                      src={faviconUrl(item.node.url!)}
+                      alt=""
+                      className={bookmarkViews[item.node.id]?.expanded ? "w-12 h-12 shrink-0 rounded-lg" : "w-4 h-4 shrink-0 rounded"}
+                    />
+                    <div className={bookmarkViews[item.node.id]?.expanded ? "min-w-0" : ""}>
+                      <div className={bookmarkViews[item.node.id]?.expanded ? "truncate text-sm font-semibold" : "truncate"}>
+                        {item.node.title || item.node.url}
+                      </div>
+                      {bookmarkViews[item.node.id]?.expanded && (
+                        <div className="mt-0.5 truncate text-xs text-zinc-400">{item.node.url}</div>
+                      )}
+                    </div>
                   </Link>
+                  {dropHint?.overId === item.node.id && dropHint.place === "after" && (
+                    <div className="mt-1 h-0.5 w-full rounded bg-emerald-300/80 shadow-[0_0_18px_rgba(74,222,128,0.35)]" />
+                  )}
                 </div>
               )
             )
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GoalCard({
+  goal,
+  onUpdateGoal,
+}: {
+  goal: ShelfGoal;
+  onUpdateGoal: (id: string, next: ShelfGoal) => void;
+}) {
+  const percent = Math.max(0, Math.min(100, goal.progress));
+  const fillStop = `${percent}%`;
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const menuOpen = menuPos !== null;
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const headerLabel = goal.label?.trim() ? goal.label.trim() : "Goal";
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuPos(null);
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (menuRef.current && target && menuRef.current.contains(target)) return;
+      setMenuPos(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("mousedown", onMouseDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("mousedown", onMouseDown, true);
+    };
+  }, [menuOpen]);
+
+  const addOrEditLink = () => {
+    const url = window.prompt("Link URL", goal.linkUrl ?? "");
+    if (!url?.trim()) return;
+    onUpdateGoal(goal.id, { ...goal, linkUrl: url.trim() });
+  };
+
+  const changeHeaderTitle = () => {
+    const next = window.prompt("Header title", headerLabel);
+    if (!next?.trim()) return;
+    onUpdateGoal(goal.id, { ...goal, label: next.trim() });
+  };
+
+  return (
+    <div
+      className="grid-stack-item-content mt-[15px] mb-[15px] h-full min-h-0 overflow-hidden rounded-xl border-[3px] border-blue-400 text-slate-900 shadow-[0_0_0_1px_rgba(59,130,246,0.18),0_0_28px_rgba(59,130,246,0.12)]"
+      style={{
+        backgroundImage: `linear-gradient(90deg, rgb(226 232 240) 0%, rgb(226 232 240) ${fillStop}, rgb(255 255 255) ${fillStop}, rgb(255 255 255) 100%)`,
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setMenuPos({ x: e.clientX, y: e.clientY });
+      }}
+    >
+      {menuOpen && (
+        <div
+          ref={menuRef}
+          className="fixed z-[70] min-w-44 rounded-2xl border border-blue-400/20 bg-black/92 p-2 shadow-[0_0_40px_rgba(59,130,246,0.18)]"
+          style={{ top: menuPos!.y, left: menuPos!.x }}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          <button
+            type="button"
+            className="block w-full rounded-xl px-3 py-2 text-left text-sm text-blue-200 hover:bg-blue-400/10 hover:text-blue-100"
+            onClick={() => {
+              addOrEditLink();
+              setMenuPos(null);
+            }}
+          >
+            Add a link
+          </button>
+          <button
+            type="button"
+            className="block w-full rounded-xl px-3 py-2 text-left text-sm text-blue-200 hover:bg-blue-400/10 hover:text-blue-100"
+            onClick={() => {
+              changeHeaderTitle();
+              setMenuPos(null);
+            }}
+          >
+            Change title
+          </button>
+          <button
+            type="button"
+            className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-white/5"
+            onClick={() => setMenuPos(null)}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      <div className="flex h-full min-h-0 flex-col p-1.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-blue-600/70">{headerLabel}</p>
+            <input
+              value={goal.title}
+              onChange={(e) => onUpdateGoal(goal.id, { ...goal, title: e.target.value })}
+              className="mt-0.5 w-full bg-transparent text-sm font-semibold outline-none"
+              aria-label="Goal title"
+            />
+          </div>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={percent}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              onUpdateGoal(goal.id, {
+                ...goal,
+                progress: Number.isFinite(next) ? next : 0,
+              });
+            }}
+            className="shrink-0 w-10 rounded-full border border-blue-300 bg-slate-100/90 px-1.5 py-0.5 text-right text-[10px] font-medium text-blue-700 outline-none"
+            aria-label="Goal readiness percentage"
+          />
+        </div>
+        <div className="mt-1 flex min-h-0 flex-1 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (goal.linkUrl?.trim()) {
+                window.open(goal.linkUrl.trim(), "_blank", "noopener,noreferrer");
+                return;
+              }
+              addOrEditLink();
+            }}
+            className="h-6 flex-1 rounded-md bg-blue-700 px-2 text-left text-[11px] font-semibold text-white shadow hover:bg-blue-600"
+            title={goal.linkUrl ? goal.linkUrl : "Set a link"}
+          >
+            Continue
+          </button>
+          <div className="relative h-6 w-24 shrink-0 overflow-hidden rounded-full border border-slate-500/60 bg-slate-200 shadow-inner">
+            <div
+              className="absolute inset-y-0 left-0 bg-slate-100 transition-all"
+              style={{ width: `${percent}%` }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center text-[10px] font-medium text-slate-700">
+              {percent}%
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -285,13 +719,20 @@ export function BookmarkGrid() {
     colors,
     labels,
     separators,
+    goals,
+    showGoals,
     gridLocked,
     ready,
     saveLayout,
     setSectionColor,
     setShelfLabel,
     addFolderSeparator,
+    setFolderSeparators,
+    saveGoals,
+    setShowGoals,
     setGridLocked,
+    bookmarkViews,
+    setBookmarkExpanded,
     exportBackup,
     importBackup,
   } = useShelfStorage();
@@ -303,6 +744,7 @@ export function BookmarkGrid() {
   const [showSettings, setShowSettings] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folders = useMemo(() => collectFolders(tree), [tree]);
+  const goalItems = useMemo(() => (showGoals ? Object.values(goals) : []), [goals, showGoals]);
   const layout = useMemo(() => {
     const byId = new Map<string, { id: string; x: number; y: number; w: number; h: number }>();
     savedLayout.forEach((item) => {
@@ -316,10 +758,12 @@ export function BookmarkGrid() {
       .reduce((max, item) => Math.max(max, item.x + item.w), 0);
     let appendX = maxXOnLastRow;
     let appendY = maxY;
-    return folders.map((node) => {
+    return [...folders, ...goalItems].map((node) => {
       const existingItem = byId.get(node.id);
-      if (existingItem) return existingItem;
-      const item = { id: node.id, x: appendX, y: appendY, w: DEFAULT_W, h: DEFAULT_H };
+      if (existingItem) {
+        return "progress" in node ? { ...existingItem, h: GOAL_H } : existingItem;
+      }
+      const item = { id: node.id, x: appendX, y: appendY, w: DEFAULT_W, h: "progress" in node ? GOAL_H : DEFAULT_H };
       appendX += DEFAULT_W;
       if (appendX + DEFAULT_W > COLUMNS) {
         appendX = 0;
@@ -327,7 +771,7 @@ export function BookmarkGrid() {
       }
       return item;
     });
-  }, [folders, savedLayout]);
+  }, [folders, goalItems, savedLayout]);
 
   useEffect(() => {
     if (!gridRef.current || !ready || folders.length === 0) return;
@@ -348,6 +792,38 @@ export function BookmarkGrid() {
   const removeFolderWithCollapse = async (id: string) => {
     saveLayout(savedLayout.filter((item) => item.id !== id));
     await deleteBookmarkNode(id);
+    await reload();
+  };
+
+  useEffect(() => {
+    if (!goalItems.length) return;
+    const normalized = layout.map((item, index) => {
+      const node = [...folders, ...goalItems][index];
+      return node && "progress" in node ? { ...item, h: GOAL_H } : item;
+    });
+    const changed = normalized.some((item, index) => {
+      const original = layout[index];
+      return original && original.h !== item.h;
+    });
+    if (changed) saveLayout(normalized as ShelfLayoutItem[]);
+  }, [folders, goalItems, layout, saveLayout]);
+
+  const addGoalCard = async () => {
+    const title = window.prompt("Goal title", "Learning in progress");
+    if (!title?.trim()) return;
+    const linkUrl = window.prompt("Link URL (optional)", "https://");
+    const id = crypto.randomUUID();
+    saveGoals({
+      ...goals,
+      [id]: {
+        id,
+        title: title.trim(),
+        goal: "",
+        progress: 0,
+        label: "Goal",
+        linkUrl: linkUrl?.trim() ? linkUrl.trim() : undefined,
+      },
+    });
     await reload();
   };
 
@@ -412,6 +888,14 @@ export function BookmarkGrid() {
           >
             + Bookmark
           </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-zinc-100"
+            onPress={addGoalCard}
+          >
+            + Goal
+          </Button>
         </div>
       </div>
       {showSettings && (
@@ -449,6 +933,14 @@ export function BookmarkGrid() {
             >
               <span>Import backup</span>
               <span className="text-xs text-emerald-300/60">Upload</span>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => setShowGoals(!showGoals)}
+            >
+              <span>Show Goal</span>
+              <span className="text-xs text-emerald-300/60">{showGoals ? "On" : "Off"}</span>
             </button>
           </div>
         </div>
@@ -508,34 +1000,54 @@ export function BookmarkGrid() {
         </button>
       </div>
       <div ref={gridRef} className="grid-stack shelf-grid pb-[2px]" data-gs-column={COLUMNS}>
-        {folders.map((node, i) => {
+        {[...folders, ...goalItems].map((node, i) => {
           const pos = layout[i];
           if (!pos) return null;
+          const isGoal = "progress" in node;
           return (
-            <div key={node.id} className="grid-stack-item" {...{ "gs-id": pos.id, "gs-x": pos.x, "gs-y": pos.y, "gs-w": pos.w, "gs-h": pos.h }}>
-              <FolderCard
-                node={node}
-                accentColor={colors[node.id]}
-                label={labels[node.id]}
-                gridLocked={gridLocked}
-                separators={
-                  separators[node.id]
-                    ? (separators[node.id] as Array<{ id: string; createdAt: string }>).map((_, index) => index)
-                    : []
-                }
-                onColorChange={setSectionColor}
-                onLabelChange={setShelfLabel}
-                onDeleteFolder={removeFolderWithCollapse}
-                onAddSeparator={addFolderSeparator}
-                onDropBookmark={async (bookmarkId, folderId) => {
-                  setMoving(true);
-                  try {
-                    await moveBookmark(bookmarkId, folderId);
-                  } finally {
-                    setMoving(false);
-                  }
-                }}
-              />
+            <div
+              key={node.id}
+              className="grid-stack-item"
+              {...{
+                "gs-id": pos.id,
+                "gs-x": pos.x,
+                "gs-y": pos.y,
+                "gs-w": pos.w,
+                "gs-h": pos.h,
+                ...(isGoal ? { "gs-no-resize": "true" } : {}),
+              }}
+            >
+              {isGoal ? (
+                <GoalCard
+                  goal={node}
+                  onUpdateGoal={(id, next) => {
+                    saveGoals({ ...goals, [id]: next });
+                  }}
+                />
+              ) : (
+                <FolderCard
+                  node={node}
+                  accentColor={colors[node.id]}
+                  label={labels[node.id]}
+                  gridLocked={gridLocked}
+                  separators={separators[node.id] ?? []}
+                  onColorChange={setSectionColor}
+                  onLabelChange={setShelfLabel}
+                  onDeleteFolder={removeFolderWithCollapse}
+                  onAddSeparator={addFolderSeparator}
+                  onUpdateSeparators={(folderId, seps) => setFolderSeparators(folderId, seps)}
+                  bookmarkViews={bookmarkViews}
+                  onSetBookmarkExpanded={setBookmarkExpanded}
+                  onDropBookmark={async (bookmarkId, folderId) => {
+                    setMoving(true);
+                    try {
+                      await moveBookmark(bookmarkId, folderId);
+                    } finally {
+                      setMoving(false);
+                    }
+                  }}
+                />
+              )}
             </div>
           );
         })}

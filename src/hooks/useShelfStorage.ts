@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   ShelfBackupData,
+  ShelfBookmarkViewMap,
   ShelfFolderSeparatorMap,
+  ShelfGoalMap,
   ShelfLayoutItem,
   ShelfPromptMap,
   ShelfPromptVersion,
@@ -13,6 +15,9 @@ const COLORS_KEY = "shelf-colors";
 const SHELF_NAME_KEY = "shelf-name";
 const LABELS_KEY = "shelf-labels";
 const SEPARATORS_KEY = "shelf-separators";
+const GOALS_KEY = "shelf-goals";
+const SHOW_GOALS_KEY = "show-goals";
+const BOOKMARK_VIEW_KEY = "bookmark-view";
 const PROMPTS_KEY = "shelf-prompts";
 const GRID_LOCKED_KEY = "grid-locked";
 const PROMPT_ROWS_KEY = "prompt-rows";
@@ -76,11 +81,39 @@ function getStorage() {
   return null;
 }
 
+function normalizeGoals(input: unknown): ShelfGoalMap {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const next: ShelfGoalMap = {};
+  for (const [id, raw] of Object.entries(input as Record<string, any>)) {
+    if (!raw || typeof raw !== "object") continue;
+    const title = typeof raw.title === "string" ? raw.title : "Learning in progress";
+    const goal = typeof raw.goal === "string" ? raw.goal : "";
+    const progress =
+      typeof raw.progress === "number"
+        ? raw.progress
+        : typeof raw.progress === "string"
+          ? Number(raw.progress)
+          : 0;
+    next[id] = {
+      id,
+      title,
+      goal,
+      progress: Number.isFinite(progress) ? progress : 0,
+      label: typeof raw.label === "string" ? raw.label : "Goal",
+      linkUrl: typeof raw.linkUrl === "string" ? raw.linkUrl : undefined,
+    };
+  }
+  return next;
+}
+
 export function useShelfStorage() {
   const [layout, setLayout] = useState<ShelfLayoutItem[]>([]);
   const [colors, setColors] = useState<ShelfSectionColors>({});
   const [labels, setLabels] = useState<Record<string, string>>({});
   const [separators, setSeparators] = useState<ShelfFolderSeparatorMap>({});
+  const [goals, setGoals] = useState<ShelfGoalMap>({});
+  const [showGoals, setShowGoals] = useState(false);
+  const [bookmarkViews, setBookmarkViews] = useState<ShelfBookmarkViewMap>({});
   const [prompts, setPrompts] = useState<ShelfPromptMap>(DEFAULT_PROMPTS);
   const [shelfName, setShelfNameState] = useState("ShELF");
   const [gridLocked, setGridLocked] = useState(false);
@@ -93,7 +126,7 @@ export function useShelfStorage() {
       setReady(true);
       return;
     }
-    storage.get([LAYOUT_KEY, COLORS_KEY, SHELF_NAME_KEY, LABELS_KEY, SEPARATORS_KEY, PROMPTS_KEY, GRID_LOCKED_KEY, PROMPT_ROWS_KEY], (result: { [key: string]: unknown }) => {
+    storage.get([LAYOUT_KEY, COLORS_KEY, SHELF_NAME_KEY, LABELS_KEY, SEPARATORS_KEY, GOALS_KEY, SHOW_GOALS_KEY, BOOKMARK_VIEW_KEY, PROMPTS_KEY, GRID_LOCKED_KEY, PROMPT_ROWS_KEY], (result: { [key: string]: unknown }) => {
       setLayout(Array.isArray(result[LAYOUT_KEY]) ? (result[LAYOUT_KEY] as ShelfLayoutItem[]) : []);
       setColors(
         result[COLORS_KEY] && typeof result[COLORS_KEY] === "object" && !Array.isArray(result[COLORS_KEY])
@@ -108,7 +141,29 @@ export function useShelfStorage() {
       );
       setSeparators(
         result[SEPARATORS_KEY] && typeof result[SEPARATORS_KEY] === "object" && !Array.isArray(result[SEPARATORS_KEY])
-          ? (result[SEPARATORS_KEY] as ShelfFolderSeparatorMap)
+          ? (() => {
+              const raw = result[SEPARATORS_KEY] as ShelfFolderSeparatorMap;
+              const next: ShelfFolderSeparatorMap = {};
+              for (const [folderId, seps] of Object.entries(raw)) {
+                if (!Array.isArray(seps)) continue;
+                next[folderId] = seps
+                  .filter(Boolean)
+                  .map((sep: any, index: number) => ({
+                    id: typeof sep?.id === "string" ? sep.id : crypto.randomUUID(),
+                    createdAt:
+                      typeof sep?.createdAt === "string" ? sep.createdAt : new Date().toISOString(),
+                    atIndex: typeof sep?.atIndex === "number" ? sep.atIndex : index,
+                  }));
+              }
+              return next;
+            })()
+          : {}
+      );
+      setGoals(normalizeGoals(result[GOALS_KEY]));
+      setShowGoals(result[SHOW_GOALS_KEY] === true);
+      setBookmarkViews(
+        result[BOOKMARK_VIEW_KEY] && typeof result[BOOKMARK_VIEW_KEY] === "object" && !Array.isArray(result[BOOKMARK_VIEW_KEY])
+          ? (result[BOOKMARK_VIEW_KEY] as ShelfBookmarkViewMap)
           : {}
       );
       setPrompts(
@@ -162,12 +217,38 @@ export function useShelfStorage() {
         ...prev,
         [folderId]: [
           ...(prev[folderId] ?? []),
-          { id: crypto.randomUUID(), createdAt: new Date().toISOString() },
+          { id: crypto.randomUUID(), createdAt: new Date().toISOString(), atIndex: 999999 },
         ],
       };
       getStorage()?.set({ [SEPARATORS_KEY]: next });
       return next;
     });
+  }, []);
+
+  const setFolderSeparators = useCallback((folderId: string, seps: ShelfFolderSeparatorMap[string]) => {
+    setSeparators((prev) => {
+      const next = { ...prev, [folderId]: seps ?? [] };
+      getStorage()?.set({ [SEPARATORS_KEY]: next });
+      return next;
+    });
+  }, []);
+
+  const setBookmarkExpanded = useCallback((bookmarkId: string, expanded: boolean) => {
+    setBookmarkViews((prev) => {
+      const next = { ...prev, [bookmarkId]: { ...(prev[bookmarkId] ?? {}), expanded } };
+      getStorage()?.set({ [BOOKMARK_VIEW_KEY]: next });
+      return next;
+    });
+  }, []);
+
+  const saveGoals = useCallback((next: ShelfGoalMap) => {
+    setGoals(next);
+    getStorage()?.set({ [GOALS_KEY]: next });
+  }, []);
+
+  const setShowGoalsState = useCallback((next: boolean) => {
+    setShowGoals(next);
+    getStorage()?.set({ [SHOW_GOALS_KEY]: next });
   }, []);
 
   const savePrompts = useCallback((next: ShelfPromptMap) => {
@@ -201,12 +282,15 @@ export function useShelfStorage() {
       layout,
       colors,
       labels,
+      separators,
+      goals,
+      showGoals,
       prompts,
       shelfName,
       gridLocked,
       promptRows,
     };
-  }, [colors, gridLocked, labels, layout, prompts, promptRows, shelfName]);
+  }, [colors, goals, gridLocked, labels, layout, prompts, promptRows, separators, shelfName, showGoals]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -215,24 +299,30 @@ export function useShelfStorage() {
     if (backup.prompts) setPrompts(backup.prompts);
     if (typeof backup.shelfName === "string") setShelfNameState(backup.shelfName);
     if (typeof backup.gridLocked === "boolean") setGridLocked(backup.gridLocked);
+    if (typeof backup.showGoals === "boolean") setShowGoals(backup.showGoals);
 
     getStorage()?.set({
       [LAYOUT_KEY]: backup.layout ?? layout,
       [COLORS_KEY]: backup.colors ?? colors,
       [LABELS_KEY]: backup.labels ?? labels,
       [SEPARATORS_KEY]: backup.separators ?? separators,
+      [GOALS_KEY]: backup.goals ?? goals,
+      [SHOW_GOALS_KEY]: typeof backup.showGoals === "boolean" ? backup.showGoals : showGoals,
       [PROMPTS_KEY]: backup.prompts ?? prompts,
       [SHELF_NAME_KEY]: typeof backup.shelfName === "string" ? backup.shelfName : shelfName,
       [GRID_LOCKED_KEY]: typeof backup.gridLocked === "boolean" ? backup.gridLocked : gridLocked,
       [PROMPT_ROWS_KEY]: backup.promptRows === 2 ? 2 : 1,
     });
-  }, [colors, gridLocked, labels, layout, prompts, promptRows, separators, shelfName]);
+  }, [colors, goals, gridLocked, labels, layout, prompts, promptRows, separators, shelfName, showGoals]);
 
   return {
     layout,
     colors,
     labels,
     separators,
+    goals,
+    showGoals,
+    bookmarkViews,
     prompts,
     gridLocked,
     promptRows,
@@ -245,6 +335,10 @@ export function useShelfStorage() {
     setShelfName,
     setShelfLabel,
     addFolderSeparator,
+    setFolderSeparators,
+    setBookmarkExpanded,
+    saveGoals,
+    setShowGoals: setShowGoalsState,
     setGridLocked: setGridLockedState,
     setPromptRows: setPromptRowsState,
     exportBackup,
