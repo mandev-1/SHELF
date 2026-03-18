@@ -127,6 +127,7 @@ function FolderCard({
   const [bookmarkMenu, setBookmarkMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const bookmarkMenuOpen = bookmarkMenu !== null;
   const bookmarkMenuRef = useRef<HTMLDivElement | null>(null);
+  const hoverMenuTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setDraftLabel(label ?? getTitle(node));
@@ -149,6 +150,25 @@ function FolderCard({
       window.removeEventListener("mousedown", onMouseDown, true);
     };
   }, [bookmarkMenuOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverMenuTimerRef.current !== null) {
+        window.clearTimeout(hoverMenuTimerRef.current);
+        hoverMenuTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const openBookmarkMenuFromEl = (bookmarkId: string, el: HTMLElement) => {
+    const rect = el.getBoundingClientRect();
+    const menuW = 180; // min-w-44-ish
+    const menuH = 120;
+    const margin = 8;
+    const x = Math.min(window.innerWidth - menuW - margin, Math.max(margin, rect.right + 8));
+    const y = Math.min(window.innerHeight - menuH - margin, Math.max(margin, rect.top));
+    setBookmarkMenu({ id: bookmarkId, x, y });
+  };
 
   const readDragPayload = (dt: DataTransfer) => {
     const sepRaw = dt.getData("application/x-shelf-separator");
@@ -456,6 +476,22 @@ function FolderCard({
                     e.stopPropagation();
                     setBookmarkMenu({ id: item.node.id, x: e.clientX, y: e.clientY });
                   }}
+                  onMouseEnter={(e) => {
+                    if (hoverMenuTimerRef.current !== null) window.clearTimeout(hoverMenuTimerRef.current);
+                    const el = e.currentTarget as HTMLDivElement;
+                    hoverMenuTimerRef.current = window.setTimeout(() => {
+                      hoverMenuTimerRef.current = null;
+                      // don't auto-open if a menu is already open
+                      if (bookmarkMenuOpen) return;
+                      openBookmarkMenuFromEl(item.node.id, el);
+                    }, 1200);
+                  }}
+                  onMouseLeave={() => {
+                    if (hoverMenuTimerRef.current !== null) {
+                      window.clearTimeout(hoverMenuTimerRef.current);
+                      hoverMenuTimerRef.current = null;
+                    }
+                  }}
                   onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
                     e.dataTransfer.setData("text/plain", item.node.id);
                     e.dataTransfer.setData(
@@ -463,6 +499,10 @@ function FolderCard({
                       JSON.stringify({ id: item.node.id, parentId: node.id })
                     );
                     e.dataTransfer.effectAllowed = "move";
+                    if (hoverMenuTimerRef.current !== null) {
+                      window.clearTimeout(hoverMenuTimerRef.current);
+                      hoverMenuTimerRef.current = null;
+                    }
                   }}
                   onDragOver={(e: React.DragEvent<HTMLDivElement>) => {
                     e.preventDefault();
