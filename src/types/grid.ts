@@ -20,6 +20,13 @@ export interface ShelfPrompt {
 
 export type ShelfPromptMap = Record<string, ShelfPrompt>;
 
+export interface ShelfFolderSeparator {
+  id: string;
+  createdAt: string;
+}
+
+export type ShelfFolderSeparatorMap = Record<string, ShelfFolderSeparator[]>;
+
 export interface ShelfPromptVersion {
   id: string;
   code: string;
@@ -32,6 +39,7 @@ export interface ShelfBackupData {
   layout: ShelfLayoutItem[];
   colors: ShelfSectionColors;
   labels: Record<string, string>;
+  separators: ShelfFolderSeparatorMap;
   prompts: ShelfPromptMap;
   shelfName: string;
   gridLocked: boolean;

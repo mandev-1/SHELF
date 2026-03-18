@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   ShelfBackupData,
+  ShelfFolderSeparatorMap,
   ShelfLayoutItem,
   ShelfPromptMap,
   ShelfPromptVersion,
@@ -11,6 +12,7 @@ const LAYOUT_KEY = "shelf-layout";
 const COLORS_KEY = "shelf-colors";
 const SHELF_NAME_KEY = "shelf-name";
 const LABELS_KEY = "shelf-labels";
+const SEPARATORS_KEY = "shelf-separators";
 const PROMPTS_KEY = "shelf-prompts";
 const GRID_LOCKED_KEY = "grid-locked";
 const PROMPT_ROWS_KEY = "prompt-rows";
@@ -78,6 +80,7 @@ export function useShelfStorage() {
   const [layout, setLayout] = useState<ShelfLayoutItem[]>([]);
   const [colors, setColors] = useState<ShelfSectionColors>({});
   const [labels, setLabels] = useState<Record<string, string>>({});
+  const [separators, setSeparators] = useState<ShelfFolderSeparatorMap>({});
   const [prompts, setPrompts] = useState<ShelfPromptMap>(DEFAULT_PROMPTS);
   const [shelfName, setShelfNameState] = useState("ShELF");
   const [gridLocked, setGridLocked] = useState(false);
@@ -90,7 +93,7 @@ export function useShelfStorage() {
       setReady(true);
       return;
     }
-    storage.get([LAYOUT_KEY, COLORS_KEY, SHELF_NAME_KEY, LABELS_KEY, PROMPTS_KEY, GRID_LOCKED_KEY, PROMPT_ROWS_KEY], (result: { [key: string]: unknown }) => {
+    storage.get([LAYOUT_KEY, COLORS_KEY, SHELF_NAME_KEY, LABELS_KEY, SEPARATORS_KEY, PROMPTS_KEY, GRID_LOCKED_KEY, PROMPT_ROWS_KEY], (result: { [key: string]: unknown }) => {
       setLayout(Array.isArray(result[LAYOUT_KEY]) ? (result[LAYOUT_KEY] as ShelfLayoutItem[]) : []);
       setColors(
         result[COLORS_KEY] && typeof result[COLORS_KEY] === "object" && !Array.isArray(result[COLORS_KEY])
@@ -101,6 +104,11 @@ export function useShelfStorage() {
       setLabels(
         result[LABELS_KEY] && typeof result[LABELS_KEY] === "object" && !Array.isArray(result[LABELS_KEY])
           ? (result[LABELS_KEY] as Record<string, string>)
+          : {}
+      );
+      setSeparators(
+        result[SEPARATORS_KEY] && typeof result[SEPARATORS_KEY] === "object" && !Array.isArray(result[SEPARATORS_KEY])
+          ? (result[SEPARATORS_KEY] as ShelfFolderSeparatorMap)
           : {}
       );
       setPrompts(
@@ -144,6 +152,20 @@ export function useShelfStorage() {
       if (!label) delete next[id];
       else next[id] = label;
       getStorage()?.set({ [LABELS_KEY]: next });
+      return next;
+    });
+  }, []);
+
+  const addFolderSeparator = useCallback((folderId: string) => {
+    setSeparators((prev) => {
+      const next = {
+        ...prev,
+        [folderId]: [
+          ...(prev[folderId] ?? []),
+          { id: crypto.randomUUID(), createdAt: new Date().toISOString() },
+        ],
+      };
+      getStorage()?.set({ [SEPARATORS_KEY]: next });
       return next;
     });
   }, []);
@@ -198,17 +220,19 @@ export function useShelfStorage() {
       [LAYOUT_KEY]: backup.layout ?? layout,
       [COLORS_KEY]: backup.colors ?? colors,
       [LABELS_KEY]: backup.labels ?? labels,
+      [SEPARATORS_KEY]: backup.separators ?? separators,
       [PROMPTS_KEY]: backup.prompts ?? prompts,
       [SHELF_NAME_KEY]: typeof backup.shelfName === "string" ? backup.shelfName : shelfName,
       [GRID_LOCKED_KEY]: typeof backup.gridLocked === "boolean" ? backup.gridLocked : gridLocked,
       [PROMPT_ROWS_KEY]: backup.promptRows === 2 ? 2 : 1,
     });
-  }, [colors, gridLocked, labels, layout, prompts, promptRows, shelfName]);
+  }, [colors, gridLocked, labels, layout, prompts, promptRows, separators, shelfName]);
 
   return {
     layout,
     colors,
     labels,
+    separators,
     prompts,
     gridLocked,
     promptRows,
@@ -220,6 +244,7 @@ export function useShelfStorage() {
     setSectionColor,
     setShelfName,
     setShelfLabel,
+    addFolderSeparator,
     setGridLocked: setGridLockedState,
     setPromptRows: setPromptRowsState,
     exportBackup,

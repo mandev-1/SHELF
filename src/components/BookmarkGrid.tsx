@@ -25,6 +25,27 @@ function folderChildren(node: BookmarkTreeNode) {
   return (node.children ?? []).filter((n) => n.url);
 }
 
+function renderFolderItems(node: BookmarkTreeNode, separators: number[] = []) {
+  const links = folderChildren(node);
+  const items: Array<
+    | { type: "link"; key: string; node: BookmarkTreeNode }
+    | { type: "separator"; key: string }
+  > = [];
+  let separatorIndex = 0;
+  const separatorSet = new Set(separators);
+  links.forEach((link, index) => {
+    if (separatorSet.has(index)) {
+      items.push({ type: "separator", key: `separator-${separatorIndex}` });
+      separatorIndex += 1;
+    }
+    items.push({ type: "link", key: link.id, node: link });
+  });
+  if (separatorSet.has(links.length)) {
+    items.push({ type: "separator", key: `separator-${separatorIndex}` });
+  }
+  return items;
+}
+
 function collectFolders(nodes: BookmarkTreeNode[] | null): BookmarkTreeNode[] {
   const out: BookmarkTreeNode[] = [];
   const walk = (node: BookmarkTreeNode) => {
@@ -61,23 +82,28 @@ function FolderCard({
   accentColor,
   label,
   gridLocked,
+  separators,
   onColorChange,
   onLabelChange,
   onDeleteFolder,
+  onAddSeparator,
   onDropBookmark,
 }: {
   node: BookmarkTreeNode;
   accentColor?: string;
   label?: string;
   gridLocked: boolean;
+  separators: number[];
   onColorChange: (id: string, color: string | null) => void;
   onLabelChange: (id: string, label: string | null) => void;
   onDeleteFolder: (id: string) => void;
+  onAddSeparator: (id: string) => void;
   onDropBookmark: (bookmarkId: string, folderId: string) => void;
 }) {
-  const links = folderChildren(node);
+  const items = renderFolderItems(node, separators);
   const [editingLabel, setEditingLabel] = useState(false);
   const [draftLabel, setDraftLabel] = useState(label ?? getTitle(node));
+  const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
     setDraftLabel(label ?? getTitle(node));
@@ -93,6 +119,11 @@ function FolderCard({
     <div
       className="group grid-stack-item-content h-full flex flex-row rounded-xl border border-white/10 bg-white/5 overflow-hidden min-h-0"
       onDragOver={(e) => e.preventDefault()}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowMenu(true);
+      }}
       onDrop={(e) => {
         e.preventDefault();
         const bookmarkId = e.dataTransfer.getData("text/plain");
@@ -100,7 +131,35 @@ function FolderCard({
       }}
     >
       <div className="shrink-0 w-1 min-w-[4px] self-stretch rounded-l-xl" style={{ backgroundColor: accentColor || "transparent" }} aria-hidden />
-      <div className="flex-1 flex flex-col min-w-0">
+      <div
+        className="flex-1 flex flex-col min-w-0"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowMenu(true);
+        }}
+      >
+        {showMenu && (
+          <div className="absolute z-20 mt-12 ml-3 rounded-2xl border border-emerald-400/15 bg-black/95 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16)]">
+            <button
+              type="button"
+              onClick={() => {
+                onAddSeparator(node.id);
+                setShowMenu(false);
+              }}
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10"
+            >
+              Add separator
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowMenu(false)}
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-white/5"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1 border-b border-white/10 shrink-0">
           {editingLabel ? (
             <input
@@ -179,30 +238,39 @@ function FolderCard({
           )}
         </div>
         <div className="flex-1 overflow-auto p-2 space-y-1">
-          {links.length === 0 ? (
+          {items.length === 0 ? (
             <p className="text-zinc-500 text-xs">Empty folder</p>
           ) : (
-            links.map((item) => (
-              <div
-                key={item.id}
-                draggable
-                onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
-                  e.dataTransfer.setData("text/plain", item.id);
-                  e.dataTransfer.effectAllowed = "move";
-                }}
-                className="cursor-move"
-              >
-                <Link
-                  href={item.url!}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-zinc-300 hover:text-white text-xs truncate no-underline hover:underline underline-offset-1 w-full"
+            items.map((item) =>
+              item.type === "separator" ? (
+                <div key={item.key} className="my-2 h-px w-full bg-gradient-to-r from-transparent via-emerald-300/75 to-transparent" />
+              ) : (
+                <div
+                  key={item.key}
+                  draggable
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowMenu(true);
+                  }}
+                  onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
+                    e.dataTransfer.setData("text/plain", item.node.id);
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  className="cursor-move"
                 >
-                  <img src={faviconUrl(item.url!)} alt="" className="w-4 h-4 shrink-0 rounded" />
-                  <span className="truncate">{item.title || item.url}</span>
-                </Link>
-              </div>
-            ))
+                  <Link
+                    href={item.node.url!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-zinc-300 hover:text-white text-xs truncate no-underline hover:underline underline-offset-1 w-full"
+                  >
+                    <img src={faviconUrl(item.node.url!)} alt="" className="w-4 h-4 shrink-0 rounded" />
+                    <span className="truncate">{item.node.title || item.node.url}</span>
+                  </Link>
+                </div>
+              )
+            )
           )}
         </div>
       </div>
@@ -216,11 +284,13 @@ export function BookmarkGrid() {
     layout: savedLayout,
     colors,
     labels,
+    separators,
     gridLocked,
     ready,
     saveLayout,
     setSectionColor,
     setShelfLabel,
+    addFolderSeparator,
     setGridLocked,
     exportBackup,
     importBackup,
@@ -448,9 +518,15 @@ export function BookmarkGrid() {
                 accentColor={colors[node.id]}
                 label={labels[node.id]}
                 gridLocked={gridLocked}
+                separators={
+                  separators[node.id]
+                    ? (separators[node.id] as Array<{ id: string; createdAt: string }>).map((_, index) => index)
+                    : []
+                }
                 onColorChange={setSectionColor}
                 onLabelChange={setShelfLabel}
                 onDeleteFolder={removeFolderWithCollapse}
+                onAddSeparator={addFolderSeparator}
                 onDropBookmark={async (bookmarkId, folderId) => {
                   setMoving(true);
                   try {

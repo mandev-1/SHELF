@@ -1,5 +1,9 @@
 # ShELF · Bookmarks
 
+## Quick Install
+
+Download the latest release from `releases/<version>/` and load that folder unpacked in `chrome://extensions` or `brave://extensions`.
+
 ```bash
 npm run release
 npm run updaterelease         ### <---- This will update the release in same folder
