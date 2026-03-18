@@ -63,6 +63,13 @@ export interface ShelfPillarTodoItem {
   url?: string;
 }
 
+export interface ObsidianLogConfig {
+  enabled: boolean;
+  baseUrl: string;
+  apiKey: string;
+  notePath: string;
+}
+
 export interface ShelfBackupData {
   version: number;
   layout: ShelfLayoutItem[];

@@ -8,6 +8,13 @@
   },
   "permissions": [
     "bookmarks",
-    "storage"
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:27124/*",
+    "http://localhost:27124/*",
+    "https://127.0.0.1:27124/*",
+    "https://localhost:27124/*"
   ]
 }

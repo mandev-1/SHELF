@@ -56,6 +56,7 @@ export function Pillar({
   onSetPinned,
   todos,
   onSetTodos,
+  onTodoLog,
 }: {
   shelfName: string;
   tree: BookmarkTreeNode[] | null;
@@ -63,6 +64,7 @@ export function Pillar({
   onSetPinned: (next: { top: string[] }) => void;
   todos: ShelfPillarTodoItem[];
   onSetTodos: (next: ShelfPillarTodoItem[] | ((prev: ShelfPillarTodoItem[]) => ShelfPillarTodoItem[])) => void;
+  onTodoLog?: (entry: string) => void;
 }) {
   const byId = useMemo(() => collectBookmarks(tree), [tree]);
   const [overZone, setOverZone] = useState<"top" | null>(null);
@@ -89,18 +91,25 @@ export function Pillar({
     onSetTodos((prev) => [...prev, { id: crypto.randomUUID(), text, done: false, url }]);
     setTodoDraft("");
     setTodoLinkDraft("");
+    onTodoLog?.(`added: ${text}${url ? ` (${url})` : ""}`);
   };
 
   const toggleTodo = (id: string) => {
-    onSetTodos((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+    const t = todos.find((x) => x.id === id);
+    onSetTodos((prev) => prev.map((item) => (item.id === id ? { ...item, done: !item.done } : item)));
+    if (t) onTodoLog?.(`${t.done ? "reopened" : "done"}: ${t.text}`);
   };
 
   const removeTodo = (id: string) => {
-    onSetTodos((prev) => prev.filter((t) => t.id !== id));
+    const t = todos.find((x) => x.id === id);
+    onSetTodos((prev) => prev.filter((item) => item.id !== id));
+    if (t) onTodoLog?.(`removed: ${t.text}`);
   };
 
   const setTodoUrl = (id: string, url: string | undefined) => {
-    onSetTodos((prev) => prev.map((t) => (t.id === id ? { ...t, url: url?.trim() || undefined } : t)));
+    const t = todos.find((x) => x.id === id);
+    onSetTodos((prev) => prev.map((item) => (item.id === id ? { ...item, url: url?.trim() || undefined } : item)));
+    if (t) onTodoLog?.(`link ${url ? "set" : "cleared"}: ${t.text}`);
   };
 
   return (

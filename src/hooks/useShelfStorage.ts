@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
+  ObsidianLogConfig,
   ShelfBackupData,
   ShelfBookmarkViewMap,
   ShelfFolderSeparatorMap,
@@ -21,6 +22,7 @@ const SHOW_GOALS_KEY = "show-goals";
 const BOOKMARK_VIEW_KEY = "bookmark-view";
 const PILLAR_KEY = "pillar-pins";
 const PILLAR_TODOS_KEY = "pillar-todos";
+const OBSIDIAN_LOG_KEY = "obsidian-log";
 const PROMPTS_KEY = "shelf-prompts";
 const GRID_LOCKED_KEY = "grid-locked";
 const PROMPT_ROWS_KEY = "prompt-rows";
@@ -119,6 +121,12 @@ export function useShelfStorage() {
   const [bookmarkViews, setBookmarkViews] = useState<ShelfBookmarkViewMap>({});
   const [pillarPins, setPillarPins] = useState<{ top: string[] }>({ top: [] });
   const [pillarTodos, setPillarTodos] = useState<ShelfPillarTodoItem[]>([]);
+  const [obsidianLog, setObsidianLogState] = useState<ObsidianLogConfig>({
+    enabled: false,
+    baseUrl: "http://127.0.0.1:27124",
+    apiKey: "",
+    notePath: "ShELF/todo-log.md",
+  });
   const [prompts, setPrompts] = useState<ShelfPromptMap>(DEFAULT_PROMPTS);
   const [shelfName, setShelfNameState] = useState("ShELF");
   const [gridLocked, setGridLocked] = useState(false);
@@ -131,7 +139,24 @@ export function useShelfStorage() {
       setReady(true);
       return;
     }
-    storage.get([LAYOUT_KEY, COLORS_KEY, SHELF_NAME_KEY, LABELS_KEY, SEPARATORS_KEY, GOALS_KEY, SHOW_GOALS_KEY, BOOKMARK_VIEW_KEY, PILLAR_KEY, PILLAR_TODOS_KEY, PROMPTS_KEY, GRID_LOCKED_KEY, PROMPT_ROWS_KEY], (result: { [key: string]: unknown }) => {
+    storage.get(
+      [
+        LAYOUT_KEY,
+        COLORS_KEY,
+        SHELF_NAME_KEY,
+        LABELS_KEY,
+        SEPARATORS_KEY,
+        GOALS_KEY,
+        SHOW_GOALS_KEY,
+        BOOKMARK_VIEW_KEY,
+        PILLAR_KEY,
+        PILLAR_TODOS_KEY,
+        OBSIDIAN_LOG_KEY,
+        PROMPTS_KEY,
+        GRID_LOCKED_KEY,
+        PROMPT_ROWS_KEY,
+      ],
+      (result: { [key: string]: unknown }) => {
       setLayout(Array.isArray(result[LAYOUT_KEY]) ? (result[LAYOUT_KEY] as ShelfLayoutItem[]) : []);
       setColors(
         result[COLORS_KEY] && typeof result[COLORS_KEY] === "object" && !Array.isArray(result[COLORS_KEY])
@@ -189,6 +214,16 @@ export function useShelfStorage() {
             url: typeof x.url === "string" && x.url.trim() ? x.url.trim() : undefined,
           }));
       });
+      const rawObs = result[OBSIDIAN_LOG_KEY];
+      if (rawObs && typeof rawObs === "object" && !Array.isArray(rawObs)) {
+        const o = rawObs as Record<string, unknown>;
+        setObsidianLogState({
+          enabled: Boolean(o.enabled),
+          baseUrl: typeof o.baseUrl === "string" && o.baseUrl.trim() ? o.baseUrl.trim() : "http://127.0.0.1:27124",
+          apiKey: typeof o.apiKey === "string" ? o.apiKey : "",
+          notePath: typeof o.notePath === "string" && o.notePath.trim() ? o.notePath.trim() : "ShELF/todo-log.md",
+        });
+      }
       setPrompts(
         result[PROMPTS_KEY] && typeof result[PROMPTS_KEY] === "object" && !Array.isArray(result[PROMPTS_KEY])
           ? normalizePrompts(result[PROMPTS_KEY])
@@ -319,6 +354,45 @@ export function useShelfStorage() {
     getStorage()?.set({ [PROMPT_ROWS_KEY]: next });
   }, []);
 
+  const setObsidianLogConfig = useCallback((next: Partial<ObsidianLogConfig>) => {
+    setObsidianLogState((prev) => {
+      const nextState = {
+        enabled: typeof next.enabled === "boolean" ? next.enabled : prev.enabled,
+        baseUrl: typeof next.baseUrl === "string" && next.baseUrl.trim() ? next.baseUrl.trim() : prev.baseUrl,
+        apiKey: typeof next.apiKey === "string" ? next.apiKey : prev.apiKey,
+        notePath: typeof next.notePath === "string" && next.notePath.trim() ? next.notePath.trim() : prev.notePath,
+      };
+      getStorage()?.set({ [OBSIDIAN_LOG_KEY]: nextState });
+      return nextState;
+    });
+  }, []);
+
+  const logToObsidian = useCallback(
+    async (message: string) => {
+      if (!obsidianLog.enabled || !obsidianLog.apiKey.trim() || !obsidianLog.baseUrl.trim()) return;
+      const base = obsidianLog.baseUrl.replace(/\/+$/, "");
+      const path = obsidianLog.notePath.replace(/^\//, "");
+      const url = `${base}/vault/${encodeURIComponent(path)}`;
+      const line = `\n${message}`;
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${obsidianLog.apiKey}`,
+            "Content-Type": "text/markdown",
+          },
+          body: line,
+        });
+        if (!res.ok) {
+          console.warn("[ShELF] Obsidian log failed:", res.status, await res.text());
+        }
+      } catch (e) {
+        console.warn("[ShELF] Obsidian log error:", e);
+      }
+    },
+    [obsidianLog]
+  );
+
   const exportBackup = useCallback((): ShelfBackupData => {
     return {
       version: 1,
@@ -375,6 +449,9 @@ export function useShelfStorage() {
     pillarPins,
     pillarTodos,
     setPillarTodos: setPillarTodosState,
+    obsidianLog,
+    setObsidianLogConfig,
+    logToObsidian,
     prompts,
     gridLocked,
     promptRows,

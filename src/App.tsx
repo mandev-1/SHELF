@@ -22,6 +22,7 @@ function App() {
     setPillarPins,
     pillarTodos,
     setPillarTodos,
+    logToObsidian,
   } = useShelfStorage();
   const [editingName, setEditingName] = useState(false);
   const { results: searchResults, loading: searchLoading } =
@@ -39,6 +40,11 @@ function App() {
         onSetPinned={setPillarPins}
         todos={pillarTodos}
         onSetTodos={setPillarTodos}
+        onTodoLog={(entry) => {
+          const ts = new Date().toISOString().slice(0, 19).replace("T", " ");
+          const line = `- ${ts} — ${entry}`;
+          logToObsidian(line);
+        }}
       />
       <div className="flex-1 flex flex-col min-w-0">
         <header className="shrink-0 border-b border-white/10 px-6 py-5">

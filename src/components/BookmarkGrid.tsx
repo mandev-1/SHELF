@@ -1,4 +1,4 @@
-import { Button, Link, Popover, Spinner, Surface } from "@heroui/react";
+import { Button, Input, Link, Popover, Spinner, Surface } from "@heroui/react";
 import { GridStack } from "gridstack";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -799,6 +799,9 @@ export function BookmarkGrid() {
     setBookmarkExpanded,
     exportBackup,
     importBackup,
+    obsidianLog,
+    setObsidianLogConfig,
+    logToObsidian,
   } = useShelfStorage();
   const gridRef = useRef<HTMLDivElement>(null);
   const gridInstanceRef = useRef<GridStack | null>(null);
@@ -806,6 +809,8 @@ export function BookmarkGrid() {
   const [addingBookmark, setAddingBookmark] = useState(false);
   const [moving, setMoving] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showObsidianConfig, setShowObsidianConfig] = useState(false);
+  const [obsidianTestStatus, setObsidianTestStatus] = useState<"idle" | "ok" | "fail">("idle");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folders = useMemo(() => collectFolders(tree), [tree]);
   const goalItems = useMemo(() => (showGoals ? Object.values(goals) : []), [goals, showGoals]);
@@ -968,7 +973,7 @@ export function BookmarkGrid() {
           onClick={() => setShowSettings(false)}
         >
           <div
-            className="absolute bottom-20 right-4 w-56 rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)]"
+            className={`absolute bottom-20 right-4 rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)] ${showObsidianConfig ? "w-72" : "w-56"}`}
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -1001,11 +1006,96 @@ export function BookmarkGrid() {
             <button
               type="button"
               className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => {
+                if (typeof chrome !== "undefined" && chrome.tabs?.create) {
+                  chrome.tabs.create({ url: "chrome://bookmarks/" });
+                }
+                setShowSettings(false);
+              }}
+            >
+              <span>Go to Chrome bookmarks</span>
+              <span className="text-xs text-emerald-300/60">chrome://bookmarks</span>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
               onClick={() => setShowGoals(!showGoals)}
             >
               <span>Show Goal</span>
               <span className="text-xs text-emerald-300/60">{showGoals ? "On" : "Off"}</span>
             </button>
+            <div className="my-1.5 border-t border-white/10" />
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => setShowObsidianConfig((v) => !v)}
+            >
+              <span>Obsidian log</span>
+              <span className="text-xs text-emerald-300/60">{obsidianLog.enabled ? "On" : "Off"}</span>
+            </button>
+            {showObsidianConfig && (
+              <div className="mt-2 space-y-2 rounded-xl border border-white/10 bg-white/5 p-2">
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={obsidianLog.enabled}
+                    onChange={(e) => setObsidianLogConfig({ enabled: e.target.checked })}
+                    className="rounded border-white/20"
+                  />
+                  Enable todo log to Obsidian
+                </label>
+                <div>
+                  <div className="mb-0.5 text-[10px] text-zinc-500">API URL</div>
+                  <Input
+                    variant="secondary"
+                    value={obsidianLog.baseUrl}
+                    onChange={(e) => setObsidianLogConfig({ baseUrl: e.target.value })}
+                    placeholder="http://127.0.0.1:27124"
+                    className="text-xs"
+                  />
+                </div>
+                <div>
+                  <div className="mb-0.5 text-[10px] text-zinc-500">API Key</div>
+                  <Input
+                    variant="secondary"
+                    type="password"
+                    value={obsidianLog.apiKey}
+                    onChange={(e) => setObsidianLogConfig({ apiKey: e.target.value })}
+                    placeholder="From Obsidian Local REST API settings"
+                    className="text-xs"
+                  />
+                </div>
+                <div>
+                  <div className="mb-0.5 text-[10px] text-zinc-500">Note path</div>
+                  <Input
+                    variant="secondary"
+                    value={obsidianLog.notePath}
+                    onChange={(e) => setObsidianLogConfig({ notePath: e.target.value })}
+                    placeholder="ShELF/todo-log.md"
+                    className="text-xs"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-lg bg-emerald-500/20 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/30"
+                    onClick={async () => {
+                      setObsidianTestStatus("idle");
+                      try {
+                        await logToObsidian("\n--- ShELF test log " + new Date().toISOString() + " ---");
+                        setObsidianTestStatus("ok");
+                      } catch {
+                        setObsidianTestStatus("fail");
+                      }
+                    }}
+                  >
+                    Test connection
+                  </button>
+                  {obsidianTestStatus === "ok" && <span className="text-xs text-emerald-400">OK</span>}
+                  {obsidianTestStatus === "fail" && <span className="text-xs text-red-400">Failed</span>}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
