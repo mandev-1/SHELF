@@ -23,6 +23,8 @@ const BOOKMARK_VIEW_KEY = "bookmark-view";
 const PILLAR_KEY = "pillar-pins";
 const PILLAR_TODOS_KEY = "pillar-todos";
 const OBSIDIAN_LOG_KEY = "obsidian-log";
+const TASK_LOG_KEY = "task-log";
+const HIDDEN_FOLDERS_KEY = "shelf-hidden-folders";
 const PROMPTS_KEY = "shelf-prompts";
 const GRID_LOCKED_KEY = "grid-locked";
 const PROMPT_ROWS_KEY = "prompt-rows";
@@ -119,14 +121,20 @@ export function useShelfStorage() {
   const [goals, setGoals] = useState<ShelfGoalMap>({});
   const [showGoals, setShowGoals] = useState(false);
   const [bookmarkViews, setBookmarkViews] = useState<ShelfBookmarkViewMap>({});
-  const [pillarPins, setPillarPins] = useState<{ top: string[] }>({ top: [] });
+  const [pillarPins, setPillarPins] = useState<{
+    top: string[];
+    overrides?: Record<string, { title?: string; imageUrl?: string }>;
+  }>({ top: [] });
   const [pillarTodos, setPillarTodos] = useState<ShelfPillarTodoItem[]>([]);
   const [obsidianLog, setObsidianLogState] = useState<ObsidianLogConfig>({
     enabled: false,
     baseUrl: "http://127.0.0.1:27124",
     apiKey: "",
     notePath: "ShELF/todo-log.md",
+    useDailyNote: false,
   });
+  const [taskLog, setTaskLog] = useState<string>("");
+  const [hiddenFolderIds, setHiddenFolderIds] = useState<string[]>([]);
   const [prompts, setPrompts] = useState<ShelfPromptMap>(DEFAULT_PROMPTS);
   const [shelfName, setShelfNameState] = useState("ShELF");
   const [gridLocked, setGridLocked] = useState(false);
@@ -152,6 +160,8 @@ export function useShelfStorage() {
         PILLAR_KEY,
         PILLAR_TODOS_KEY,
         OBSIDIAN_LOG_KEY,
+        TASK_LOG_KEY,
+        HIDDEN_FOLDERS_KEY,
         PROMPTS_KEY,
         GRID_LOCKED_KEY,
         PROMPT_ROWS_KEY,
@@ -200,7 +210,10 @@ export function useShelfStorage() {
         const raw = result[PILLAR_KEY];
         if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { top: [] };
         const top = Array.isArray((raw as any).top) ? (raw as any).top.filter((x: any) => typeof x === "string") : [];
-        return { top: top.slice(0, 6) };
+        const overrides = (raw as any).overrides && typeof (raw as any).overrides === "object" && !Array.isArray((raw as any).overrides)
+          ? (raw as any).overrides as Record<string, { title?: string; imageUrl?: string }>
+          : undefined;
+        return { top: top.slice(0, 6), overrides };
       });
       setPillarTodos(() => {
         const raw = result[PILLAR_TODOS_KEY];
@@ -212,6 +225,7 @@ export function useShelfStorage() {
             text: String(x.text),
             done: Boolean(x.done),
             url: typeof x.url === "string" && x.url.trim() ? x.url.trim() : undefined,
+            note: typeof x.note === "string" ? x.note : undefined,
           }));
       });
       const rawObs = result[OBSIDIAN_LOG_KEY];
@@ -222,8 +236,14 @@ export function useShelfStorage() {
           baseUrl: typeof o.baseUrl === "string" && o.baseUrl.trim() ? o.baseUrl.trim() : "http://127.0.0.1:27124",
           apiKey: typeof o.apiKey === "string" ? o.apiKey : "",
           notePath: typeof o.notePath === "string" && o.notePath.trim() ? o.notePath.trim() : "ShELF/todo-log.md",
+          useDailyNote: Boolean(o.useDailyNote),
         });
       }
+      setTaskLog(typeof result[TASK_LOG_KEY] === "string" ? result[TASK_LOG_KEY] as string : "");
+      const rawHidden = result[HIDDEN_FOLDERS_KEY];
+      setHiddenFolderIds(
+        Array.isArray(rawHidden) ? rawHidden.filter((x: unknown) => typeof x === "string") : []
+      );
       setPrompts(
         result[PROMPTS_KEY] && typeof result[PROMPTS_KEY] === "object" && !Array.isArray(result[PROMPTS_KEY])
           ? normalizePrompts(result[PROMPTS_KEY])
@@ -300,9 +320,30 @@ export function useShelfStorage() {
   }, []);
 
   const setPillarPinsState = useCallback((next: { top: string[] }) => {
-    const normalized = { top: (next.top ?? []).filter(Boolean).slice(0, 6) };
-    setPillarPins(normalized);
-    getStorage()?.set({ [PILLAR_KEY]: normalized });
+    setPillarPins((prev) => {
+      const normalized = { ...prev, top: (next.top ?? []).filter(Boolean).slice(0, 6) };
+      getStorage()?.set({ [PILLAR_KEY]: normalized });
+      return normalized;
+    });
+  }, []);
+
+  const setPillarPinOverride = useCallback((bookmarkId: string, override: { title?: string; imageUrl?: string } | null) => {
+    setPillarPins((prev) => {
+      const overrides = { ...(prev.overrides ?? {}) };
+      if (override === null) {
+        delete overrides[bookmarkId];
+      } else {
+        const current = overrides[bookmarkId] ?? {};
+        overrides[bookmarkId] = {
+          title: override.title !== undefined ? override.title : current.title,
+          imageUrl: override.imageUrl !== undefined ? override.imageUrl : current.imageUrl,
+        };
+        if (!overrides[bookmarkId].title && !overrides[bookmarkId].imageUrl) delete overrides[bookmarkId];
+      }
+      const next = { ...prev, overrides: Object.keys(overrides).length ? overrides : undefined };
+      getStorage()?.set({ [PILLAR_KEY]: next });
+      return next;
+    });
   }, []);
 
   const setPillarTodosState = useCallback((next: ShelfPillarTodoItem[] | ((prev: ShelfPillarTodoItem[]) => ShelfPillarTodoItem[])) => {
@@ -313,6 +354,7 @@ export function useShelfStorage() {
         text: t.text,
         done: Boolean(t.done),
         url: typeof t.url === "string" && t.url.trim() ? t.url.trim() : undefined,
+        note: typeof t.note === "string" ? t.note : undefined,
       }));
       getStorage()?.set({ [PILLAR_TODOS_KEY]: normalized });
       return normalized;
@@ -361,6 +403,7 @@ export function useShelfStorage() {
         baseUrl: typeof next.baseUrl === "string" && next.baseUrl.trim() ? next.baseUrl.trim() : prev.baseUrl,
         apiKey: typeof next.apiKey === "string" ? next.apiKey : prev.apiKey,
         notePath: typeof next.notePath === "string" && next.notePath.trim() ? next.notePath.trim() : prev.notePath,
+        useDailyNote: typeof next.useDailyNote === "boolean" ? next.useDailyNote : prev.useDailyNote ?? false,
       };
       getStorage()?.set({ [OBSIDIAN_LOG_KEY]: nextState });
       return nextState;
@@ -371,7 +414,14 @@ export function useShelfStorage() {
     async (message: string) => {
       if (!obsidianLog.enabled || !obsidianLog.apiKey.trim() || !obsidianLog.baseUrl.trim()) return;
       const base = obsidianLog.baseUrl.replace(/\/+$/, "");
-      const path = obsidianLog.notePath.replace(/^\//, "");
+      let path = obsidianLog.notePath.replace(/^\//, "").replace(/\/+$/, "");
+      if (obsidianLog.useDailyNote) {
+        const dateStr = new Date().toISOString().slice(0, 10);
+        path = path.endsWith(".md") ? path.replace(/\.md$/, "") : path;
+        path = `${path}/${dateStr}.md`;
+      } else if (!path.endsWith(".md")) {
+        path = `${path}.md`;
+      }
       const url = `${base}/vault/${encodeURIComponent(path)}`;
       const line = `\n${message}`;
       try {
@@ -393,6 +443,50 @@ export function useShelfStorage() {
     [obsidianLog]
   );
 
+  const appendTaskLog = useCallback((text: string) => {
+    setTaskLog((prev) => {
+      const next = prev ? `${prev}\n${text}` : text;
+      getStorage()?.set({ [TASK_LOG_KEY]: next });
+      return next;
+    });
+  }, []);
+
+  const clearTaskLog = useCallback(() => {
+    setTaskLog("");
+    getStorage()?.set({ [TASK_LOG_KEY]: "" });
+  }, []);
+
+  const openTaskLogInObsidian = useCallback(async () => {
+    if (!obsidianLog.apiKey.trim() || !obsidianLog.baseUrl.trim()) return;
+    const base = obsidianLog.baseUrl.replace(/\/+$/, "");
+    let path = obsidianLog.notePath.replace(/^\//, "").replace(/\/+$/, "");
+    if (obsidianLog.useDailyNote) {
+      const dateStr = new Date().toISOString().slice(0, 10);
+      path = path.endsWith(".md") ? path.replace(/\.md$/, "") : path;
+      path = `${path}/${dateStr}.md`;
+    } else if (!path.endsWith(".md")) {
+      path = `${path}.md`;
+    }
+    try {
+      const res = await fetch(`${base}/open/${encodeURIComponent(path)}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${obsidianLog.apiKey}` },
+      });
+      if (!res.ok) console.warn("[ShELF] Open in Obsidian failed:", res.status, await res.text());
+    } catch (e) {
+      console.warn("[ShELF] Open in Obsidian error:", e);
+    }
+  }, [obsidianLog]);
+
+  const setHiddenFolders = useCallback((next: string[] | ((prev: string[]) => string[])) => {
+    setHiddenFolderIds((prev) => {
+      const list = typeof next === "function" ? next(prev) : next;
+      const normalized = list.filter((id) => typeof id === "string");
+      getStorage()?.set({ [HIDDEN_FOLDERS_KEY]: normalized });
+      return normalized;
+    });
+  }, []);
+
   const exportBackup = useCallback((): ShelfBackupData => {
     return {
       version: 1,
@@ -408,8 +502,9 @@ export function useShelfStorage() {
       shelfName,
       gridLocked,
       promptRows,
+      hiddenFolderIds,
     };
-  }, [colors, goals, gridLocked, labels, layout, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals]);
+  }, [colors, goals, gridLocked, hiddenFolderIds, labels, layout, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -419,8 +514,15 @@ export function useShelfStorage() {
     if (typeof backup.shelfName === "string") setShelfNameState(backup.shelfName);
     if (typeof backup.gridLocked === "boolean") setGridLocked(backup.gridLocked);
     if (typeof backup.showGoals === "boolean") setShowGoals(backup.showGoals);
-    if (backup.pillarPins && typeof backup.pillarPins === "object") setPillarPins({ top: Array.isArray((backup.pillarPins as any).top) ? (backup.pillarPins as any).top.slice(0, 6) : [] });
+    if (backup.pillarPins && typeof backup.pillarPins === "object") {
+      const raw = backup.pillarPins as any;
+      setPillarPins({
+        top: Array.isArray(raw.top) ? raw.top.slice(0, 6) : [],
+        overrides: raw.overrides && typeof raw.overrides === "object" ? raw.overrides : undefined,
+      });
+    }
     if (Array.isArray(backup.pillarTodos)) setPillarTodos(backup.pillarTodos);
+    if (Array.isArray(backup.hiddenFolderIds)) setHiddenFolderIds(backup.hiddenFolderIds);
 
     getStorage()?.set({
       [LAYOUT_KEY]: backup.layout ?? layout,
@@ -429,14 +531,20 @@ export function useShelfStorage() {
       [SEPARATORS_KEY]: backup.separators ?? separators,
       [GOALS_KEY]: backup.goals ?? goals,
       [SHOW_GOALS_KEY]: typeof backup.showGoals === "boolean" ? backup.showGoals : showGoals,
-      [PILLAR_KEY]: backup.pillarPins ? { top: Array.isArray((backup.pillarPins as any).top) ? (backup.pillarPins as any).top.slice(0, 6) : [] } : pillarPins,
+      [PILLAR_KEY]: backup.pillarPins
+        ? {
+            top: Array.isArray((backup.pillarPins as any).top) ? (backup.pillarPins as any).top.slice(0, 6) : [],
+            overrides: (backup.pillarPins as any).overrides ?? pillarPins.overrides,
+          }
+        : pillarPins,
       [PILLAR_TODOS_KEY]: Array.isArray(backup.pillarTodos) ? backup.pillarTodos : pillarTodos,
       [PROMPTS_KEY]: backup.prompts ?? prompts,
       [SHELF_NAME_KEY]: typeof backup.shelfName === "string" ? backup.shelfName : shelfName,
       [GRID_LOCKED_KEY]: typeof backup.gridLocked === "boolean" ? backup.gridLocked : gridLocked,
       [PROMPT_ROWS_KEY]: backup.promptRows === 2 ? 2 : 1,
+      [HIDDEN_FOLDERS_KEY]: Array.isArray(backup.hiddenFolderIds) ? backup.hiddenFolderIds : hiddenFolderIds,
     });
-  }, [colors, goals, gridLocked, labels, layout, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals]);
+  }, [colors, goals, gridLocked, hiddenFolderIds, labels, layout, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals]);
 
   return {
     layout,
@@ -452,6 +560,12 @@ export function useShelfStorage() {
     obsidianLog,
     setObsidianLogConfig,
     logToObsidian,
+    openTaskLogInObsidian,
+    taskLog,
+    appendTaskLog,
+    clearTaskLog,
+    hiddenFolderIds,
+    setHiddenFolders,
     prompts,
     gridLocked,
     promptRows,
@@ -467,6 +581,7 @@ export function useShelfStorage() {
     setFolderSeparators,
     setBookmarkExpanded,
     setPillarPins: setPillarPinsState,
+    setPillarPinOverride,
     saveGoals,
     setShowGoals: setShowGoalsState,
     setGridLocked: setGridLockedState,

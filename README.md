@@ -48,10 +48,19 @@ A minimal, serverless Chrome/Brave extension that turns your new tab into a book
 
 ## Development
 
-- **One-off build:** `npm run build`
-- **Watch mode (rebuild on change):** `npm run dev`
+**Live reload (recommended)** — Changes apply without refreshing:
 
-After changing code, go to `chrome://extensions` and click the reload icon on the ShELF extension to pick up the new build.
+1. Run the dev server: `npm run dev`
+2. In Chrome/Brave go to `chrome://extensions`, enable **Developer mode**, and click **Load unpacked**.
+3. Select the **`dev`** folder (not `dist`). The extension will show as "ShELF Bookmarks (dev)".
+4. Open a new tab. Edits to the code will hot-reload in that tab.
+
+**Production-style build** (no dev server):
+
+- One-off build: `npm run build`
+- Watch and rebuild on change: `npm run build:watch`
+
+Then load the extension from `dist` or from `releases/<version>/` and refresh the new-tab page after each rebuild.
 
 ## Tech stack
 

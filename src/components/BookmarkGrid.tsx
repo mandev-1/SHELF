@@ -106,6 +106,9 @@ function FolderCard({
   bookmarkViews,
   onSetBookmarkExpanded,
   onRenameBookmark,
+  onDeleteBookmark,
+  onAddBookmarkHere,
+  onHideFromShelf,
 }: {
   node: BookmarkTreeNode;
   accentColor?: string;
@@ -121,6 +124,9 @@ function FolderCard({
   bookmarkViews: Record<string, { expanded?: boolean }>;
   onSetBookmarkExpanded: (bookmarkId: string, expanded: boolean) => void;
   onRenameBookmark: (bookmarkId: string, newTitle: string) => Promise<void>;
+  onDeleteBookmark: (bookmarkId: string) => Promise<void>;
+  onAddBookmarkHere: (folderId: string) => Promise<void>;
+  onHideFromShelf: (folderId: string) => void;
 }) {
   const items = renderFolderItems(node, separators);
   const [editingLabel, setEditingLabel] = useState(false);
@@ -315,6 +321,19 @@ function FolderCard({
             </button>
             <button
               type="button"
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-300 hover:bg-red-500/15"
+              onClick={async () => {
+                const id = bookmarkMenu!.id;
+                if (window.confirm("Delete this bookmark?")) {
+                  await onDeleteBookmark(id);
+                }
+                setBookmarkMenu(null);
+              }}
+            >
+              Delete
+            </button>
+            <button
+              type="button"
               className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-white/5"
               onClick={() => setBookmarkMenu(null)}
             >
@@ -327,12 +346,32 @@ function FolderCard({
             <button
               type="button"
               onClick={() => {
+                onAddBookmarkHere(node.id);
+                setShowMenu(false);
+              }}
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10"
+            >
+              Add bookmark here
+            </button>
+            <button
+              type="button"
+              onClick={() => {
                 onAddSeparator(node.id);
                 setShowMenu(false);
               }}
               className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10"
             >
               Add separator
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onHideFromShelf(node.id);
+                setShowMenu(false);
+              }}
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-white/5"
+            >
+              Hide from shelf
             </button>
             <button
               type="button"
@@ -802,6 +841,11 @@ export function BookmarkGrid() {
     obsidianLog,
     setObsidianLogConfig,
     logToObsidian,
+    openTaskLogInObsidian,
+    taskLog,
+    clearTaskLog,
+    hiddenFolderIds,
+    setHiddenFolders,
   } = useShelfStorage();
   const gridRef = useRef<HTMLDivElement>(null);
   const gridInstanceRef = useRef<GridStack | null>(null);
@@ -810,9 +854,18 @@ export function BookmarkGrid() {
   const [moving, setMoving] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showObsidianConfig, setShowObsidianConfig] = useState(false);
+  const [showHiddenFolders, setShowHiddenFolders] = useState(false);
   const [obsidianTestStatus, setObsidianTestStatus] = useState<"idle" | "ok" | "fail">("idle");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const folders = useMemo(() => collectFolders(tree), [tree]);
+  const allFolders = useMemo(() => collectFolders(tree), [tree]);
+  const folders = useMemo(
+    () => allFolders.filter((f) => !hiddenFolderIds.includes(f.id)),
+    [allFolders, hiddenFolderIds]
+  );
+  const hiddenFolderNodes = useMemo(
+    () => allFolders.filter((f) => hiddenFolderIds.includes(f.id)),
+    [allFolders, hiddenFolderIds]
+  );
   const goalItems = useMemo(() => (showGoals ? Object.values(goals) : []), [goals, showGoals]);
   const layout = useMemo(() => {
     const byId = new Map<string, { id: string; x: number; y: number; w: number; h: number }>();
@@ -843,7 +896,7 @@ export function BookmarkGrid() {
   }, [folders, goalItems, savedLayout]);
 
   useEffect(() => {
-    if (!gridRef.current || !ready || folders.length === 0) return;
+    if (!gridRef.current || !ready || (folders.length === 0 && goalItems.length === 0)) return;
     gridInstanceRef.current?.destroy(false);
     const grid = GridStack.init({ column: COLUMNS, cellHeight: 80, margin: "12px 10px 12px 10px", float: true, animate: true }, gridRef.current);
     gridInstanceRef.current = grid;
@@ -856,7 +909,7 @@ export function BookmarkGrid() {
       grid.destroy(false);
       gridInstanceRef.current = null;
     };
-  }, [folders.length, ready, saveLayout, gridLocked]);
+  }, [folders.length, goalItems.length, ready, saveLayout, gridLocked]);
 
   const removeFolderWithCollapse = async (id: string) => {
     saveLayout(savedLayout.filter((item) => item.id !== id));
@@ -973,7 +1026,7 @@ export function BookmarkGrid() {
           onClick={() => setShowSettings(false)}
         >
           <div
-            className={`absolute bottom-20 right-4 rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)] ${showObsidianConfig ? "w-72" : "w-56"}`}
+            className={`absolute bottom-20 right-4 rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)] ${showObsidianConfig || showHiddenFolders ? "w-72" : "w-56"}`}
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -1025,6 +1078,78 @@ export function BookmarkGrid() {
               <span className="text-xs text-emerald-300/60">{showGoals ? "On" : "Off"}</span>
             </button>
             <div className="my-1.5 border-t border-white/10" />
+            <div className="rounded-xl border border-white/10 bg-white/5 p-2">
+              <div className="mb-1.5 text-xs font-medium text-emerald-200">Task log (local)</div>
+              <p className="mb-2 text-[10px] text-zinc-500">Pillar todo activity is written here. Download as .md or clear.</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg bg-emerald-500/20 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
+                  disabled={!taskLog.trim()}
+                  onClick={() => {
+                    const blob = new Blob([taskLog], { type: "text/markdown" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `task-log-${new Date().toISOString().slice(0, 10)}.md`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  Download .md
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-white/10 px-2 py-1 text-xs text-zinc-300 hover:bg-white/15 disabled:opacity-50"
+                  disabled={!taskLog.trim()}
+                  onClick={() => {
+                    if (taskLog.trim() && window.confirm("Clear the task log?")) clearTaskLog();
+                  }}
+                >
+                  Clear log
+                </button>
+              </div>
+              {taskLog.trim() && (
+                <p className="mt-1.5 text-[10px] text-zinc-500">
+                  {taskLog.split("\n").filter(Boolean).length} lines
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => setShowHiddenFolders((v) => !v)}
+            >
+              <span>Hidden folders</span>
+              <span className="text-xs text-emerald-300/60">
+                {hiddenFolderNodes.length > 0 ? hiddenFolderNodes.length : "None"}
+              </span>
+            </button>
+            {showHiddenFolders && (
+              <div className="mt-2 space-y-1 rounded-xl border border-white/10 bg-white/5 p-2">
+                {hiddenFolderNodes.length === 0 ? (
+                  <p className="text-xs text-zinc-500">No hidden folders. Right‑click a folder → Hide from shelf.</p>
+                ) : (
+                  hiddenFolderNodes.map((node) => (
+                    <div
+                      key={node.id}
+                      className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-300"
+                    >
+                      <span className="min-w-0 truncate">{getTitle(node)}</span>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-200 hover:bg-emerald-500/30"
+                        onClick={() => {
+                          setHiddenFolders((prev) => prev.filter((id) => id !== node.id));
+                        }}
+                      >
+                        Unhide
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
             <button
               type="button"
               className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
@@ -1035,6 +1160,15 @@ export function BookmarkGrid() {
             </button>
             {showObsidianConfig && (
               <div className="mt-2 space-y-2 rounded-xl border border-white/10 bg-white/5 p-2">
+                <a
+                  href={typeof chrome !== "undefined" && chrome.runtime?.getURL ? chrome.runtime.getURL("obsidian-setup.html") : "/obsidian-setup.html"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300"
+                >
+                  <span aria-hidden>?</span>
+                  <span>Setup guide: connect Obsidian</span>
+                </a>
                 <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
                   <input
                     type="checkbox"
@@ -1044,8 +1178,19 @@ export function BookmarkGrid() {
                   />
                   Enable todo log to Obsidian
                 </label>
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={obsidianLog.useDailyNote ?? false}
+                    onChange={(e) => setObsidianLogConfig({ useDailyNote: e.target.checked })}
+                    className="rounded border-white/20"
+                  />
+                  Use daily note (one log per day)
+                </label>
                 <div>
-                  <div className="mb-0.5 text-[10px] text-zinc-500">API URL</div>
+                  <div className="mb-0.5 text-[10px] text-zinc-500">
+                    {obsidianLog.useDailyNote ? "Folder path (e.g. Daily or ShELF/daily)" : "Note path"}
+                  </div>
                   <Input
                     variant="secondary"
                     value={obsidianLog.baseUrl}
@@ -1071,11 +1216,11 @@ export function BookmarkGrid() {
                     variant="secondary"
                     value={obsidianLog.notePath}
                     onChange={(e) => setObsidianLogConfig({ notePath: e.target.value })}
-                    placeholder="ShELF/todo-log.md"
+                    placeholder={obsidianLog.useDailyNote ? "Daily" : "ShELF/todo-log.md"}
                     className="text-xs"
                   />
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     className="rounded-lg bg-emerald-500/20 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/30"
@@ -1090,6 +1235,14 @@ export function BookmarkGrid() {
                     }}
                   >
                     Test connection
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg bg-emerald-500/20 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/30"
+                    onClick={() => openTaskLogInObsidian()}
+                    title="Open the task log note (or today’s daily note) in Obsidian. Use Reveal in folder there to open the directory."
+                  >
+                    Open task log in Obsidian
                   </button>
                   {obsidianTestStatus === "ok" && <span className="text-xs text-emerald-400">OK</span>}
                   {obsidianTestStatus === "fail" && <span className="text-xs text-red-400">Failed</span>}
@@ -1195,6 +1348,27 @@ export function BookmarkGrid() {
                   onRenameBookmark={async (bookmarkId, newTitle) => {
                     await updateBookmark(bookmarkId, { title: newTitle });
                   }}
+                  onDeleteBookmark={async (bookmarkId) => {
+                    await deleteBookmarkNode(bookmarkId);
+                  }}
+                  onAddBookmarkHere={async (folderId) => {
+                    const url = window.prompt("Bookmark URL");
+                    if (!url?.trim()) return;
+                    let defaultTitle = "";
+                    try {
+                      defaultTitle = new URL(url).hostname;
+                    } catch {
+                      defaultTitle = url;
+                    }
+                    const title = window.prompt("Bookmark title", defaultTitle)?.trim() || defaultTitle || url;
+                    setAddingBookmark(true);
+                    try {
+                      await createBookmark(title, url.trim(), folderId);
+                      await reload();
+                    } finally {
+                      setAddingBookmark(false);
+                    }
+                  }}
                   onDropBookmark={async (bookmarkId, folderId) => {
                     setMoving(true);
                     try {
@@ -1202,6 +1376,10 @@ export function BookmarkGrid() {
                     } finally {
                       setMoving(false);
                     }
+                  }}
+                  onHideFromShelf={(folderId) => {
+                    setHiddenFolders((prev) => [...prev, folderId]);
+                    saveLayout(savedLayout.filter((item) => item.id !== folderId));
                   }}
                 />
               )}

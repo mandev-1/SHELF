@@ -61,6 +61,7 @@ export interface ShelfPillarTodoItem {
   text: string;
   done: boolean;
   url?: string;
+  note?: string;
 }
 
 export interface ObsidianLogConfig {
@@ -68,6 +69,8 @@ export interface ObsidianLogConfig {
   baseUrl: string;
   apiKey: string;
   notePath: string;
+  /** When true, append /YYYY-MM-DD.md to notePath for one log per day */
+  useDailyNote?: boolean;
 }
 
 export interface ShelfBackupData {
@@ -78,12 +81,13 @@ export interface ShelfBackupData {
   separators: ShelfFolderSeparatorMap;
   goals: ShelfGoalMap;
   showGoals: boolean;
-  pillarPins?: { top: string[]; list?: string[] };
+  pillarPins?: { top: string[]; list?: string[]; overrides?: Record<string, { title?: string; imageUrl?: string }> };
   pillarTodos?: ShelfPillarTodoItem[];
   prompts: ShelfPromptMap;
   shelfName: string;
   gridLocked: boolean;
   promptRows: 1 | 2;
+  hiddenFolderIds?: string[];
 }
 
 export const ACCENT_COLORS = [

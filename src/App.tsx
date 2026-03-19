@@ -20,9 +20,12 @@ function App() {
     setPromptRows,
     pillarPins,
     setPillarPins,
+    setPillarPinOverride,
     pillarTodos,
     setPillarTodos,
+    obsidianLog,
     logToObsidian,
+    appendTaskLog,
   } = useShelfStorage();
   const [editingName, setEditingName] = useState(false);
   const { results: searchResults, loading: searchLoading } =
@@ -37,13 +40,17 @@ function App() {
         shelfName={shelfName}
         tree={tree}
         pinnedTop={pillarPins.top}
+        pinOverrides={pillarPins.overrides}
         onSetPinned={setPillarPins}
+        onSetPinOverride={setPillarPinOverride}
         todos={pillarTodos}
         onSetTodos={setPillarTodos}
         onTodoLog={(entry) => {
-          const ts = new Date().toISOString().slice(0, 19).replace("T", " ");
-          const line = `- ${ts} — ${entry}`;
-          logToObsidian(line);
+          const time = new Date().toTimeString().slice(0, 5);
+          const formatted =
+            entry.includes("\n") ? `- ${time} - ${entry.split("\n")[0]}\n${entry.split("\n").slice(1).join("\n")}` : `- ${time} - ${entry}`;
+          appendTaskLog(formatted);
+          if (obsidianLog.enabled) logToObsidian(formatted);
         }}
       />
       <div className="flex-1 flex flex-col min-w-0">

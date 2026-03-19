@@ -1,5 +1,5 @@
 import { Input, Link, Surface } from "@heroui/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { BookmarkTreeNode } from "../types/bookmarks";
 import type { ShelfPillarTodoItem } from "../types/grid";
 
@@ -53,7 +53,9 @@ export function Pillar({
   shelfName,
   tree,
   pinnedTop,
+  pinOverrides,
   onSetPinned,
+  onSetPinOverride,
   todos,
   onSetTodos,
   onTodoLog,
@@ -61,7 +63,9 @@ export function Pillar({
   shelfName: string;
   tree: BookmarkTreeNode[] | null;
   pinnedTop: string[];
+  pinOverrides?: Record<string, { title?: string; imageUrl?: string }>;
   onSetPinned: (next: { top: string[] }) => void;
+  onSetPinOverride: (bookmarkId: string, override: { title?: string; imageUrl?: string } | null) => void;
   todos: ShelfPillarTodoItem[];
   onSetTodos: (next: ShelfPillarTodoItem[] | ((prev: ShelfPillarTodoItem[]) => ShelfPillarTodoItem[])) => void;
   onTodoLog?: (entry: string) => void;
@@ -70,6 +74,14 @@ export function Pillar({
   const [overZone, setOverZone] = useState<"top" | null>(null);
   const [todoDraft, setTodoDraft] = useState("");
   const [todoLinkDraft, setTodoLinkDraft] = useState("");
+  const [notePopover, setNotePopover] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [pinMenu, setPinMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [celebration, setCelebration] = useState<string | null>(null);
+  const notePopoverRef = useRef<HTMLDivElement | null>(null);
+  const pinMenuRef = useRef<HTMLDivElement | null>(null);
+  const celebrationTimerRef = useRef<number | null>(null);
+  const todosRef = useRef(todos);
+  todosRef.current = todos;
 
   const topNodes = pinnedTop.map((id) => byId.get(id)).filter(Boolean) as BookmarkTreeNode[];
 
@@ -91,29 +103,87 @@ export function Pillar({
     onSetTodos((prev) => [...prev, { id: crypto.randomUUID(), text, done: false, url }]);
     setTodoDraft("");
     setTodoLinkDraft("");
-    onTodoLog?.(`added: ${text}${url ? ` (${url})` : ""}`);
+    onTodoLog?.(`added new task with name ${text}`);
+    if (url) onTodoLog?.(`added URL to task with name ${text}. The URL is: ${url}`);
   };
 
   const toggleTodo = (id: string) => {
     const t = todos.find((x) => x.id === id);
     onSetTodos((prev) => prev.map((item) => (item.id === id ? { ...item, done: !item.done } : item)));
-    if (t) onTodoLog?.(`${t.done ? "reopened" : "done"}: ${t.text}`);
+    if (t) onTodoLog?.(t.done ? `reopened task ${t.text}` : `completed task ${t.text}`);
   };
 
   const removeTodo = (id: string) => {
     const t = todos.find((x) => x.id === id);
+    const label = t?.text ? `"${t.text}"` : "this task";
+    if (!window.confirm(`Remove ${label}? This will clear it from your list.`)) return;
     onSetTodos((prev) => prev.filter((item) => item.id !== id));
-    if (t) onTodoLog?.(`removed: ${t.text}`);
+    if (t) onTodoLog?.(`removed task ${t.text}`);
+    setCelebration("Task cleared! 🎉");
+    if (celebrationTimerRef.current !== null) window.clearTimeout(celebrationTimerRef.current);
+    celebrationTimerRef.current = window.setTimeout(() => {
+      setCelebration(null);
+      celebrationTimerRef.current = null;
+    }, 2500);
   };
 
   const setTodoUrl = (id: string, url: string | undefined) => {
     const t = todos.find((x) => x.id === id);
     onSetTodos((prev) => prev.map((item) => (item.id === id ? { ...item, url: url?.trim() || undefined } : item)));
-    if (t) onTodoLog?.(`link ${url ? "set" : "cleared"}: ${t.text}`);
+    if (t) {
+      if (url?.trim()) onTodoLog?.(`added URL to task with name ${t.text}. The URL is: ${url.trim()}`);
+      else onTodoLog?.(`removed URL from task with name ${t.text}`);
+    }
   };
 
+  const setTodoNote = (id: string, note: string) => {
+    onSetTodos((prev) => prev.map((item) => (item.id === id ? { ...item, note: note === "" ? undefined : note } : item)));
+  };
+
+  useEffect(() => {
+    if (!notePopover) return;
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (notePopoverRef.current && target && notePopoverRef.current.contains(target)) return;
+      const todo = todosRef.current.find((t) => t.id === notePopover.id);
+      if (todo?.note?.trim()) {
+        onTodoLog?.(`added comment to task ${todo.text}:\n\n${todo.note.trim()}\n\n`);
+      }
+      setNotePopover(null);
+    };
+    window.addEventListener("mousedown", onMouseDown, true);
+    return () => window.removeEventListener("mousedown", onMouseDown, true);
+  }, [notePopover, onTodoLog]);
+
+  useEffect(() => {
+    if (!pinMenu) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPinMenu(null);
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (pinMenuRef.current && target && pinMenuRef.current.contains(target)) return;
+      setPinMenu(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("mousedown", onMouseDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("mousedown", onMouseDown, true);
+    };
+  }, [pinMenu]);
+
+  useEffect(() => {
+    return () => {
+      if (celebrationTimerRef.current !== null) {
+        window.clearTimeout(celebrationTimerRef.current);
+        celebrationTimerRef.current = null;
+      }
+    };
+  }, []);
+
   return (
-    <aside className="flex h-screen w-[280px] shrink-0 flex-col border-r border-white/10 bg-zinc-900/80">
+    <aside className="relative flex h-screen w-[280px] shrink-0 flex-col border-r border-white/10 bg-zinc-900/80">
       <div className="shrink-0 p-4">
         <div className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/70">Pillar</div>
         <div className="mt-1 truncate text-lg font-semibold text-white">{shelfName}</div>
@@ -149,31 +219,53 @@ export function Pillar({
             {topNodes.length === 0 ? (
               <div className="text-xs text-zinc-500">Empty</div>
             ) : (
-              topNodes.map((b) => (
-                <div key={b.id} className="group min-w-0 overflow-hidden rounded-2xl border border-emerald-400/15 bg-black/35 p-3">
-                  <Link
-                    href={b.url!}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex min-w-0 items-center gap-3 no-underline"
+              topNodes.map((b) => {
+                const override = pinOverrides?.[b.id];
+                const displayTitle = override?.title ?? b.title ?? b.url ?? "";
+                const imageSrc = override?.imageUrl?.trim() ? override.imageUrl! : faviconUrl(b.url!);
+                return (
+                  <div
+                    key={b.id}
+                    className="group min-w-0 overflow-hidden rounded-2xl border border-emerald-400/15 bg-black/35 p-3"
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setPinMenu({ id: b.id, x: e.clientX, y: e.clientY });
+                    }}
                   >
-                    <img src={faviconUrl(b.url!)} alt="" className="h-11 w-11 shrink-0 rounded-xl" />
-                    <div className="min-w-0 flex-1 overflow-hidden">
-                      <div className="truncate text-sm font-semibold text-white group-hover:text-emerald-100">
-                        {b.title || b.url}
+                    <Link
+                      href={b.url!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex min-w-0 min-h-0 items-center gap-3 no-underline overflow-hidden"
+                    >
+                      <img
+                        src={imageSrc}
+                        alt=""
+                        className="h-11 w-11 shrink-0 rounded-xl object-cover bg-white/5"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = faviconUrl(b.url!);
+                        }}
+                      />
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <div className="truncate text-sm font-semibold text-white group-hover:text-emerald-100">
+                          {displayTitle}
+                        </div>
+                        <div className="mt-0.5 truncate text-xs text-zinc-400" title={b.url}>
+                          {b.url}
+                        </div>
                       </div>
-                      <div className="mt-0.5 truncate text-xs text-zinc-400">{b.url}</div>
-                    </div>
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => removePin(b.id)}
-                    className="mt-2 text-[11px] text-zinc-400 hover:text-white"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => removePin(b.id)}
+                      className="mt-2 text-[11px] text-zinc-400 hover:text-white"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
@@ -209,7 +301,14 @@ export function Pillar({
               <div className="text-xs text-zinc-500">No tasks yet</div>
             ) : (
               todos.map((t) => (
-                <div key={t.id} className="group flex min-w-0 items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-white/5">
+                <div
+                  key={t.id}
+                  className="group flex min-w-0 items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-white/5"
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setNotePopover({ id: t.id, x: e.clientX, y: e.clientY });
+                  }}
+                >
                   <button
                     type="button"
                     onClick={() => toggleTodo(t.id)}
@@ -263,6 +362,118 @@ export function Pillar({
         </div>
       </Surface>
       </div>
+      {celebration && (
+        <div
+          className="absolute bottom-4 left-4 right-4 z-10 flex justify-center"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/20 px-4 py-2.5 text-sm font-medium text-emerald-100 shadow-lg">
+            {celebration}
+          </div>
+        </div>
+      )}
+      {pinMenu && (() => {
+        const b = byId.get(pinMenu.id);
+        if (!b) return null;
+        const override = pinOverrides?.[b.id];
+        return (
+          <div
+            ref={pinMenuRef}
+            className="fixed z-[100] min-w-44 rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16)]"
+            style={{
+              left: Math.max(8, Math.min(pinMenu.x, window.innerWidth - 180)),
+              top: Math.max(8, Math.min(pinMenu.y, window.innerHeight - 180)),
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10"
+              onClick={() => {
+                const current = override?.title ?? b.title ?? "";
+                const newTitle = window.prompt("Display name for this pin", current);
+                if (newTitle !== null) {
+                  onSetPinOverride(b.id, { ...override, title: newTitle.trim() || undefined });
+                }
+                setPinMenu(null);
+              }}
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10"
+              onClick={() => {
+                const current = override?.imageUrl ?? "";
+                const url = window.prompt("Image URL for this pin", current);
+                if (url !== null) {
+                  onSetPinOverride(b.id, { ...override, imageUrl: url.trim() || undefined });
+                }
+                setPinMenu(null);
+              }}
+            >
+              {override?.imageUrl ? "Change image" : "Set custom image"}
+            </button>
+            {override?.imageUrl && (
+              <button
+                type="button"
+                className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-white/5"
+                onClick={() => {
+                  onSetPinOverride(b.id, { ...override, imageUrl: "" });
+                  setPinMenu(null);
+                }}
+              >
+                Clear custom image
+              </button>
+            )}
+            <button
+              type="button"
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-white/5"
+              onClick={() => setPinMenu(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        );
+      })()}
+      {notePopover && (() => {
+        const t = todos.find((x) => x.id === notePopover.id);
+        if (!t) return null;
+        return (
+          <div
+            ref={notePopoverRef}
+            className="fixed z-[100] w-64 rounded-xl border border-emerald-400/20 bg-zinc-900 shadow-lg"
+            style={{
+              left: Math.max(8, Math.min(notePopover.x, window.innerWidth - 272)),
+              top: Math.max(8, Math.min(notePopover.y, window.innerHeight - 180)),
+            }}
+          >
+            <div className="border-b border-white/10 px-2 py-1.5 text-[10px] text-zinc-500">
+              Note: {t.text}
+            </div>
+            <textarea
+              value={t.note ?? ""}
+              onChange={(e) => setTodoNote(t.id, e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.shiftKey) {
+                  e.preventDefault();
+                  const todo = todosRef.current.find((x) => x.id === notePopover.id);
+                  if (todo?.note?.trim()) {
+                    onTodoLog?.(`added comment to task ${todo.text}:\n\n${todo.note.trim()}\n\n`);
+                  }
+                  setNotePopover(null);
+                }
+              }}
+              placeholder="Add a note…"
+              className="min-h-[80px] w-full resize-y rounded-b-xl border-0 bg-transparent px-3 py-2 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-0"
+              rows={3}
+              autoFocus
+            />
+          </div>
+        );
+      })()}
     </aside>
   );
 }

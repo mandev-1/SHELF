@@ -331,62 +331,64 @@ export function PromptLibraryCard({ prompts, onUpdatePrompt, onDeletePrompt, onU
                   Close
                 </button>
               </div>
-              <div className="relative flex-1 p-5">
-                <div className="grid h-full gap-4 lg:grid-cols-[1fr_280px]">
-                  <div className="flex flex-col gap-4">
-                    <textarea
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      className="min-h-[320px] flex-1 w-full resize-none rounded-[22px] border border-emerald-400/25 bg-black/92 p-5 font-mono text-sm text-emerald-200 outline-none shadow-[0_0_0_1px_rgba(16,185,129,0.1)]"
-                    />
-                    <div className="pointer-events-none rounded-[22px] border border-emerald-400/15 bg-black/70 p-5 font-mono text-sm leading-6 text-emerald-100/90">
-                      {renderPromptPreview(draft)}
+              <div className="flex min-h-0 flex-1 flex-col p-5">
+                <div className="min-h-0 flex-1 overflow-auto">
+                  <div className="grid min-h-0 gap-4 lg:grid-cols-[1fr_280px]">
+                    <div className="flex flex-col gap-4">
+                      <textarea
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        className="min-h-[320px] w-full resize-none rounded-[22px] border border-emerald-400/25 bg-black/92 p-5 font-mono text-sm text-emerald-200 outline-none shadow-[0_0_0_1px_rgba(16,185,129,0.1)]"
+                      />
+                      <div className="pointer-events-none rounded-[22px] border border-emerald-400/15 bg-black/70 p-5 font-mono text-sm leading-6 text-emerald-100/90">
+                        {renderPromptPreview(draft)}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex min-h-0 flex-col rounded-[22px] border border-white/10 bg-black/45 p-4">
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Versions</p>
-                      <button
-                        type="button"
-                        onClick={() => setShowVersions((v) => !v)}
-                        className="rounded-full border border-white/10 px-3 py-1 text-xs text-zinc-300 hover:text-white"
-                      >
-                        {showVersions ? "Hide" : "Show"}
-                      </button>
-                    </div>
-                    {showVersions && (
-                      <div className="mb-3 flex items-center gap-2">
-                        <button type="button" onClick={addVersion} className="rounded-full bg-emerald-300 px-3 py-2 text-xs font-medium text-black">
-                          + Version
+                    <div className="flex min-h-0 flex-col rounded-[22px] border border-white/10 bg-black/45 p-4">
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Versions</p>
+                        <button
+                          type="button"
+                          onClick={() => setShowVersions((v) => !v)}
+                          className="rounded-full border border-white/10 px-3 py-1 text-xs text-zinc-300 hover:text-white"
+                        >
+                          {showVersions ? "Hide" : "Show"}
                         </button>
                       </div>
-                    )}
-                    <div className="min-h-0 flex-1 overflow-auto space-y-2 pr-1">
-                      {(activePrompt.versions ?? []).map((version) => (
-                        <button
-                          key={version.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedVersionId(version.id);
-                            setDraft(version.body);
-                          }}
-                          className={`w-full rounded-xl border px-3 py-2 text-left transition ${
-                            selectedVersionId === version.id
-                              ? "border-emerald-300/50 bg-emerald-400/10 text-white"
-                              : "border-white/10 bg-black/25 text-zinc-300 hover:border-white/20 hover:bg-black/35"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-medium">{version.code}</span>
-                            <span className="text-[10px] text-zinc-500">{version.id === activeVersion?.id ? "Current" : "Older"}</span>
-                          </div>
-                          <div className="mt-1 text-[11px] text-zinc-500">{new Date(version.createdAt).toLocaleString()}</div>
-                        </button>
-                      ))}
+                      {showVersions && (
+                        <div className="mb-3 flex items-center gap-2">
+                          <button type="button" onClick={addVersion} className="rounded-full bg-emerald-300 px-3 py-2 text-xs font-medium text-black">
+                            + Version
+                          </button>
+                        </div>
+                      )}
+                      <div className="min-h-0 flex-1 overflow-auto space-y-2 pr-1">
+                        {(activePrompt.versions ?? []).map((version) => (
+                          <button
+                            key={version.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedVersionId(version.id);
+                              setDraft(version.body);
+                            }}
+                            className={`w-full rounded-xl border px-3 py-2 text-left transition ${
+                              selectedVersionId === version.id
+                                ? "border-emerald-300/50 bg-emerald-400/10 text-white"
+                                : "border-white/10 bg-black/25 text-zinc-300 hover:border-white/20 hover:bg-black/35"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-medium">{version.code}</span>
+                              <span className="text-[10px] text-zinc-500">{version.id === activeVersion?.id ? "Current" : "Older"}</span>
+                            </div>
+                            <div className="mt-1 text-[11px] text-zinc-500">{new Date(version.createdAt).toLocaleString()}</div>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div className="absolute bottom-5 right-5 flex items-center gap-2">
+                <div className="mt-4 flex shrink-0 items-center justify-end gap-2 border-t border-white/5 pt-4">
                   <button
                     type="button"
                     onClick={() => setShowVersions((v) => !v)}

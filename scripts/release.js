@@ -43,6 +43,9 @@ function buildReleaseDir(version) {
   cpSync(join(DIST, "index.html"), join(releaseDir, "index.html"));
   cpSync(join(DIST, "manifest.json"), join(releaseDir, "manifest.json"));
   cpSync(join(DIST, "assets"), join(releaseDir, "assets"), { recursive: true });
+  if (existsSync(join(DIST, "obsidian-setup.html"))) {
+    cpSync(join(DIST, "obsidian-setup.html"), join(releaseDir, "obsidian-setup.html"));
+  }
   return releaseDir;
 }
 
