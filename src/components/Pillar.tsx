@@ -119,7 +119,7 @@ export function Pillar({
     if (!window.confirm(`Remove ${label}? This will clear it from your list.`)) return;
     onSetTodos((prev) => prev.filter((item) => item.id !== id));
     if (t) onTodoLog?.(`removed task ${t.text}`);
-    setCelebration("Task cleared! 🎉");
+    setCelebration("Hooray! Task cleared! 🎉");
     if (celebrationTimerRef.current !== null) window.clearTimeout(celebrationTimerRef.current);
     celebrationTimerRef.current = window.setTimeout(() => {
       setCelebration(null);
