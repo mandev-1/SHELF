@@ -17,12 +17,12 @@ function truncateSubtitle(text: string, maxLen = 25) {
 
 function tagColorClasses(tag: string) {
   const palettes = [
-    "border-cyan-400/30 bg-cyan-500/20 text-cyan-100",
-    "border-fuchsia-400/30 bg-fuchsia-500/20 text-fuchsia-100",
-    "border-amber-400/30 bg-amber-500/20 text-amber-100",
-    "border-violet-400/30 bg-violet-500/20 text-violet-100",
-    "border-emerald-400/30 bg-emerald-500/20 text-emerald-100",
-    "border-rose-400/30 bg-rose-500/20 text-rose-100",
+    "bg-violet-700/18 text-violet-200/90",
+    "bg-fuchsia-700/18 text-fuchsia-200/90",
+    "bg-purple-700/18 text-purple-200/90",
+    "bg-indigo-700/18 text-indigo-200/90",
+    "bg-violet-800/16 text-violet-200/85",
+    "bg-fuchsia-800/16 text-fuchsia-200/85",
   ] as const;
   const hash = tag.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
   return palettes[hash % palettes.length];
@@ -91,8 +91,6 @@ export function Pillar({
   const [overZone, setOverZone] = useState<"top" | null>(null);
   const [todoDraft, setTodoDraft] = useState("");
   const [todoSubtitleDraft, setTodoSubtitleDraft] = useState("");
-  const [todoTagDraft, setTodoTagDraft] = useState("");
-  const [todoLinkDraft, setTodoLinkDraft] = useState("");
   const [notePopover, setNotePopover] = useState<{ id: string; x: number; y: number } | null>(null);
   const [pinMenu, setPinMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [celebration, setCelebration] = useState<string | null>(null);
@@ -118,16 +116,11 @@ export function Pillar({
   const addTodo = () => {
     const text = todoDraft.trim();
     if (!text) return;
-    const url = todoLinkDraft.trim() || undefined;
     const subtitle = todoSubtitleDraft.trim() || undefined;
-    const tag = todoTagDraft.trim() || undefined;
-    onSetTodos((prev) => [...prev, { id: crypto.randomUUID(), text, subtitle, tag, done: false, url }]);
+    onSetTodos((prev) => [...prev, { id: crypto.randomUUID(), text, subtitle, done: false }]);
     setTodoDraft("");
     setTodoSubtitleDraft("");
-    setTodoTagDraft("");
-    setTodoLinkDraft("");
     onTodoLog?.(`added new task with name ${text}`);
-    if (url) onTodoLog?.(`added URL to task with name ${text}. The URL is: ${url}`);
   };
 
   const toggleTodo = (id: string) => {
@@ -330,26 +323,6 @@ export function Pillar({
               }}
               className="[--input-bg:theme(colors.white/0.05)] [--input-border:theme(colors.white/0.1)] text-xs"
             />
-            <Input
-              variant="secondary"
-              placeholder="Tag (optional)"
-              value={todoTagDraft}
-              onChange={(e) => setTodoTagDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") addTodo();
-              }}
-              className="[--input-bg:theme(colors.white/0.05)] [--input-border:theme(colors.white/0.1)] text-xs"
-            />
-            <Input
-              variant="secondary"
-              placeholder="Link (optional)"
-              value={todoLinkDraft}
-              onChange={(e) => setTodoLinkDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") addTodo();
-              }}
-              className="[--input-bg:theme(colors.white/0.05)] [--input-border:theme(colors.white/0.1)] text-xs"
-            />
           </div>
           <div className="min-w-0 space-y-1">
             {todos.length === 0 ? (
@@ -412,11 +385,13 @@ export function Pillar({
                       ×
                     </button>
                   </div>
-                  {t.tag && (
+                  {(t.tag || t.subtitle) && (
                     <div className="mt-1 ml-6 flex min-w-0 items-center gap-2">
-                      <span className={`shrink-0 rounded-sm border px-2 py-0.5 text-[10px] font-medium ${tagColorClasses(t.tag)}`}>
-                        {t.tag}
-                      </span>
+                      {t.tag && (
+                        <span className={`shrink-0 rounded-sm px-2 py-0.5 text-[9px] font-medium ${tagColorClasses(t.tag)}`}>
+                          {t.tag}
+                        </span>
+                      )}
                       {t.subtitle && (
                         <span className={`min-w-0 truncate text-[11px] ${t.done ? "text-zinc-500 line-through" : "text-zinc-400"}`}>
                           {truncateSubtitle(t.subtitle, 25)}
