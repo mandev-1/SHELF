@@ -76,6 +76,7 @@ export function Pillar({
   todos,
   onSetTodos,
   onTodoLog,
+  onOpenDashboard,
 }: {
   shelfName: string;
   tree: BookmarkTreeNode[] | null;
@@ -86,6 +87,7 @@ export function Pillar({
   todos: ShelfPillarTodoItem[];
   onSetTodos: (next: ShelfPillarTodoItem[] | ((prev: ShelfPillarTodoItem[]) => ShelfPillarTodoItem[])) => void;
   onTodoLog?: (entry: string) => void;
+  onOpenDashboard?: () => void;
 }) {
   const byId = useMemo(() => collectBookmarks(tree), [tree]);
   const [overZone, setOverZone] = useState<"top" | null>(null);
@@ -403,6 +405,20 @@ export function Pillar({
               ))
             )}
           </div>
+        </div>
+
+        <div className="mt-3 min-w-0 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-3">
+          <div className="mb-2 text-xs font-semibold text-cyan-100">Error Dashboard</div>
+          <div className="text-[11px] text-cyan-100/80">
+            Open a full-page view to paste raw JSON and visualize errors.
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenDashboard?.()}
+            className="mt-2 w-full rounded-lg border border-cyan-300/35 bg-cyan-400/10 px-2.5 py-1.5 text-[11px] font-medium text-cyan-50 hover:bg-cyan-400/20"
+          >
+            Open Dashboard
+          </button>
         </div>
       </Surface>
       </div>
