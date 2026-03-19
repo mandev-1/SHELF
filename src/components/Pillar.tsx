@@ -11,6 +11,23 @@ function faviconUrl(url: string) {
   }
 }
 
+function truncateSubtitle(text: string, maxLen = 25) {
+  return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
+}
+
+function tagColorClasses(tag: string) {
+  const palettes = [
+    "border-cyan-400/30 bg-cyan-500/20 text-cyan-100",
+    "border-fuchsia-400/30 bg-fuchsia-500/20 text-fuchsia-100",
+    "border-amber-400/30 bg-amber-500/20 text-amber-100",
+    "border-violet-400/30 bg-violet-500/20 text-violet-100",
+    "border-emerald-400/30 bg-emerald-500/20 text-emerald-100",
+    "border-rose-400/30 bg-rose-500/20 text-rose-100",
+  ] as const;
+  const hash = tag.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  return palettes[hash % palettes.length];
+}
+
 function collectBookmarks(tree: BookmarkTreeNode[] | null): Map<string, BookmarkTreeNode> {
   const map = new Map<string, BookmarkTreeNode>();
   const walk = (n: BookmarkTreeNode) => {
@@ -73,6 +90,8 @@ export function Pillar({
   const byId = useMemo(() => collectBookmarks(tree), [tree]);
   const [overZone, setOverZone] = useState<"top" | null>(null);
   const [todoDraft, setTodoDraft] = useState("");
+  const [todoSubtitleDraft, setTodoSubtitleDraft] = useState("");
+  const [todoTagDraft, setTodoTagDraft] = useState("");
   const [todoLinkDraft, setTodoLinkDraft] = useState("");
   const [notePopover, setNotePopover] = useState<{ id: string; x: number; y: number } | null>(null);
   const [pinMenu, setPinMenu] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -100,8 +119,12 @@ export function Pillar({
     const text = todoDraft.trim();
     if (!text) return;
     const url = todoLinkDraft.trim() || undefined;
-    onSetTodos((prev) => [...prev, { id: crypto.randomUUID(), text, done: false, url }]);
+    const subtitle = todoSubtitleDraft.trim() || undefined;
+    const tag = todoTagDraft.trim() || undefined;
+    onSetTodos((prev) => [...prev, { id: crypto.randomUUID(), text, subtitle, tag, done: false, url }]);
     setTodoDraft("");
+    setTodoSubtitleDraft("");
+    setTodoTagDraft("");
     setTodoLinkDraft("");
     onTodoLog?.(`added new task with name ${text}`);
     if (url) onTodoLog?.(`added URL to task with name ${text}. The URL is: ${url}`);
@@ -138,6 +161,18 @@ export function Pillar({
 
   const setTodoNote = (id: string, note: string) => {
     onSetTodos((prev) => prev.map((item) => (item.id === id ? { ...item, note: note === "" ? undefined : note } : item)));
+  };
+
+  const setTodoSubtitle = (id: string, subtitle: string) => {
+    onSetTodos((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, subtitle: subtitle === "" ? undefined : subtitle } : item))
+    );
+  };
+
+  const setTodoTag = (id: string, tag: string) => {
+    onSetTodos((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, tag: tag.trim() === "" ? undefined : tag.trim() } : item))
+    );
   };
 
   useEffect(() => {
@@ -287,6 +322,26 @@ export function Pillar({
             />
             <Input
               variant="secondary"
+              placeholder="Subtitle (optional)"
+              value={todoSubtitleDraft}
+              onChange={(e) => setTodoSubtitleDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addTodo();
+              }}
+              className="[--input-bg:theme(colors.white/0.05)] [--input-border:theme(colors.white/0.1)] text-xs"
+            />
+            <Input
+              variant="secondary"
+              placeholder="Tag (optional)"
+              value={todoTagDraft}
+              onChange={(e) => setTodoTagDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addTodo();
+              }}
+              className="[--input-bg:theme(colors.white/0.05)] [--input-border:theme(colors.white/0.1)] text-xs"
+            />
+            <Input
+              variant="secondary"
               placeholder="Link (optional)"
               value={todoLinkDraft}
               onChange={(e) => setTodoLinkDraft(e.target.value)}
@@ -303,58 +358,72 @@ export function Pillar({
               todos.map((t) => (
                 <div
                   key={t.id}
-                  className="group flex min-w-0 items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-white/5"
+                  className="group min-w-0 rounded-xl px-2 py-1.5 hover:bg-white/5"
                   onContextMenu={(e) => {
                     e.preventDefault();
                     setNotePopover({ id: t.id, x: e.clientX, y: e.clientY });
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => toggleTodo(t.id)}
-                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-white/20 bg-white/5 text-emerald-400 hover:border-emerald-400/50 hover:bg-emerald-400/10"
-                    aria-label={t.done ? "Mark incomplete" : "Mark done"}
-                  >
-                    {t.done ? <span className="text-[10px]">✓</span> : null}
-                  </button>
-                  {t.url ? (
-                    <Link
-                      href={t.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`min-w-0 flex-1 truncate text-left text-xs no-underline hover:underline underline-offset-1 ${
-                        t.done ? "text-zinc-500 line-through" : "text-zinc-300 hover:text-emerald-200"
-                      }`}
+                  <div className="flex min-w-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleTodo(t.id)}
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-white/20 bg-white/5 text-emerald-400 hover:border-emerald-400/50 hover:bg-emerald-400/10"
+                      aria-label={t.done ? "Mark incomplete" : "Mark done"}
                     >
-                      {t.text}
-                    </Link>
-                  ) : (
-                    <span
-                      className={`min-w-0 flex-1 truncate text-left text-xs ${t.done ? "text-zinc-500 line-through" : "text-zinc-300"}`}
+                      {t.done ? <span className="text-[10px]">✓</span> : null}
+                    </button>
+                    {t.url ? (
+                      <Link
+                        href={t.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`min-w-0 flex-1 truncate text-left text-xs no-underline hover:underline underline-offset-1 ${
+                          t.done ? "text-zinc-500 line-through" : "text-zinc-300 hover:text-emerald-200"
+                        }`}
+                      >
+                        {t.text}
+                      </Link>
+                    ) : (
+                      <span
+                        className={`min-w-0 flex-1 truncate text-left text-xs ${t.done ? "text-zinc-500 line-through" : "text-zinc-300"}`}
+                      >
+                        {t.text}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = window.prompt("Link URL", t.url ?? "");
+                        if (next !== null) setTodoUrl(t.id, next || undefined);
+                      }}
+                      className="shrink-0 text-[11px] text-zinc-500 hover:text-emerald-300"
+                      aria-label={t.url ? "Edit link" : "Add link"}
+                      title={t.url ? "Edit link" : "Add link"}
                     >
-                      {t.text}
-                    </span>
+                      🔗
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeTodo(t.id)}
+                      className="ml-0.5 shrink-0 text-[11px] text-zinc-500 hover:text-white"
+                      aria-label="Remove task"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  {t.tag && (
+                    <div className="mt-1 ml-6 flex min-w-0 items-center gap-2">
+                      <span className={`shrink-0 rounded-sm border px-2 py-0.5 text-[10px] font-medium ${tagColorClasses(t.tag)}`}>
+                        {t.tag}
+                      </span>
+                      {t.subtitle && (
+                        <span className={`min-w-0 truncate text-[11px] ${t.done ? "text-zinc-500 line-through" : "text-zinc-400"}`}>
+                          {truncateSubtitle(t.subtitle, 25)}
+                        </span>
+                      )}
+                    </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = window.prompt("Link URL", t.url ?? "");
-                      if (next !== null) setTodoUrl(t.id, next || undefined);
-                    }}
-                    className="shrink-0 text-[11px] text-zinc-500 hover:text-emerald-300"
-                    aria-label={t.url ? "Edit link" : "Add link"}
-                    title={t.url ? "Edit link" : "Add link"}
-                  >
-                    🔗
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeTodo(t.id)}
-                    className="ml-0.5 shrink-0 text-[11px] text-zinc-500 hover:text-white"
-                    aria-label="Remove task"
-                  >
-                    ×
-                  </button>
                 </div>
               ))
             )}
@@ -452,6 +521,22 @@ export function Pillar({
           >
             <div className="border-b border-white/10 px-2 py-1.5 text-[10px] text-zinc-500">
               Note: {t.text}
+            </div>
+            <div className="space-y-2 px-2 py-2">
+              <Input
+                variant="secondary"
+                value={t.tag ?? ""}
+                onChange={(e) => setTodoTag(t.id, e.target.value)}
+                placeholder="Tag (optional)"
+                className="text-xs"
+              />
+              <Input
+                variant="secondary"
+                value={t.subtitle ?? ""}
+                onChange={(e) => setTodoSubtitle(t.id, e.target.value)}
+                placeholder="Subtitle (optional)"
+                className="text-xs"
+              />
             </div>
             <textarea
               value={t.note ?? ""}

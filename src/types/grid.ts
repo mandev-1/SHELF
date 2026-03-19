@@ -62,6 +62,8 @@ export interface ShelfPillarTodoItem {
   done: boolean;
   url?: string;
   note?: string;
+  subtitle?: string;
+  tag?: string;
 }
 
 export interface ObsidianLogConfig {

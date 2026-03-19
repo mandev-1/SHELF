@@ -226,6 +226,8 @@ export function useShelfStorage() {
             done: Boolean(x.done),
             url: typeof x.url === "string" && x.url.trim() ? x.url.trim() : undefined,
             note: typeof x.note === "string" ? x.note : undefined,
+            subtitle: typeof x.subtitle === "string" ? x.subtitle : undefined,
+            tag: typeof x.tag === "string" ? x.tag : undefined,
           }));
       });
       const rawObs = result[OBSIDIAN_LOG_KEY];
@@ -355,6 +357,8 @@ export function useShelfStorage() {
         done: Boolean(t.done),
         url: typeof t.url === "string" && t.url.trim() ? t.url.trim() : undefined,
         note: typeof t.note === "string" ? t.note : undefined,
+        subtitle: typeof t.subtitle === "string" ? t.subtitle : undefined,
+        tag: typeof t.tag === "string" ? t.tag : undefined,
       }));
       getStorage()?.set({ [PILLAR_TODOS_KEY]: normalized });
       return normalized;
