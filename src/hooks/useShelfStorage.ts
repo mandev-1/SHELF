@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
+  BookmarkSize,
   ObsidianLogConfig,
   ShelfBackupData,
+  ShelfTheme,
+  ShelfTodoBlockStatus,
+  ShelfTodoHandleConfig,
+  ShelfBookmarkOverrides,
   ShelfBookmarkViewMap,
   ShelfFolderSeparatorMap,
   ShelfGoalMap,
@@ -10,6 +15,7 @@ import type {
   ShelfPromptMap,
   ShelfPromptVersion,
   ShelfSectionColors,
+  VisualFlowData,
 } from "../types/grid";
 
 const LAYOUT_KEY = "shelf-layout";
@@ -20,6 +26,7 @@ const SEPARATORS_KEY = "shelf-separators";
 const GOALS_KEY = "shelf-goals";
 const SHOW_GOALS_KEY = "show-goals";
 const BOOKMARK_VIEW_KEY = "bookmark-view";
+const BOOKMARK_OVERRIDES_KEY = "bookmark-overrides";
 const PILLAR_KEY = "pillar-pins";
 const PILLAR_TODOS_KEY = "pillar-todos";
 const OBSIDIAN_LOG_KEY = "obsidian-log";
@@ -28,6 +35,10 @@ const HIDDEN_FOLDERS_KEY = "shelf-hidden-folders";
 const PROMPTS_KEY = "shelf-prompts";
 const GRID_LOCKED_KEY = "grid-locked";
 const PROMPT_ROWS_KEY = "prompt-rows";
+const THEME_KEY = "shelf-theme";
+const BOOKMARK_SIZE_KEY = "bookmark-size";
+const VISUAL_FLOW_KEY = "shelf-visual-flow";
+const LLM_CONSOLE_URL_KEY = "shelf-llm-console-url";
 
 const DEFAULT_PROMPTS: ShelfPromptMap = {
   hacker: {
@@ -121,6 +132,7 @@ export function useShelfStorage() {
   const [goals, setGoals] = useState<ShelfGoalMap>({});
   const [showGoals, setShowGoals] = useState(false);
   const [bookmarkViews, setBookmarkViews] = useState<ShelfBookmarkViewMap>({});
+  const [bookmarkOverrides, setBookmarkOverrides] = useState<ShelfBookmarkOverrides>({});
   const [pillarPins, setPillarPins] = useState<{
     top: string[];
     overrides?: Record<string, { title?: string; imageUrl?: string }>;
@@ -139,6 +151,11 @@ export function useShelfStorage() {
   const [shelfName, setShelfNameState] = useState("ShELF");
   const [gridLocked, setGridLocked] = useState(false);
   const [promptRows, setPromptRows] = useState<1 | 2>(1);
+  const [theme, setThemeState] = useState<ShelfTheme>("auto");
+  const [timeTick, setTimeTick] = useState(() => Date.now());
+  const [bookmarkSize, setBookmarkSizeState] = useState<BookmarkSize>("normal");
+  const [visualFlow, setVisualFlowState] = useState<VisualFlowData>({});
+  const [llmConsoleUrl, setLlmConsoleUrlState] = useState("https://example.org");
   const [ready, setReady] = useState(false);
 
   const load = useCallback(() => {
@@ -157,6 +174,7 @@ export function useShelfStorage() {
         GOALS_KEY,
         SHOW_GOALS_KEY,
         BOOKMARK_VIEW_KEY,
+        BOOKMARK_OVERRIDES_KEY,
         PILLAR_KEY,
         PILLAR_TODOS_KEY,
         OBSIDIAN_LOG_KEY,
@@ -165,6 +183,10 @@ export function useShelfStorage() {
         PROMPTS_KEY,
         GRID_LOCKED_KEY,
         PROMPT_ROWS_KEY,
+        THEME_KEY,
+        BOOKMARK_SIZE_KEY,
+        VISUAL_FLOW_KEY,
+        LLM_CONSOLE_URL_KEY,
       ],
       (result: { [key: string]: unknown }) => {
       setLayout(Array.isArray(result[LAYOUT_KEY]) ? (result[LAYOUT_KEY] as ShelfLayoutItem[]) : []);
@@ -206,6 +228,11 @@ export function useShelfStorage() {
           ? (result[BOOKMARK_VIEW_KEY] as ShelfBookmarkViewMap)
           : {}
       );
+      setBookmarkOverrides(
+        result[BOOKMARK_OVERRIDES_KEY] && typeof result[BOOKMARK_OVERRIDES_KEY] === "object" && !Array.isArray(result[BOOKMARK_OVERRIDES_KEY])
+          ? (result[BOOKMARK_OVERRIDES_KEY] as ShelfBookmarkOverrides)
+          : {}
+      );
       setPillarPins(() => {
         const raw = result[PILLAR_KEY];
         if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { top: [] };
@@ -228,6 +255,20 @@ export function useShelfStorage() {
             note: typeof x.note === "string" ? x.note : undefined,
             subtitle: typeof x.subtitle === "string" ? x.subtitle : undefined,
             tag: typeof x.tag === "string" ? x.tag : undefined,
+            blockStatus:
+              x.blockStatus === "blocked" || x.blockStatus === "ready" || x.blockStatus === "abeyed"
+                ? (x.blockStatus as ShelfTodoBlockStatus)
+                : undefined,
+            handleConfig:
+              x.handleConfig === "horizontal" ||
+              x.handleConfig === "vertical" ||
+              x.handleConfig === "top" ||
+              x.handleConfig === "bottom" ||
+              x.handleConfig === "left" ||
+              x.handleConfig === "right" ||
+              x.handleConfig === "hidden"
+                ? (x.handleConfig as ShelfTodoHandleConfig)
+                : undefined,
           }));
       });
       const rawObs = result[OBSIDIAN_LOG_KEY];
@@ -253,6 +294,31 @@ export function useShelfStorage() {
       );
       setGridLocked(Boolean(result[GRID_LOCKED_KEY]));
       setPromptRows(result[PROMPT_ROWS_KEY] === 2 ? 2 : 1);
+      const t = result[THEME_KEY];
+      setThemeState(t === "dark" || t === "day" || t === "sap" || t === "auto" ? t : "auto");
+      const bs = result[BOOKMARK_SIZE_KEY];
+      setBookmarkSizeState(bs === "senior" ? "senior" : "normal");
+      const rawUrl = result[LLM_CONSOLE_URL_KEY];
+      if (typeof rawUrl === "string" && rawUrl.trim()) {
+        setLlmConsoleUrlState(rawUrl.trim());
+      }
+      const vf = result[VISUAL_FLOW_KEY];
+      if (vf && typeof vf === "object" && !Array.isArray(vf)) {
+        const raw = vf as Record<string, unknown>;
+        setVisualFlowState({
+          nodePositions: raw.nodePositions && typeof raw.nodePositions === "object" ? (raw.nodePositions as Record<string, { x: number; y: number }>) : undefined,
+          edges: Array.isArray(raw.edges)
+            ? (raw.edges as unknown[])
+                .filter((e: unknown) => e && typeof e === "object" && typeof (e as any).source === "string" && typeof (e as any).target === "string")
+                .map((e: any) => ({
+                  source: e.source,
+                  target: e.target,
+                  ...(e.arrow && { arrow: true }),
+                  ...(e.doubled && { doubled: true }),
+                }))
+            : undefined,
+        });
+      }
       setReady(true);
     });
   }, []);
@@ -260,6 +326,25 @@ export function useShelfStorage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /* Update every minute so "auto" theme switches at 08:00 and 21:40 */
+  useEffect(() => {
+    const id = setInterval(() => setTimeTick(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const resolvedTheme: "dark" | "day" | "sap" =
+    theme === "auto"
+      ? (() => {
+          const d = new Date(timeTick);
+          const h = d.getHours();
+          const m = d.getMinutes();
+          const totalMin = h * 60 + m;
+          const darkUntil = 8 * 60; // 08:00
+          const darkFrom = 21 * 60 + 40; // 21:40
+          return totalMin < darkUntil || totalMin >= darkFrom ? "dark" : "sap";
+        })()
+      : theme;
 
   const saveLayout = useCallback((items: ShelfLayoutItem[]) => {
     setLayout(items);
@@ -321,6 +406,24 @@ export function useShelfStorage() {
     });
   }, []);
 
+  const setBookmarkOverride = useCallback((bookmarkId: string, override: { title?: string; imageUrl?: string } | null) => {
+    setBookmarkOverrides((prev) => {
+      const next = { ...prev };
+      if (override === null) {
+        delete next[bookmarkId];
+      } else {
+        const current = next[bookmarkId] ?? {};
+        next[bookmarkId] = {
+          title: override.title !== undefined ? override.title : current.title,
+          imageUrl: override.imageUrl !== undefined ? override.imageUrl : current.imageUrl,
+        };
+        if (!next[bookmarkId].title && !next[bookmarkId].imageUrl) delete next[bookmarkId];
+      }
+      getStorage()?.set({ [BOOKMARK_OVERRIDES_KEY]: next });
+      return next;
+    });
+  }, []);
+
   const setPillarPinsState = useCallback((next: { top: string[] }) => {
     setPillarPins((prev) => {
       const normalized = { ...prev, top: (next.top ?? []).filter(Boolean).slice(0, 6) };
@@ -359,6 +462,20 @@ export function useShelfStorage() {
         note: typeof t.note === "string" ? t.note : undefined,
         subtitle: typeof t.subtitle === "string" ? t.subtitle : undefined,
         tag: typeof t.tag === "string" ? t.tag : undefined,
+        blockStatus:
+          t.blockStatus === "blocked" || t.blockStatus === "ready" || t.blockStatus === "abeyed"
+            ? t.blockStatus
+            : undefined,
+        handleConfig:
+          t.handleConfig === "horizontal" ||
+          t.handleConfig === "vertical" ||
+          t.handleConfig === "top" ||
+          t.handleConfig === "bottom" ||
+          t.handleConfig === "left" ||
+          t.handleConfig === "right" ||
+          t.handleConfig === "hidden"
+            ? t.handleConfig
+            : undefined,
       }));
       getStorage()?.set({ [PILLAR_TODOS_KEY]: normalized });
       return normalized;
@@ -393,6 +510,27 @@ export function useShelfStorage() {
   const setGridLockedState = useCallback((next: boolean) => {
     setGridLocked(next);
     getStorage()?.set({ [GRID_LOCKED_KEY]: next });
+  }, []);
+
+  const setTheme = useCallback((next: ShelfTheme) => {
+    setThemeState(next);
+    getStorage()?.set({ [THEME_KEY]: next });
+  }, []);
+
+  const setBookmarkSize = useCallback((next: BookmarkSize) => {
+    setBookmarkSizeState(next);
+    getStorage()?.set({ [BOOKMARK_SIZE_KEY]: next });
+  }, []);
+
+  const setVisualFlow = useCallback((next: VisualFlowData) => {
+    setVisualFlowState(next);
+    getStorage()?.set({ [VISUAL_FLOW_KEY]: next });
+  }, []);
+
+  const setLlmConsoleUrl = useCallback((next: string) => {
+    const url = next.trim() || "https://example.org";
+    setLlmConsoleUrlState(url);
+    getStorage()?.set({ [LLM_CONSOLE_URL_KEY]: url });
   }, []);
 
   const setPromptRowsState = useCallback((next: 1 | 2) => {
@@ -496,6 +634,7 @@ export function useShelfStorage() {
       version: 1,
       layout,
       colors,
+      theme,
       labels,
       separators,
       goals,
@@ -507,12 +646,18 @@ export function useShelfStorage() {
       gridLocked,
       promptRows,
       hiddenFolderIds,
+      bookmarkOverrides,
+      bookmarkSize,
+      visualFlow,
+      llmConsoleUrl,
     };
-  }, [colors, goals, gridLocked, hiddenFolderIds, labels, layout, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals]);
+  }, [bookmarkOverrides, bookmarkSize, colors, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals, theme, visualFlow]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
     if (backup.colors) setColors(backup.colors);
+    if (backup.theme === "day" || backup.theme === "sap" || backup.theme === "auto") setThemeState(backup.theme);
+    else if (backup.theme === "dark") setThemeState("dark");
     if (backup.labels) setLabels(backup.labels);
     if (backup.prompts) setPrompts(backup.prompts);
     if (typeof backup.shelfName === "string") setShelfNameState(backup.shelfName);
@@ -527,6 +672,12 @@ export function useShelfStorage() {
     }
     if (Array.isArray(backup.pillarTodos)) setPillarTodos(backup.pillarTodos);
     if (Array.isArray(backup.hiddenFolderIds)) setHiddenFolderIds(backup.hiddenFolderIds);
+    if (backup.bookmarkOverrides && typeof backup.bookmarkOverrides === "object") setBookmarkOverrides(backup.bookmarkOverrides);
+    if (backup.bookmarkSize === "senior") setBookmarkSizeState("senior");
+    if (backup.visualFlow && typeof backup.visualFlow === "object") setVisualFlowState(backup.visualFlow);
+    if (typeof backup.llmConsoleUrl === "string" && backup.llmConsoleUrl.trim()) {
+      setLlmConsoleUrlState(backup.llmConsoleUrl.trim());
+    }
 
     getStorage()?.set({
       [LAYOUT_KEY]: backup.layout ?? layout,
@@ -547,8 +698,13 @@ export function useShelfStorage() {
       [GRID_LOCKED_KEY]: typeof backup.gridLocked === "boolean" ? backup.gridLocked : gridLocked,
       [PROMPT_ROWS_KEY]: backup.promptRows === 2 ? 2 : 1,
       [HIDDEN_FOLDERS_KEY]: Array.isArray(backup.hiddenFolderIds) ? backup.hiddenFolderIds : hiddenFolderIds,
+      [THEME_KEY]: backup.theme ?? theme,
+      [BOOKMARK_OVERRIDES_KEY]: backup.bookmarkOverrides ?? bookmarkOverrides,
+      [BOOKMARK_SIZE_KEY]: backup.bookmarkSize ?? bookmarkSize,
+      [VISUAL_FLOW_KEY]: backup.visualFlow ?? visualFlow,
+      [LLM_CONSOLE_URL_KEY]: typeof backup.llmConsoleUrl === "string" && backup.llmConsoleUrl.trim() ? backup.llmConsoleUrl.trim() : llmConsoleUrl,
     });
-  }, [colors, goals, gridLocked, hiddenFolderIds, labels, layout, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals]);
+  }, [bookmarkOverrides, bookmarkSize, colors, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals, theme, visualFlow]);
 
   return {
     layout,
@@ -558,6 +714,8 @@ export function useShelfStorage() {
     goals,
     showGoals,
     bookmarkViews,
+    bookmarkOverrides,
+    setBookmarkOverride,
     pillarPins,
     pillarTodos,
     setPillarTodos: setPillarTodosState,
@@ -590,6 +748,15 @@ export function useShelfStorage() {
     setShowGoals: setShowGoalsState,
     setGridLocked: setGridLockedState,
     setPromptRows: setPromptRowsState,
+    theme,
+    resolvedTheme,
+    setTheme,
+    bookmarkSize,
+    setBookmarkSize,
+    visualFlow,
+    setVisualFlow,
+    llmConsoleUrl,
+    setLlmConsoleUrl,
     exportBackup,
     importBackup,
     reload: load,

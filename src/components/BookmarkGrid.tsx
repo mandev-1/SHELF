@@ -104,7 +104,10 @@ function FolderCard({
   onDropBookmark,
   onUpdateSeparators,
   bookmarkViews,
+  bookmarkOverrides,
+  bookmarkSize = "normal",
   onSetBookmarkExpanded,
+  onSetBookmarkOverride,
   onRenameBookmark,
   onDeleteBookmark,
   onAddBookmarkHere,
@@ -122,7 +125,10 @@ function FolderCard({
   onDropBookmark: (bookmarkId: string, folderId: string) => void;
   onUpdateSeparators: (folderId: string, seps: ShelfFolderSeparator[]) => void;
   bookmarkViews: Record<string, { expanded?: boolean }>;
+  bookmarkOverrides?: Record<string, { title?: string; imageUrl?: string }>;
+  bookmarkSize?: "normal" | "senior";
   onSetBookmarkExpanded: (bookmarkId: string, expanded: boolean) => void;
+  onSetBookmarkOverride?: (bookmarkId: string, override: { title?: string; imageUrl?: string } | null) => void;
   onRenameBookmark: (bookmarkId: string, newTitle: string) => Promise<void>;
   onDeleteBookmark: (bookmarkId: string) => Promise<void>;
   onAddBookmarkHere: (folderId: string) => Promise<void>;
@@ -287,7 +293,10 @@ function FolderCard({
           <div
             ref={bookmarkMenuRef}
             className="fixed z-[80] min-w-44 rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16)]"
-            style={{ top: bookmarkMenu!.y, left: bookmarkMenu!.x }}
+            style={{
+              left: Math.max(8, Math.min(bookmarkMenu!.x, window.innerWidth - 200)),
+              top: Math.max(8, Math.min(bookmarkMenu!.y, window.innerHeight - 260)),
+            }}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
@@ -303,6 +312,39 @@ function FolderCard({
             >
               {bookmarkMenu && bookmarkViews[bookmarkMenu.id]?.expanded ? "Make normal" : "Make bigger"}
             </button>
+            {onSetBookmarkOverride && (
+              <>
+                <button
+                  type="button"
+                  className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10"
+                  onClick={() => {
+                    const id = bookmarkMenu!.id;
+                    const override = bookmarkOverrides?.[id];
+                    const url = window.prompt("Image URL for this bookmark", override?.imageUrl ?? "");
+                    if (url !== null) {
+                      onSetBookmarkOverride(id, { ...override, imageUrl: url.trim() || undefined });
+                    }
+                    setBookmarkMenu(null);
+                  }}
+                >
+                  {bookmarkOverrides?.[bookmarkMenu!.id]?.imageUrl ? "Change custom image" : "Set custom image"}
+                </button>
+                {bookmarkOverrides?.[bookmarkMenu!.id]?.imageUrl && (
+                  <button
+                    type="button"
+                    className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-white/5"
+                    onClick={() => {
+                      const id = bookmarkMenu!.id;
+                      const override = bookmarkOverrides?.[id] ?? {};
+                      onSetBookmarkOverride(id, { ...override, imageUrl: undefined });
+                      setBookmarkMenu(null);
+                    }}
+                  >
+                    Clear custom image
+                  </button>
+                )}
+              </>
+            )}
             <button
               type="button"
               className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10"
@@ -602,7 +644,7 @@ function FolderCard({
                     }
                   }}
                   className={`cursor-move ${
-                    (bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id)
+                    (bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id || bookmarkSize === "senior")
                       ? "rounded-xl border border-emerald-400/15 bg-black/25 p-3"
                       : ""
                   }`}
@@ -614,36 +656,41 @@ function FolderCard({
                     href={item.node.url!}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={
-                      bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id
-                        ? "flex items-center gap-3 text-zinc-200 hover:text-white no-underline hover:underline underline-offset-2 w-full"
-                        : "flex items-center gap-2 text-zinc-300 hover:text-white text-xs truncate no-underline hover:underline underline-offset-1 w-full"
-                    }
+                  className={
+                    bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id || bookmarkSize === "senior"
+                      ? "flex items-center gap-3 text-zinc-200 hover:text-white no-underline hover:underline underline-offset-2 w-full"
+                      : "flex items-center gap-2 text-zinc-300 hover:text-white text-xs truncate no-underline hover:underline underline-offset-1 w-full"
+                  }
                   >
                     <img
-                      src={faviconUrl(item.node.url!)}
+                      src={(bookmarkOverrides?.[item.node.id]?.imageUrl?.trim() || faviconUrl(item.node.url!))}
                       alt=""
                       className={
                         bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id
-                          ? "w-12 h-12 shrink-0 rounded-lg"
-                          : "w-4 h-4 shrink-0 rounded"
+                          ? "h-14 w-14 shrink-0 rounded-xl object-cover"
+                          : bookmarkSize === "senior"
+                            ? "h-10 w-10 shrink-0 rounded-lg object-cover"
+                            : "h-4 w-4 shrink-0 rounded object-cover"
                       }
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = faviconUrl(item.node.url!);
+                      }}
                     />
                     <div
                       className={
-                        bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id ? "min-w-0" : ""
+                        bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id || bookmarkSize === "senior" ? "min-w-0" : ""
                       }
                     >
                       <div
                         className={
-                          bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id
+                          bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id || bookmarkSize === "senior"
                             ? "truncate text-sm font-semibold"
                             : "truncate"
                         }
                       >
-                        {item.node.title || item.node.url}
+                        {(bookmarkOverrides?.[item.node.id]?.title ?? item.node.title) || item.node.url}
                       </div>
-                      {(bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id) && (
+                      {(bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id || bookmarkSize === "senior") && (
                         <div className="mt-0.5 truncate text-xs text-zinc-400">{item.node.url}</div>
                       )}
                     </div>
@@ -721,7 +768,10 @@ function GoalCard({
         <div
           ref={menuRef}
           className="fixed z-[70] min-w-44 rounded-2xl border border-blue-400/20 bg-black/92 p-2 shadow-[0_0_40px_rgba(59,130,246,0.18)]"
-          style={{ top: menuPos!.y, left: menuPos!.x }}
+          style={{
+            left: Math.max(8, Math.min(menuPos!.x, window.innerWidth - 200)),
+            top: Math.max(8, Math.min(menuPos!.y, window.innerHeight - 200)),
+          }}
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           onContextMenu={(e) => {
@@ -835,13 +885,21 @@ export function BookmarkGrid() {
     setShowGoals,
     setGridLocked,
     bookmarkViews,
+    bookmarkOverrides,
+    bookmarkSize,
+    setBookmarkOverride,
     setBookmarkExpanded,
+    setBookmarkSize,
+    theme,
+    setTheme,
     exportBackup,
     importBackup,
     obsidianLog,
     setObsidianLogConfig,
     logToObsidian,
     openTaskLogInObsidian,
+    llmConsoleUrl,
+    setLlmConsoleUrl,
     taskLog,
     clearTaskLog,
     hiddenFolderIds,
@@ -1026,9 +1084,47 @@ export function BookmarkGrid() {
           onClick={() => setShowSettings(false)}
         >
           <div
-            className={`absolute bottom-20 right-4 rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)] ${showObsidianConfig || showHiddenFolders ? "w-72" : "w-56"}`}
+            className={`absolute bottom-20 right-4 rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)] ${showObsidianConfig || showHiddenFolders ? "w-72" : "w-64"}`}
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
+              <div className="mb-1.5 text-xs font-medium text-emerald-200">Theme</div>
+              <div className="flex flex-wrap gap-1.5">
+                {(["auto", "dark", "day", "sap"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTheme(t)}
+                    className={`rounded-lg px-2 py-1.5 text-[11px] font-medium capitalize transition ${
+                      theme === t
+                        ? "bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40"
+                        : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
+                    }`}
+                  >
+                    {t === "day" ? "Day" : t === "sap" ? "SAP" : t === "auto" ? "Auto" : "Dark"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
+              <div className="mb-1.5 text-xs font-medium text-emerald-200">Bookmark size</div>
+              <div className="flex gap-1.5">
+                {(["normal", "senior"] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setBookmarkSize(s)}
+                    className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-medium capitalize transition ${
+                      bookmarkSize === s
+                        ? "bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40"
+                        : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
             <button
               type="button"
               className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
@@ -1150,6 +1246,17 @@ export function BookmarkGrid() {
                 )}
               </div>
             )}
+            <div className="rounded-xl border border-white/10 bg-white/5 p-2">
+              <div className="mb-1.5 text-xs font-medium text-emerald-200">LLM Console URL</div>
+              <p className="mb-2 text-[10px] text-zinc-500">Embedded in LLM Console. Works best with local UIs (Ollama, LM Studio). Use &quot;Open in tab&quot; if blocked.</p>
+              <Input
+                variant="secondary"
+                value={llmConsoleUrl}
+                onChange={(e) => setLlmConsoleUrl(e.target.value)}
+                placeholder="https://example.org"
+                className="text-xs"
+              />
+            </div>
             <button
               type="button"
               className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
@@ -1344,7 +1451,10 @@ export function BookmarkGrid() {
                   onAddSeparator={addFolderSeparator}
                   onUpdateSeparators={(folderId, seps) => setFolderSeparators(folderId, seps)}
                   bookmarkViews={bookmarkViews}
+                  bookmarkOverrides={bookmarkOverrides}
+                  bookmarkSize={bookmarkSize}
                   onSetBookmarkExpanded={setBookmarkExpanded}
+                  onSetBookmarkOverride={setBookmarkOverride}
                   onRenameBookmark={async (bookmarkId, newTitle) => {
                     await updateBookmark(bookmarkId, { title: newTitle });
                   }}

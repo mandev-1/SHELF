@@ -1,5 +1,5 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import { dirname, join, relative } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 
@@ -49,12 +49,22 @@ function buildReleaseDir(version) {
   return releaseDir;
 }
 
+function createArchives(releaseDir, version) {
+  const tarPath = join(RELEASES_DIR, `${version}.tar.gz`);
+  const zipPath = join(RELEASES_DIR, `${version}.zip`);
+  execSync(`tar -czf "${tarPath}" -C "${RELEASES_DIR}" "${version}"`, { stdio: "inherit" });
+  execSync(`zip -r "${zipPath}" "${version}"`, { cwd: RELEASES_DIR, stdio: "inherit" });
+  console.log(`Created ${relative(ROOT, tarPath)}`);
+  console.log(`Created ${relative(ROOT, zipPath)}`);
+}
+
 function main() {
   const currentVersion = getCurrentVersion();
   const version = MODE === "release" ? bumpPatch(currentVersion) : currentVersion;
   updateVersionInFiles(version);
   execSync("npm run build", { cwd: ROOT, stdio: "inherit" });
   const releaseDir = buildReleaseDir(version);
+  createArchives(releaseDir, version);
   writeFileSync(RELEASE_VERSION_FILE, version + "\n");
   console.log(`Done. Release output: ${releaseDir.replace(ROOT + "/", "")}/`);
 }

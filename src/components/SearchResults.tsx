@@ -1,10 +1,12 @@
 import { Link, Spinner, Surface } from "@heroui/react";
+import { useEffect, useRef } from "react";
 import type { BookmarkTreeNode } from "../types/bookmarks";
 
 interface SearchResultsProps {
   results: BookmarkTreeNode[];
   loading: boolean;
   query: string;
+  selectedIndex?: number;
 }
 
 function faviconUrl(url: string): string {
@@ -16,7 +18,12 @@ function faviconUrl(url: string): string {
   }
 }
 
-export function SearchResults({ results, loading, query }: SearchResultsProps) {
+export function SearchResults({ results, loading, query, selectedIndex = 0 }: SearchResultsProps) {
+  const selectedRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    selectedRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedIndex]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -47,9 +54,16 @@ export function SearchResults({ results, loading, query }: SearchResultsProps) {
           {results.length} result{results.length !== 1 ? "s" : ""}
         </p>
       </div>
-      <ul className="divide-y divide-emerald-400/10 max-h-[60vh] overflow-y-auto">
-        {results.map((node) => (
-          <li key={node.id} className="px-4 py-3 transition-colors hover:bg-emerald-400/5">
+      <ul className="divide-y divide-emerald-400/10 max-h-[60vh] overflow-y-auto" role="listbox" aria-activedescendant={results[selectedIndex] != null ? `search-result-${selectedIndex}` : undefined}>
+        {results.map((node, i) => (
+          <li
+            key={node.id}
+            ref={i === selectedIndex ? selectedRef : undefined}
+            role="option"
+            id={`search-result-${i}`}
+            aria-selected={i === selectedIndex}
+            className={`px-4 py-3 transition-colors hover:bg-emerald-400/5 ${i === selectedIndex ? "bg-emerald-400/15" : ""}`}
+          >
             <Link
               href={node.url!}
               target="_blank"

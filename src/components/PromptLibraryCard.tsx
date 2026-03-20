@@ -63,9 +63,20 @@ interface PromptLibraryCardProps {
   onUpdatePromptMeta: (id: string, updater: (prompt: ShelfPrompt) => ShelfPrompt) => void;
   promptRows: 1 | 2;
   onPromptRowsChange: (rows: 1 | 2) => void;
+  initialEditId?: string | null;
+  onInitialEditConsumed?: () => void;
 }
 
-export function PromptLibraryCard({ prompts, onUpdatePrompt, onDeletePrompt, onUpdatePromptMeta, promptRows, onPromptRowsChange }: PromptLibraryCardProps) {
+export function PromptLibraryCard({
+  prompts,
+  onUpdatePrompt,
+  onDeletePrompt,
+  onUpdatePromptMeta,
+  promptRows,
+  onPromptRowsChange,
+  initialEditId,
+  onInitialEditConsumed,
+}: PromptLibraryCardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const activePrompt = activeId ? prompts[activeId] : null;
   const [draft, setDraft] = useState("");
@@ -85,6 +96,13 @@ export function PromptLibraryCard({ prompts, onUpdatePrompt, onDeletePrompt, onU
     setDraftTitle(activePrompt?.title ?? "");
     setSelectedVersionId(activePrompt?.activeVersionId ?? activePrompt?.versions?.at(-1)?.id ?? null);
   }, [activePrompt?.activeVersionId, activePrompt?.body, activePrompt?.title, activePrompt?.versions]);
+
+  useEffect(() => {
+    if (initialEditId && prompts[initialEditId]) {
+      setActiveId(initialEditId);
+      onInitialEditConsumed?.();
+    }
+  }, [initialEditId, onInitialEditConsumed, prompts]);
 
   const close = () => setActiveId(null);
 
@@ -215,7 +233,10 @@ export function PromptLibraryCard({ prompts, onUpdatePrompt, onDeletePrompt, onU
         >
           <div
             className="absolute min-w-40 rounded-2xl border border-emerald-400/15 bg-black/90 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)]"
-            style={{ top: menu.y, left: menu.x }}
+            style={{
+              left: Math.max(8, Math.min(menu.x, window.innerWidth - 180)),
+              top: Math.max(8, Math.min(menu.y, window.innerHeight - 120)),
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -241,7 +262,7 @@ export function PromptLibraryCard({ prompts, onUpdatePrompt, onDeletePrompt, onU
       <Surface variant="secondary" className="results-glow rounded-2xl border border-emerald-400/20 bg-black/45 p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-emerald-300/80">Prompt Library</p>
+            <p className="shelf-prompt-label text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200">Prompt Library</p>
             <h2 className="text-lg font-semibold text-white">Prompt library</h2>
           </div>
           <div className="flex items-center gap-2">
@@ -290,11 +311,11 @@ export function PromptLibraryCard({ prompts, onUpdatePrompt, onDeletePrompt, onU
                 <div className="flex min-w-0 items-center gap-2">
                   <p className="truncate text-sm font-medium text-emerald-200">{prompt.title}</p>
                 </div>
-                <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-300/70">
+                <span className="shelf-prompt-copy text-xs font-medium uppercase tracking-[0.15em] text-emerald-200">
                   {copiedId === prompt.id ? "Copied" : "Click to copy"}
                 </span>
               </div>
-              <p className="mt-1 line-clamp-2 text-xs text-emerald-200/80 font-mono">{prompt.body}</p>
+              <p className="shelf-prompt-body mt-1 line-clamp-2 text-xs font-mono">{prompt.body}</p>
             </button>
           ))}
         </div>
@@ -311,11 +332,11 @@ export function PromptLibraryCard({ prompts, onUpdatePrompt, onDeletePrompt, onU
           <div className="relative z-[61] flex h-full w-full items-stretch justify-stretch p-3 sm:p-5">
             <Surface
               variant="secondary"
-              className="results-glow flex h-full w-full flex-col overflow-hidden rounded-[28px] border border-emerald-400/20 bg-black/94 shadow-[0_0_70px_rgba(16,185,129,0.12),0_0_120px_rgba(59,130,246,0.10),0_0_180px_rgba(236,72,153,0.08)] transition-all duration-300 ease-out animate-[prompt-enter_220ms_ease-out]"
+              className="shelf-prompt-editor results-glow flex h-full w-full flex-col overflow-hidden rounded-[28px] border border-emerald-400/20 bg-black/94 shadow-[0_0_70px_rgba(16,185,129,0.12),0_0_120px_rgba(59,130,246,0.10),0_0_180px_rgba(236,72,153,0.08)] transition-all duration-300 ease-out animate-[prompt-enter_220ms_ease-out]"
             >
-              <div className="flex items-center justify-between border-b border-emerald-400/10 bg-white/5 px-6 py-4">
+              <div className="shelf-prompt-editor-header flex items-center justify-between border-b border-emerald-400/10 bg-white/5 px-6 py-4">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-300/80">Prompt editor</p>
+                  <p className="shelf-prompt-editor-label text-xs uppercase tracking-[0.2em] text-emerald-300/80">Prompt editor</p>
                   <input
                     value={draftTitle}
                     onChange={(e) => setDraftTitle(e.target.value)}
@@ -326,7 +347,7 @@ export function PromptLibraryCard({ prompts, onUpdatePrompt, onDeletePrompt, onU
                 <button
                   type="button"
                   onClick={close}
-                  className="rounded-full border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-300 transition hover:border-emerald-300/30 hover:text-white"
+                  className="shelf-prompt-editor-close rounded-full border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-300 transition hover:border-emerald-300/30 hover:text-white"
                 >
                   Close
                 </button>
@@ -338,19 +359,19 @@ export function PromptLibraryCard({ prompts, onUpdatePrompt, onDeletePrompt, onU
                       <textarea
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
-                        className="min-h-[320px] w-full resize-none rounded-[22px] border border-emerald-400/25 bg-black/92 p-5 font-mono text-sm text-emerald-200 outline-none shadow-[0_0_0_1px_rgba(16,185,129,0.1)]"
+                        className="shelf-prompt-body min-h-[320px] w-full resize-none rounded-[22px] border border-emerald-400/25 bg-black/92 p-5 font-mono text-sm outline-none shadow-[0_0_0_1px_rgba(16,185,129,0.1)]"
                       />
-                      <div className="pointer-events-none rounded-[22px] border border-emerald-400/15 bg-black/70 p-5 font-mono text-sm leading-6 text-emerald-100/90">
+                      <div className="shelf-prompt-preview pointer-events-none rounded-[22px] border border-emerald-400/15 bg-black/70 p-5 font-mono text-sm leading-6">
                         {renderPromptPreview(draft)}
                       </div>
                     </div>
-                    <div className="flex min-h-0 flex-col rounded-[22px] border border-white/10 bg-black/45 p-4">
+                    <div className="shelf-prompt-editor-versions flex min-h-0 flex-col rounded-[22px] border border-white/10 bg-black/45 p-4">
                       <div className="mb-3 flex items-center justify-between gap-2">
                         <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Versions</p>
                         <button
                           type="button"
                           onClick={() => setShowVersions((v) => !v)}
-                          className="rounded-full border border-white/10 px-3 py-1 text-xs text-zinc-300 hover:text-white"
+                          className="shelf-prompt-versions-toggle rounded-full border border-white/10 px-3 py-1 text-xs text-zinc-300 hover:text-white"
                         >
                           {showVersions ? "Hide" : "Show"}
                         </button>
@@ -371,9 +392,9 @@ export function PromptLibraryCard({ prompts, onUpdatePrompt, onDeletePrompt, onU
                               setSelectedVersionId(version.id);
                               setDraft(version.body);
                             }}
-                            className={`w-full rounded-xl border px-3 py-2 text-left transition ${
+                            className={`shelf-prompt-version-btn w-full rounded-xl border px-3 py-2 text-left transition ${
                               selectedVersionId === version.id
-                                ? "border-emerald-300/50 bg-emerald-400/10 text-white"
+                                ? "shelf-prompt-version-btn--selected border-emerald-300/50 bg-emerald-400/10 text-white"
                                 : "border-white/10 bg-black/25 text-zinc-300 hover:border-white/20 hover:bg-black/35"
                             }`}
                           >
@@ -388,7 +409,7 @@ export function PromptLibraryCard({ prompts, onUpdatePrompt, onDeletePrompt, onU
                     </div>
                   </div>
                 </div>
-                <div className="mt-4 flex shrink-0 items-center justify-end gap-2 border-t border-white/5 pt-4">
+                <div className="shelf-prompt-editor-actions mt-4 flex shrink-0 items-center justify-end gap-2 border-t border-white/5 pt-4">
                   <button
                     type="button"
                     onClick={() => setShowVersions((v) => !v)}
@@ -406,7 +427,7 @@ export function PromptLibraryCard({ prompts, onUpdatePrompt, onDeletePrompt, onU
                   <button
                     type="button"
                     onClick={saveActivePrompt}
-                    className={`rounded-full px-5 py-3 text-sm font-medium text-black transition-all duration-300 ${
+                    className={`shelf-prompt-editor-save rounded-full px-5 py-3 text-sm font-medium text-black transition-all duration-300 ${
                       savedPulse
                         ? "scale-110 bg-emerald-300 shadow-[0_0_24px_rgba(74,222,128,0.55),0_0_60px_rgba(74,222,128,0.25)]"
                         : "bg-emerald-300 shadow-[0_0_18px_rgba(74,222,128,0.28)] hover:scale-[1.03]"

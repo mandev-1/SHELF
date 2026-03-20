@@ -2,6 +2,7 @@ import { Input, Link, Surface } from "@heroui/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { BookmarkTreeNode } from "../types/bookmarks";
 import type { ShelfPillarTodoItem } from "../types/grid";
+import { NoteContent } from "./NoteContent";
 
 function faviconUrl(url: string) {
   try {
@@ -15,17 +16,22 @@ function truncateSubtitle(text: string, maxLen = 25) {
   return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
 }
 
+const TAG_PALETTES: { bg: string; palette: string }[] = [
+  { bg: "bg-violet-700/18", palette: "shelf-todo-tag--violet" },
+  { bg: "bg-fuchsia-700/18", palette: "shelf-todo-tag--fuchsia" },
+  { bg: "bg-purple-700/18", palette: "shelf-todo-tag--purple" },
+  { bg: "bg-indigo-700/18", palette: "shelf-todo-tag--indigo" },
+  { bg: "bg-slate-800/25", palette: "shelf-todo-tag--navy" },
+  { bg: "bg-blue-600/22", palette: "shelf-todo-tag--royal-blue" },
+  { bg: "bg-emerald-700/22", palette: "shelf-todo-tag--royal-green" },
+  { bg: "bg-violet-800/16", palette: "shelf-todo-tag--violet" },
+  { bg: "bg-fuchsia-800/16", palette: "shelf-todo-tag--fuchsia" },
+];
+
 function tagColorClasses(tag: string) {
-  const palettes = [
-    "bg-violet-700/18 text-violet-200/90",
-    "bg-fuchsia-700/18 text-fuchsia-200/90",
-    "bg-purple-700/18 text-purple-200/90",
-    "bg-indigo-700/18 text-indigo-200/90",
-    "bg-violet-800/16 text-violet-200/85",
-    "bg-fuchsia-800/16 text-fuchsia-200/85",
-  ] as const;
   const hash = tag.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  return palettes[hash % palettes.length];
+  const { bg, palette } = TAG_PALETTES[hash % TAG_PALETTES.length];
+  return `shelf-todo-tag ${bg} ${palette}`;
 }
 
 function collectBookmarks(tree: BookmarkTreeNode[] | null): Map<string, BookmarkTreeNode> {
@@ -77,6 +83,8 @@ export function Pillar({
   onSetTodos,
   onTodoLog,
   onOpenDashboard,
+  onOpenVisualFlow,
+  onTaskCompleted,
 }: {
   shelfName: string;
   tree: BookmarkTreeNode[] | null;
@@ -88,17 +96,22 @@ export function Pillar({
   onSetTodos: (next: ShelfPillarTodoItem[] | ((prev: ShelfPillarTodoItem[]) => ShelfPillarTodoItem[])) => void;
   onTodoLog?: (entry: string) => void;
   onOpenDashboard?: () => void;
+  onOpenVisualFlow?: () => void;
+  onTaskCompleted?: () => void;
 }) {
   const byId = useMemo(() => collectBookmarks(tree), [tree]);
   const [overZone, setOverZone] = useState<"top" | null>(null);
   const [todoDraft, setTodoDraft] = useState("");
   const [todoSubtitleDraft, setTodoSubtitleDraft] = useState("");
   const [notePopover, setNotePopover] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [noteEditMode, setNoteEditMode] = useState(false);
+
+  useEffect(() => {
+    setNoteEditMode(false);
+  }, [notePopover?.id]);
   const [pinMenu, setPinMenu] = useState<{ id: string; x: number; y: number } | null>(null);
-  const [celebration, setCelebration] = useState<string | null>(null);
   const notePopoverRef = useRef<HTMLDivElement | null>(null);
   const pinMenuRef = useRef<HTMLDivElement | null>(null);
-  const celebrationTimerRef = useRef<number | null>(null);
   const todosRef = useRef(todos);
   todosRef.current = todos;
 
@@ -127,22 +140,19 @@ export function Pillar({
 
   const toggleTodo = (id: string) => {
     const t = todos.find((x) => x.id === id);
+    const wasDone = t?.done ?? false;
     onSetTodos((prev) => prev.map((item) => (item.id === id ? { ...item, done: !item.done } : item)));
-    if (t) onTodoLog?.(t.done ? `reopened task ${t.text}` : `completed task ${t.text}`);
+    if (t) onTodoLog?.(wasDone ? `reopened task ${t.text}` : `completed task ${t.text}`);
+    if (t && !wasDone) onTaskCompleted?.();
   };
 
   const removeTodo = (id: string) => {
     const t = todos.find((x) => x.id === id);
     const label = t?.text ? `"${t.text}"` : "this task";
     if (!window.confirm(`Remove ${label}? This will clear it from your list.`)) return;
+    if (!window.confirm(`Are you sure? This cannot be undone.`)) return;
     onSetTodos((prev) => prev.filter((item) => item.id !== id));
     if (t) onTodoLog?.(`removed task ${t.text}`);
-    setCelebration("Hooray! Task cleared! 🎉");
-    if (celebrationTimerRef.current !== null) window.clearTimeout(celebrationTimerRef.current);
-    celebrationTimerRef.current = window.setTimeout(() => {
-      setCelebration(null);
-      celebrationTimerRef.current = null;
-    }, 2500);
   };
 
   const setTodoUrl = (id: string, url: string | undefined) => {
@@ -203,17 +213,8 @@ export function Pillar({
     };
   }, [pinMenu]);
 
-  useEffect(() => {
-    return () => {
-      if (celebrationTimerRef.current !== null) {
-        window.clearTimeout(celebrationTimerRef.current);
-        celebrationTimerRef.current = null;
-      }
-    };
-  }, []);
-
   return (
-    <aside className="relative flex h-screen w-[280px] shrink-0 flex-col border-r border-white/10 bg-zinc-900/80">
+    <aside className="shelf-pillar relative flex h-full min-h-0 w-[280px] shrink-0 flex-col border-r border-white/10 bg-zinc-900/80">
       <div className="shrink-0 p-4">
         <div className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/70">Pillar</div>
         <div className="mt-1 truncate text-lg font-semibold text-white">{shelfName}</div>
@@ -222,7 +223,7 @@ export function Pillar({
       <Surface variant="secondary" className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-4">
 
         <div
-          className={`min-w-0 rounded-2xl border p-3 transition ${
+          className={`shelf-top6-zone min-w-0 rounded-2xl border p-3 transition ${
             overZone === "top" ? "border-emerald-300/50 bg-emerald-400/10" : "border-white/10 bg-black/20"
           }`}
           onDragOver={(e) => {
@@ -256,7 +257,7 @@ export function Pillar({
                 return (
                   <div
                     key={b.id}
-                    className="group min-w-0 overflow-hidden rounded-2xl border border-emerald-400/15 bg-black/35 p-3"
+                    className="shelf-top6-card group min-w-0 overflow-hidden rounded-2xl border border-emerald-400/15 bg-black/35 p-3"
                     onContextMenu={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -281,8 +282,11 @@ export function Pillar({
                         <div className="truncate text-sm font-semibold text-white group-hover:text-emerald-100">
                           {displayTitle}
                         </div>
-                        <div className="mt-0.5 truncate text-xs text-zinc-400" title={b.url}>
-                          {b.url}
+                        <div
+                          className="shelf-pin-url mt-0.5 block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-zinc-400"
+                          title={b.url}
+                        >
+                          {b.url && b.url.length > 18 ? `${b.url.slice(0, 18)}...` : b.url}
                         </div>
                       </div>
                     </Link>
@@ -300,7 +304,7 @@ export function Pillar({
           </div>
         </div>
 
-        <div className="mt-3 min-w-0 rounded-2xl border border-white/10 bg-black/20 p-3">
+        <div className="shelf-todo-zone mt-3 min-w-0 rounded-2xl border border-white/10 bg-black/20 p-3">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-xs font-semibold text-emerald-200">Todo</div>
           </div>
@@ -333,7 +337,7 @@ export function Pillar({
               todos.map((t) => (
                 <div
                   key={t.id}
-                  className="group min-w-0 rounded-xl px-2 py-1.5 hover:bg-white/5"
+                  className={`shelf-todo-item group relative min-w-0 rounded-xl px-2 py-1.5 hover:bg-white/5 ${t.blockStatus === "blocked" ? "shelf-todo-item--blocked italic opacity-60" : ""}`}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     setNotePopover({ id: t.id, x: e.clientX, y: e.clientY });
@@ -407,9 +411,9 @@ export function Pillar({
           </div>
         </div>
 
-        <div className="mt-3 min-w-0 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-3">
+        <div className="shelf-error-dashboard-pillar mt-3 min-w-0 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-3">
           <div className="mb-2 text-xs font-semibold text-cyan-100">Error Dashboard</div>
-          <div className="text-[11px] text-cyan-100/80">
+          <div className="shelf-error-dashboard-pillar-subtitle text-[11px] text-cyan-100/80">
             Open a full-page view to paste raw JSON and visualize errors.
           </div>
           <button
@@ -420,19 +424,22 @@ export function Pillar({
             Open Dashboard
           </button>
         </div>
+
+        <div className="shelf-error-dashboard-pillar mt-3 min-w-0 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-3">
+          <div className="mb-2 text-xs font-semibold text-cyan-100">Visualization</div>
+          <div className="shelf-error-dashboard-pillar-subtitle text-[11px] text-cyan-100/80">
+            Visualize flow of your goals
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenVisualFlow?.()}
+            className="mt-2 w-full rounded-lg border border-cyan-300/35 bg-cyan-400/10 px-2.5 py-1.5 text-[11px] font-medium text-cyan-50 hover:bg-cyan-400/20"
+          >
+            Visual Flow of Action
+          </button>
+        </div>
       </Surface>
       </div>
-      {celebration && (
-        <div
-          className="absolute bottom-4 left-4 right-4 z-10 flex justify-center"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/20 px-4 py-2.5 text-sm font-medium text-emerald-100 shadow-lg">
-            {celebration}
-          </div>
-        </div>
-      )}
       {pinMenu && (() => {
         const b = byId.get(pinMenu.id);
         if (!b) return null;
@@ -504,16 +511,16 @@ export function Pillar({
         return (
           <div
             ref={notePopoverRef}
-            className="fixed z-[100] w-64 rounded-xl border border-emerald-400/20 bg-zinc-900 shadow-lg"
+            className={`shelf-note-popover fixed z-[100] w-64 rounded-xl border border-emerald-400/20 bg-zinc-900 shadow-lg ${t.blockStatus === "blocked" ? "italic" : ""}`}
             style={{
               left: Math.max(8, Math.min(notePopover.x, window.innerWidth - 272)),
               top: Math.max(8, Math.min(notePopover.y, window.innerHeight - 180)),
             }}
           >
-            <div className="border-b border-white/10 px-2 py-1.5 text-[10px] text-zinc-500">
+            <div className="shelf-note-popover-header border-b border-white/10 px-2 py-1.5 text-[10px] text-zinc-500">
               Note: {t.text}
             </div>
-            <div className="space-y-2 px-2 py-2">
+            <div className="shelf-note-popover-body space-y-2 px-2 py-2">
               <Input
                 variant="secondary"
                 value={t.tag ?? ""}
@@ -528,25 +535,44 @@ export function Pillar({
                 placeholder="Subtitle (optional)"
                 className="text-xs"
               />
+              {t.note?.trim() && !noteEditMode ? (
+                <div className="space-y-1">
+                  <div className="shelf-flow-node-note text-[11px] leading-relaxed">
+                    <NoteContent
+                      content={t.note}
+                      onNoteChange={(newNote) => setTodoNote(t.id, newNote)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setNoteEditMode(true)}
+                    className="text-[10px] text-zinc-500 hover:text-emerald-400"
+                  >
+                    Edit note…
+                  </button>
+                </div>
+              ) : (
+                <textarea
+                  value={t.note ?? ""}
+                  onChange={(e) => setTodoNote(t.id, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && e.shiftKey) {
+                      e.preventDefault();
+                      const todo = todosRef.current.find((x) => x.id === notePopover.id);
+                      if (todo?.note?.trim()) {
+                        onTodoLog?.(`added comment to task ${todo.text}:\n\n${todo.note.trim()}\n\n`);
+                      }
+                      setNotePopover(null);
+                    }
+                  }}
+                  onBlur={() => setNoteEditMode(false)}
+                  placeholder="Add a note…"
+                  className="shelf-note-popover-textarea min-h-[80px] w-full resize-y rounded-b-xl border-0 bg-transparent px-3 py-2 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-0"
+                  rows={3}
+                  autoFocus={noteEditMode || !t.note?.trim()}
+                />
+              )}
             </div>
-            <textarea
-              value={t.note ?? ""}
-              onChange={(e) => setTodoNote(t.id, e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && e.shiftKey) {
-                  e.preventDefault();
-                  const todo = todosRef.current.find((x) => x.id === notePopover.id);
-                  if (todo?.note?.trim()) {
-                    onTodoLog?.(`added comment to task ${todo.text}:\n\n${todo.note.trim()}\n\n`);
-                  }
-                  setNotePopover(null);
-                }
-              }}
-              placeholder="Add a note…"
-              className="min-h-[80px] w-full resize-y rounded-b-xl border-0 bg-transparent px-3 py-2 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-0"
-              rows={3}
-              autoFocus
-            />
           </div>
         );
       })()}

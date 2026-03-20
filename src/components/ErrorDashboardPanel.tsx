@@ -155,7 +155,10 @@ function migrateLegacyStorage(): { dashboards: SavedDashboard[]; currentId: stri
   }
 }
 
-export function ErrorDashboardPanel({ fullPage = false }: { fullPage?: boolean }) {
+export function ErrorDashboardPanel({
+  fullPage = false,
+  onOpenLLMConsole,
+}: { fullPage?: boolean; onOpenLLMConsole?: () => void }) {
   const [dashboards, setDashboards] = useState<SavedDashboard[]>(() => []);
   const [currentId, setCurrentId] = useState<string | null>(() => null);
   const [rawJson, setRawJson] = useState("");
@@ -392,13 +395,24 @@ export function ErrorDashboardPanel({ fullPage = false }: { fullPage?: boolean }
     setShowImportancePanel(true);
   };
 
+  useEffect(() => {
+    if (!fullPage) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (editingNameId) return;
+      collapseEverything();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [fullPage, editingNameId]);
+
   const sortedErrors = useMemo(
     () => (payload ? [...payload.errors].sort((a, b) => b.count - a.count) : []),
     [payload]
   );
 
   return (
-    <div className={containerClass}>
+    <div className={`shelf-error-dashboard ${containerClass}`}>
       {/* Header: title + compact toolbar */}
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-black/20 px-4 py-3">
         <div className="flex items-center gap-3">
@@ -426,6 +440,13 @@ export function ErrorDashboardPanel({ fullPage = false }: { fullPage?: boolean }
               className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11px] text-zinc-400 hover:text-zinc-200"
             >
               Expand all
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenLLMConsole?.()}
+              className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11px] text-zinc-400 hover:text-zinc-200"
+            >
+              Open LLM Console
             </button>
           </div>
         ) : null}

@@ -49,12 +49,25 @@ export interface ShelfBookmarkView {
 
 export type ShelfBookmarkViewMap = Record<string, ShelfBookmarkView>;
 
+export type ShelfBookmarkOverrides = Record<string, { title?: string; imageUrl?: string }>;
+
 export interface ShelfPromptVersion {
   id: string;
   code: string;
   body: string;
   createdAt: string;
 }
+
+export type ShelfTodoBlockStatus = "blocked" | "ready" | "abeyed";
+
+export type ShelfTodoHandleConfig =
+  | "horizontal"
+  | "vertical"
+  | "top"
+  | "bottom"
+  | "left"
+  | "right"
+  | "hidden";
 
 export interface ShelfPillarTodoItem {
   id: string;
@@ -64,6 +77,10 @@ export interface ShelfPillarTodoItem {
   note?: string;
   subtitle?: string;
   tag?: string;
+  /** Task blocking status: blocked by another, ready to work on, or abeyed. Only in edit form, not shown in Pillar. */
+  blockStatus?: ShelfTodoBlockStatus;
+  /** Per-node handle config: horizontal (L+R), vertical (T+B), or single side. Hidden = no connection points. */
+  handleConfig?: ShelfTodoHandleConfig;
 }
 
 export interface ObsidianLogConfig {
@@ -75,10 +92,27 @@ export interface ObsidianLogConfig {
   useDailyNote?: boolean;
 }
 
+export type ShelfTheme = "dark" | "day" | "sap" | "auto";
+
+export type BookmarkSize = "normal" | "senior";
+
+export type VisualFlowEdge = {
+  source: string;
+  target: string;
+  arrow?: boolean;
+  doubled?: boolean;
+};
+
+export interface VisualFlowData {
+  nodePositions?: Record<string, { x: number; y: number }>;
+  edges?: VisualFlowEdge[];
+}
+
 export interface ShelfBackupData {
   version: number;
   layout: ShelfLayoutItem[];
   colors: ShelfSectionColors;
+  theme?: ShelfTheme;
   labels: Record<string, string>;
   separators: ShelfFolderSeparatorMap;
   goals: ShelfGoalMap;
@@ -90,6 +124,10 @@ export interface ShelfBackupData {
   gridLocked: boolean;
   promptRows: 1 | 2;
   hiddenFolderIds?: string[];
+  bookmarkOverrides?: ShelfBookmarkOverrides;
+  bookmarkSize?: BookmarkSize;
+  visualFlow?: VisualFlowData;
+  llmConsoleUrl?: string;
 }
 
 export const ACCENT_COLORS = [
