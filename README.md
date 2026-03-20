@@ -130,7 +130,8 @@ Then load the extension from `dist` or from `releases/<version>/` and refresh th
 - Manifest V3
 - `chrome.bookmarks` — Read, create, update, delete, move bookmarks
 - `chrome.storage.local` — Persist layout, themes, prompts, todos, settings
-- `chrome.tabs` — Open LLM Console URL in new tab
+- `chrome.tabs` — Open LLM Console URL
+- **LLM Console overlay** — Opens the configured URL in the current tab and injects a content script overlay (header + Prompt Library sidebar). Close opens the Dashboard in a new tab. Avoids iframe embedding issues (X-Frame-Options, etc.).
 
 ## License
 

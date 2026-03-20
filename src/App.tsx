@@ -8,22 +8,34 @@ import { useShelfStorage } from "./hooks/useShelfStorage";
 import { PromptLibraryCard } from "./components/PromptLibraryCard";
 import { Pillar } from "./components/Pillar";
 import { ErrorDashboardPanel } from "./components/ErrorDashboardPanel";
-import { LLMConsolePanel } from "./components/LLMConsolePanel";
 import { VisualFlowPanel } from "./components/VisualFlowPanel";
 import { pickCelebrationPhrase } from "./utils/celebration";
 
 const DASHBOARD_OPEN_KEY = "shelf-dashboard-view";
 const DASHBOARD_LAST_TOOL_KEY = "shelf-dashboard-last-tool";
 
-type DashboardView = "shelf" | "error" | "visual-flow" | "llm-console";
+type DashboardView = "shelf" | "error" | "visual-flow";
 type LastTool = "error" | "visual-flow" | "llm-console";
+
+function openLLMConsoleOverlay(url: string) {
+  const resolved = (url || "https://example.org").trim();
+  if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+    chrome.runtime.sendMessage({ type: "openLLMConsole", url: resolved }, () => {
+      if (chrome.runtime.lastError) {
+        window.open(resolved, "_blank", "noopener,noreferrer");
+      }
+    });
+  } else {
+    window.open(resolved, "_blank", "noopener,noreferrer");
+  }
+}
 
 function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [dashboardView, setDashboardView] = useState<DashboardView>(() => {
     try {
       const v = window.localStorage.getItem(DASHBOARD_OPEN_KEY);
-      return v === "error" || v === "visual-flow" || v === "llm-console" ? v : "shelf";
+      return v === "error" || v === "visual-flow" ? v : "shelf";
     } catch {
       return "shelf";
     }
@@ -35,7 +47,7 @@ function App() {
       if (v === "llm-console") return "llm-console";
       if (v === "error") return "error";
       const view = window.localStorage.getItem(DASHBOARD_OPEN_KEY);
-      return view === "visual-flow" ? "visual-flow" : view === "llm-console" ? "llm-console" : "error";
+      return view === "visual-flow" ? "visual-flow" : "error";
     } catch {
       return "error";
     }
@@ -126,7 +138,7 @@ function App() {
   useEffect(() => {
     try {
       window.localStorage.setItem(DASHBOARD_OPEN_KEY, dashboardView);
-      if (dashboardView === "error" || dashboardView === "visual-flow" || dashboardView === "llm-console") {
+      if (dashboardView === "error" || dashboardView === "visual-flow") {
         window.localStorage.setItem(DASHBOARD_LAST_TOOL_KEY, dashboardView);
       }
     } catch {
@@ -166,7 +178,7 @@ function App() {
           window.clearTimeout(swipeTimeoutRef.current);
           swipeTimeoutRef.current = null;
         }
-        if (dashboardView === "error" || dashboardView === "visual-flow" || dashboardView === "llm-console") {
+        if (dashboardView === "error" || dashboardView === "visual-flow") {
           setViewSlideDir("right");
           setDashboardView("shelf");
         }
@@ -177,12 +189,16 @@ function App() {
           swipeTimeoutRef.current = null;
         }
         if (dashboardView === "shelf") {
-          setViewSlideDir("left");
-          setDashboardView(lastTool);
+          if (lastTool === "llm-console") {
+            openLLMConsoleOverlay(llmConsoleUrl);
+          } else {
+            setViewSlideDir("left");
+            setDashboardView(lastTool);
+          }
         }
       }
     },
-    [dashboardView, lastTool]
+    [dashboardView, lastTool, llmConsoleUrl]
   );
 
   useEffect(() => {
@@ -223,15 +239,19 @@ function App() {
         return;
       }
       touchSwipeRef.current = null;
-      if (dx < 0 && (dashboardView === "error" || dashboardView === "visual-flow" || dashboardView === "llm-console")) {
+      if (dx < 0 && (dashboardView === "error" || dashboardView === "visual-flow")) {
         setViewSlideDir("right");
         setDashboardView("shelf");
       } else if (dx > 0 && dashboardView === "shelf") {
-        setViewSlideDir("left");
-        setDashboardView(lastTool);
+        if (lastTool === "llm-console") {
+          openLLMConsoleOverlay(llmConsoleUrl);
+        } else {
+          setViewSlideDir("left");
+          setDashboardView(lastTool);
+        }
       }
     },
-    [dashboardView, lastTool]
+    [dashboardView, lastTool, llmConsoleUrl]
   );
 
   useEffect(() => {
@@ -334,6 +354,8 @@ function App() {
                 if (dashboardView !== "shelf") {
                   setViewSlideDir("right");
                   setDashboardView("shelf");
+                } else if (lastTool === "llm-console") {
+                  openLLMConsoleOverlay(llmConsoleUrl);
                 } else {
                   setViewSlideDir("left");
                   setDashboardView(lastTool);
@@ -364,26 +386,7 @@ function App() {
                 fullPage
                 onOpenLLMConsole={() => {
                   setLastTool("llm-console");
-                  setViewSlideDir("left");
-                  setDashboardView("llm-console");
-                }}
-              />
-            </div>
-          ) : dashboardView === "llm-console" ? (
-            <div className="max-w-6xl mx-auto">
-              <LLMConsolePanel
-                fullPage
-                prompts={prompts}
-                iframeUrl={llmConsoleUrl}
-                onEditPromptInLibrary={(id) => {
-                  setPendingEditPromptId(id);
-                  setViewSlideDir("right");
-                  setDashboardView("shelf");
-                }}
-                onClose={() => {
-                  setLastTool("error");
-                  setViewSlideDir("right");
-                  setDashboardView("error");
+                  openLLMConsoleOverlay(llmConsoleUrl);
                 }}
               />
             </div>
@@ -454,7 +457,7 @@ function App() {
           )}
           </div>
 
-          {showSearch && (dashboardView === "error" || dashboardView === "visual-flow" || dashboardView === "llm-console") && (
+          {showSearch && (dashboardView === "error" || dashboardView === "visual-flow") && (
             <div
               data-search-overlay
               className="fixed inset-0 z-[150] flex items-start justify-center pt-24 px-6 pb-6"

@@ -1248,7 +1248,7 @@ export function BookmarkGrid() {
             )}
             <div className="rounded-xl border border-white/10 bg-white/5 p-2">
               <div className="mb-1.5 text-xs font-medium text-emerald-200">LLM Console URL</div>
-              <p className="mb-2 text-[10px] text-zinc-500">Embedded in LLM Console. Works best with local UIs (Ollama, LM Studio). Use &quot;Open in tab&quot; if blocked.</p>
+              <p className="mb-2 text-[10px] text-zinc-500">Opens in the current tab with Prompt Library overlay. Works with any URL (ChatGPT, Claude, Ollama, LM Studio, etc.).</p>
               <Input
                 variant="secondary"
                 value={llmConsoleUrl}
