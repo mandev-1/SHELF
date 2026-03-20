@@ -66,9 +66,14 @@ export async function createFolder(title: string, parentId = "1") {
   return chrome.bookmarks.create({ parentId, title });
 }
 
-export async function moveBookmark(id: string, parentId: string) {
+export async function deleteBookmarkNode(id: string) {
   if (!chrome?.bookmarks) return null;
-  return chrome.bookmarks.move(id, { parentId });
+  return chrome.bookmarks.removeTree(id);
+}
+
+export async function moveBookmark(id: string, parentId: string, index?: number) {
+  if (!chrome?.bookmarks) return null;
+  return chrome.bookmarks.move(id, index === undefined ? { parentId } : { parentId, index });
 }
 
 export async function createBookmark(
@@ -78,4 +83,12 @@ export async function createBookmark(
 ) {
   if (!chrome?.bookmarks) return null;
   return chrome.bookmarks.create({ parentId, title, url });
+}
+
+export async function updateBookmark(
+  id: string,
+  changes: { title?: string; url?: string }
+) {
+  if (!chrome?.bookmarks) return;
+  await chrome.bookmarks.update(id, changes);
 }

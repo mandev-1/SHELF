@@ -4,6 +4,647 @@
 
 :root {
   --font-sans: "DM Sans", system-ui, sans-serif;
+  --shelf-bg: linear-gradient(to bottom right, #09090b, #18181b, #09090b);
+  --shelf-fg: #f4f4f5;
+  --shelf-muted: #a1a1aa;
+  --shelf-accent: #10b981;
+  --shelf-accent-hover: #34d399;
+  --shelf-border: rgba(255, 255, 255, 0.1);
+  --shelf-card: rgba(255, 255, 255, 0.05);
+  --shelf-scroll-track: rgb(24 24 27);
+  --shelf-scroll-thumb: rgb(63 63 70);
+}
+
+[data-theme="day"] {
+  --shelf-bg: linear-gradient(to bottom right, #fafaf9, #f5f5f4, #e7e5e4);
+  --shelf-fg: #1c1917;
+  --shelf-muted: #57534e;
+  --shelf-accent: #d97706;
+  --shelf-accent-hover: #f59e0b;
+  --shelf-border: rgba(0, 0, 0, 0.08);
+  --shelf-card: rgba(255, 255, 255, 0.8);
+  --shelf-scroll-track: rgb(228 228 231);
+  --shelf-scroll-thumb: rgb(161 161 170);
+}
+
+[data-theme="sap"] {
+  --shelf-bg: linear-gradient(to bottom right, #f0f4f8, #e8eef5, #dee8f0);
+  --shelf-fg: #0a0a0a;
+  --shelf-muted: #4a5568;
+  --shelf-accent: #0070f2;
+  --shelf-accent-hover: #1b90ff;
+  --shelf-border: rgba(0, 112, 242, 0.15);
+  --shelf-card: rgba(255, 255, 255, 0.9);
+  --shelf-scroll-track: rgb(226 232 240);
+  --shelf-scroll-thumb: rgb(148 163 184);
+}
+
+/* Theme overrides for light backgrounds (day, sap) */
+[data-theme="day"] .text-zinc-100,
+[data-theme="day"] .text-white,
+[data-theme="sap"] .text-zinc-100,
+[data-theme="sap"] .text-white {
+  color: var(--shelf-fg);
+}
+
+[data-theme="day"] .text-zinc-200,
+[data-theme="day"] .text-zinc-300,
+[data-theme="sap"] .text-zinc-200,
+[data-theme="sap"] .text-zinc-300 {
+  color: var(--shelf-fg);
+}
+
+[data-theme="day"] .text-zinc-400,
+[data-theme="day"] .text-zinc-500,
+[data-theme="sap"] .text-zinc-400,
+[data-theme="sap"] .text-zinc-500 {
+  color: var(--shelf-muted);
+}
+
+[data-theme="day"] .border-white\/10,
+[data-theme="day"] .border-white\/20,
+[data-theme="sap"] .border-white\/10,
+[data-theme="sap"] .border-white\/20 {
+  border-color: var(--shelf-border);
+}
+
+[data-theme="day"] .bg-white\/5,
+[data-theme="day"] .bg-white\/10,
+[data-theme="sap"] .bg-white\/5,
+[data-theme="sap"] .bg-white\/10 {
+  background-color: var(--shelf-card);
+}
+
+[data-theme="day"] .bg-black\/20,
+[data-theme="day"] .bg-black\/30,
+[data-theme="day"] .bg-black\/45,
+[data-theme="day"] .bg-black\/50,
+[data-theme="day"] .bg-black\/92,
+[data-theme="sap"] .bg-black\/20,
+[data-theme="sap"] .bg-black\/30,
+[data-theme="sap"] .bg-black\/45,
+[data-theme="sap"] .bg-black\/50,
+[data-theme="sap"] .bg-black\/92 {
+  background-color: rgba(255, 255, 255, 0.92);
+}
+
+/* Day accent: replace emerald/cyan with warm amber */
+[data-theme="day"] .text-emerald-100,
+[data-theme="day"] .text-emerald-200,
+[data-theme="day"] .text-emerald-300,
+[data-theme="day"] .text-emerald-400,
+[data-theme="day"] .text-cyan-100,
+[data-theme="day"] .text-cyan-200,
+[data-theme="day"] .text-cyan-300,
+[data-theme="day"] .text-cyan-400 {
+  color: #b45309 !important;
+}
+
+[data-theme="day"] .bg-emerald-400\/10,
+[data-theme="day"] .bg-emerald-500\/20,
+[data-theme="day"] .bg-cyan-400\/10,
+[data-theme="day"] .bg-cyan-500\/15,
+[data-theme="day"] .bg-cyan-500\/20 {
+  background-color: rgb(180 83 9 / 0.15) !important;
+}
+
+[data-theme="day"] .border-emerald-400\/15,
+[data-theme="day"] .border-emerald-400\/20,
+[data-theme="day"] .border-emerald-400\/30,
+[data-theme="day"] .border-cyan-300\/20,
+[data-theme="day"] .border-cyan-300\/30,
+[data-theme="day"] .border-cyan-400\/40 {
+  border-color: rgba(180, 83, 9, 0.25) !important;
+}
+
+/* SAP accent: replace emerald/cyan with SAP blue */
+[data-theme="sap"] [class*="emerald"],
+[data-theme="sap"] [class*="cyan"] {
+  --tw-ring-color: rgb(0 112 242 / 0.5);
+}
+
+[data-theme="sap"] .text-emerald-100,
+[data-theme="sap"] .text-emerald-200,
+[data-theme="sap"] .text-emerald-300,
+[data-theme="sap"] .text-emerald-400,
+[data-theme="sap"] .text-cyan-100,
+[data-theme="sap"] .text-cyan-200,
+[data-theme="sap"] .text-cyan-300,
+[data-theme="sap"] .text-cyan-400 {
+  color: #0070f2 !important;
+}
+
+[data-theme="sap"] .bg-emerald-400\/10,
+[data-theme="sap"] .bg-emerald-500\/20,
+[data-theme="sap"] .bg-cyan-400\/10,
+[data-theme="sap"] .bg-cyan-500\/15,
+[data-theme="sap"] .bg-cyan-500\/20 {
+  background-color: rgb(0 112 242 / 0.15) !important;
+}
+
+[data-theme="sap"] .border-emerald-400\/15,
+[data-theme="sap"] .border-emerald-400\/20,
+[data-theme="sap"] .border-emerald-400\/30,
+[data-theme="sap"] .border-cyan-300\/20,
+[data-theme="sap"] .border-cyan-300\/30,
+[data-theme="sap"] .border-cyan-400\/40 {
+  border-color: rgba(0, 112, 242, 0.25) !important;
+}
+
+[data-theme="sap"] .hover\:bg-emerald-400\/10:hover,
+[data-theme="sap"] .hover\:bg-cyan-400\/20:hover {
+  background-color: rgb(0 112 242 / 0.2) !important;
+}
+
+/* Pillar: light, contrasting background for day/sap */
+[data-theme="day"] .shelf-pillar {
+  background: linear-gradient(to bottom, #e8e6e3, #ddd9d4) !important;
+  border-right-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-theme="sap"] .shelf-pillar {
+  background: linear-gradient(to bottom, #d4dce6, #c8d4e4) !important;
+  border-right-color: rgba(0, 112, 242, 0.2) !important;
+}
+
+/* Top 6 zone & cards: SAP theme – slightly gray */
+[data-theme="sap"] .shelf-top6-zone {
+  background: rgba(238, 242, 247, 0.9) !important;
+  border-color: rgba(0, 112, 242, 0.15) !important;
+}
+
+[data-theme="sap"] .shelf-top6-card {
+  background: rgba(230, 236, 243, 0.95) !important;
+  border-color: rgba(0, 112, 242, 0.18) !important;
+}
+
+[data-theme="sap"] .shelf-top6-card .text-white {
+  color: #0a0a0a !important;
+}
+
+[data-theme="sap"] .shelf-top6-card .text-zinc-400 {
+  color: #4a5568 !important;
+}
+
+[data-theme="sap"] .shelf-top6-card .text-zinc-500 {
+  color: #7f97ba !important;
+  opacity: 0.7;
+  font-weight: 400;
+
+}
+
+/* Pillar Error Dashboard card: SAP theme – dark subtitle for visibility */
+[data-theme="sap"] .shelf-error-dashboard-pillar-subtitle {
+  color: #4f5863 !important;
+}
+
+/* Pillar Error Dashboard card: day theme – dark text & button for contrast on light cyan */
+[data-theme="day"] .shelf-error-dashboard-pillar .text-cyan-100 {
+  color: #92400e !important;
+}
+[data-theme="day"] .shelf-error-dashboard-pillar-subtitle {
+  color: #78350f !important;
+}
+[data-theme="day"] .shelf-error-dashboard-pillar button {
+  color: #78350f !important;
+}
+[data-theme="day"] .shelf-error-dashboard-pillar button:hover {
+  color: #92400e !important;
+}
+
+/* Top 6 / Pillar pin URL: truncate with ellipsis */
+.shelf-pin-url {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* SAP Todo: full white with slight baby blue tint */
+[data-theme="sap"] .shelf-todo-zone {
+  background: rgba(252, 254, 255, 0.98) !important;
+  border: 1px solid rgba(0, 112, 242, 0.12) !important;
+}
+
+[data-theme="sap"] .shelf-todo-item {
+  background: rgba(255, 255, 255, 1) !important;
+  border: 1px solid rgba(180, 210, 255, 0.5);
+}
+
+[data-theme="sap"] .shelf-todo-item:hover {
+  background: rgba(250, 252, 255, 1) !important;
+  border-color: rgba(0, 112, 242, 0.15);
+}
+
+[data-theme="sap"] .shelf-todo-item .text-zinc-300,
+[data-theme="sap"] .shelf-todo-item .text-zinc-400,
+[data-theme="sap"] .shelf-todo-item .text-zinc-500 {
+  color: #1e293b !important;
+}
+
+[data-theme="sap"] .shelf-todo-item .text-emerald-400 {
+  color: #0070f2 !important;
+}
+
+/* Pillar blocked todo: opacity + BLOCKED overlay */
+.shelf-todo-item--blocked::after {
+  content: "BLOCKED";
+  position: absolute;
+  bottom: 0.25rem;
+  right: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+}
+[data-theme="day"] .shelf-todo-item--blocked::after,
+[data-theme="sap"] .shelf-todo-item--blocked::after {
+  color: rgba(0, 0, 0, 0.3);
+}
+
+/* Pillar todo tag: dark theme – light text */
+.shelf-todo-tag--violet { color: rgb(196 181 253); }
+.shelf-todo-tag--fuchsia { color: rgb(233 213 255); }
+.shelf-todo-tag--purple { color: rgb(216 180 254); }
+.shelf-todo-tag--indigo { color: rgb(199 210 254); }
+.shelf-todo-tag--navy { color: rgb(186 230 253); }        /* sky-200 */
+.shelf-todo-tag--royal-blue { color: rgb(191 219 254); }  /* blue-200 */
+.shelf-todo-tag--royal-green { color: rgb(167 243 208); } /* emerald-200 */
+
+/* SAP/day: tag text very dark, same hue as background */
+[data-theme="sap"] .shelf-todo-tag--violet,
+[data-theme="day"] .shelf-todo-tag--violet {
+  color: rgb(61 20 138) !important;   /* violet-950 */
+}
+[data-theme="sap"] .shelf-todo-tag--fuchsia,
+[data-theme="day"] .shelf-todo-tag--fuchsia {
+  color: rgb(74 4 78) !important;      /* fuchsia-950 */
+}
+[data-theme="sap"] .shelf-todo-tag--purple,
+[data-theme="day"] .shelf-todo-tag--purple {
+  color: rgb(59 7 100) !important;     /* purple-950 */
+}
+[data-theme="sap"] .shelf-todo-tag--indigo,
+[data-theme="day"] .shelf-todo-tag--indigo {
+  color: rgb(30 27 75) !important;    /* indigo-950 */
+}
+[data-theme="sap"] .shelf-todo-tag--navy,
+[data-theme="day"] .shelf-todo-tag--navy {
+  color: rgb(30 58 138) !important;   /* blue-900, navy */
+}
+[data-theme="sap"] .shelf-todo-tag--royal-blue,
+[data-theme="day"] .shelf-todo-tag--royal-blue {
+  color: rgb(30 64 175) !important;   /* blue-800, royal */
+}
+[data-theme="sap"] .shelf-todo-tag--royal-green,
+[data-theme="day"] .shelf-todo-tag--royal-green {
+  color: rgb(6 78 59) !important;      /* emerald-900 */
+}
+
+/* Note popover: SAP theme – light card, SAP blue accents, high-contrast text */
+[data-theme="sap"] .shelf-note-popover {
+  background: #fff !important;
+  border-color: rgba(0, 112, 242, 0.25) !important;
+  box-shadow: 0 4px 20px rgba(0, 112, 242, 0.12);
+}
+[data-theme="sap"] .shelf-note-popover-header {
+  border-color: rgba(0, 112, 242, 0.12) !important;
+  color: #4a5568 !important;
+}
+[data-theme="sap"] .shelf-note-popover-textarea {
+  color: #0a0a0a !important;
+  background: transparent !important;
+}
+[data-theme="sap"] .shelf-note-popover-textarea::placeholder {
+  color: #94a3b8 !important;
+}
+[data-theme="sap"] .shelf-note-popover-body input {
+  color: #0a0a0a !important;
+  background: rgba(248, 250, 252, 0.9) !important;
+  border-color: rgba(0, 112, 242, 0.15) !important;
+}
+[data-theme="sap"] .shelf-note-popover-body input::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Note popover: day theme – light card, warm accents */
+[data-theme="day"] .shelf-note-popover {
+  background: #fff !important;
+  border-color: rgba(180, 83, 9, 0.2) !important;
+  box-shadow: 0 4px 20px rgba(180, 83, 9, 0.08);
+}
+[data-theme="day"] .shelf-note-popover-header {
+  border-color: rgba(180, 83, 9, 0.12) !important;
+  color: #57534e !important;
+}
+[data-theme="day"] .shelf-note-popover-textarea {
+  color: #0a0a0a !important;
+  background: transparent !important;
+}
+[data-theme="day"] .shelf-note-popover-textarea::placeholder {
+  color: #94a3b8 !important;
+}
+[data-theme="day"] .shelf-note-popover-body input {
+  color: #0a0a0a !important;
+  background: rgba(250, 250, 249, 0.9) !important;
+  border-color: rgba(180, 83, 9, 0.15) !important;
+}
+[data-theme="day"] .shelf-note-popover-body input::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Prompt library: murky, contrasting typography */
+.shelf-prompt-body,
+.shelf-prompt-preview {
+  font-weight: 600 !important;
+  letter-spacing: -0.02em;
+}
+
+.shelf-prompt-body {
+  color: #8faf96 !important;
+}
+
+.shelf-prompt-preview {
+  color: #a3bda8 !important;
+}
+
+[data-theme="day"] .shelf-prompt-body,
+[data-theme="day"] .shelf-prompt-preview,
+[data-theme="sap"] .shelf-prompt-body,
+[data-theme="sap"] .shelf-prompt-preview {
+  color: #0c0a09 !important;
+  font-weight: 600 !important;
+}
+
+/* Prompt Library label & Click to copy – high visibility */
+.shelf-prompt-label,
+.shelf-prompt-copy {
+  color: #6ee7b7 !important;
+}
+
+[data-theme="day"] .shelf-prompt-label,
+[data-theme="day"] .shelf-prompt-copy {
+  color: #92400e !important;
+}
+
+[data-theme="sap"] .shelf-prompt-label,
+[data-theme="sap"] .shelf-prompt-copy {
+  color: #0057d2 !important;
+}
+
+/* SAP theme: Prompt Editor – dark charcoal, light gray panels (#ebebeb), SAP blue accents */
+[data-theme="sap"] .shelf-prompt-editor {
+  background: #0f172a !important;
+  border-color: rgba(0, 112, 242, 0.25) !important;
+  box-shadow: 0 0 70px rgba(0, 112, 242, 0.08), 0 0 120px rgba(0, 112, 242, 0.05) !important;
+}
+[data-theme="sap"] .shelf-prompt-editor-header {
+  border-color: rgba(0, 112, 242, 0.15) !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+}
+[data-theme="sap"] .shelf-prompt-editor-close {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(0, 112, 242, 0.2) !important;
+  color: #0a0a0a !important;
+}
+[data-theme="sap"] .shelf-prompt-editor-close:hover {
+  border-color: rgba(0, 112, 242, 0.35) !important;
+  color: #0070f2 !important;
+}
+[data-theme="sap"] .shelf-prompt-editor-label {
+  color: #38bdf8 !important;
+}
+[data-theme="sap"] .shelf-prompt-editor input[aria-label="Prompt title"] {
+  background: #ffffff !important;
+  border-color: rgba(0, 112, 242, 0.2) !important;
+  color: #0a0a0a !important;
+}
+[data-theme="sap"] .shelf-prompt-editor .shelf-prompt-body {
+  background: #ebebeb !important;
+  border-color: rgba(0, 112, 242, 0.15) !important;
+  color: #0a0a0a !important;
+  box-shadow: 0 0 0 1px rgba(0, 112, 242, 0.08) !important;
+}
+[data-theme="sap"] .shelf-prompt-editor .shelf-prompt-body::placeholder {
+  color: #64748b !important;
+}
+[data-theme="sap"] .shelf-prompt-editor .shelf-prompt-preview {
+  background: #ebebeb !important;
+  border-color: rgba(0, 112, 242, 0.12) !important;
+  color: #334155 !important;
+}
+[data-theme="sap"] .shelf-prompt-editor .shelf-prompt-preview .font-bold {
+  color: #0070f2 !important;
+}
+[data-theme="sap"] .shelf-prompt-editor-versions {
+  background: #ebebeb !important;
+  border-color: rgba(0, 112, 242, 0.15) !important;
+}
+[data-theme="sap"] .shelf-prompt-editor-versions .text-zinc-500 {
+  color: #4a5568 !important;
+}
+[data-theme="sap"] .shelf-prompt-editor-versions .text-zinc-300,
+[data-theme="sap"] .shelf-prompt-versions-toggle {
+  color: #1e293b !important;
+}
+[data-theme="sap"] .shelf-prompt-versions-toggle {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(0, 112, 242, 0.15) !important;
+}
+[data-theme="sap"] .shelf-prompt-versions-toggle:hover {
+  background: rgba(56, 189, 248, 0.1) !important;
+  color: #0070f2 !important;
+}
+[data-theme="sap"] .shelf-prompt-version-btn--selected {
+  background: rgba(56, 189, 248, 0.2) !important;
+  border-color: rgba(0, 112, 242, 0.35) !important;
+  color: #0057d2 !important;
+}
+[data-theme="sap"] .shelf-prompt-editor-versions .shelf-prompt-version-btn:not(.shelf-prompt-version-btn--selected) {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(0, 112, 242, 0.12) !important;
+  color: #1e293b !important;
+}
+[data-theme="sap"] .shelf-prompt-editor-versions .shelf-prompt-version-btn:not(.shelf-prompt-version-btn--selected):hover {
+  background: rgba(56, 189, 248, 0.08) !important;
+  border-color: rgba(0, 112, 242, 0.2) !important;
+}
+[data-theme="sap"] .shelf-prompt-editor-actions {
+  border-color: rgba(0, 112, 242, 0.1) !important;
+  background: rgba(15, 23, 42, 0.5) !important;
+}
+[data-theme="sap"] .shelf-prompt-editor-actions button.rounded-full.border:not([class*="red"]) {
+  background: rgba(30, 41, 59, 0.9) !important;
+  border-color: rgba(0, 112, 242, 0.2) !important;
+  color: #e2e8f0 !important;
+}
+[data-theme="sap"] .shelf-prompt-editor-actions button.rounded-full.border:not([class*="red"]):hover {
+  border-color: rgba(0, 112, 242, 0.35) !important;
+  color: #ffffff !important;
+}
+[data-theme="sap"] .shelf-prompt-editor-save,
+[data-theme="sap"] .shelf-prompt-editor-save:hover {
+  background: #0070f2 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 18px rgba(0, 112, 242, 0.35) !important;
+}
+
+/* Error Dashboard: day & sap theme overrides */
+[data-theme="day"] .shelf-error-dashboard,
+[data-theme="sap"] .shelf-error-dashboard {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="sap"] .shelf-error-dashboard .border-white\/10 {
+  border-color: rgba(0, 112, 242, 0.15) !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .bg-black\/20,
+[data-theme="day"] .shelf-error-dashboard .bg-black\/15,
+[data-theme="day"] .shelf-error-dashboard .bg-black\/30,
+[data-theme="day"] .shelf-error-dashboard .bg-zinc-900\/50,
+[data-theme="sap"] .shelf-error-dashboard .bg-black\/20,
+[data-theme="sap"] .shelf-error-dashboard .bg-black\/15,
+[data-theme="sap"] .shelf-error-dashboard .bg-black\/30,
+[data-theme="sap"] .shelf-error-dashboard .bg-zinc-900\/50 {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .bg-white\/\[0\.02\] {
+  background-color: rgba(245, 245, 244, 0.8) !important;
+}
+
+[data-theme="sap"] .shelf-error-dashboard .bg-white\/\[0\.02\] {
+  background-color: rgba(248, 250, 252, 0.9) !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .bg-zinc-800\/40 {
+  background-color: rgba(245, 245, 244, 0.9) !important;
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme="sap"] .shelf-error-dashboard .bg-zinc-800\/40 {
+  background-color: rgba(248, 250, 252, 0.95) !important;
+  border-color: rgba(0, 112, 242, 0.1) !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .text-zinc-100,
+[data-theme="day"] .shelf-error-dashboard .text-zinc-200,
+[data-theme="day"] .shelf-error-dashboard .text-zinc-300,
+[data-theme="sap"] .shelf-error-dashboard .text-zinc-100,
+[data-theme="sap"] .shelf-error-dashboard .text-zinc-200,
+[data-theme="sap"] .shelf-error-dashboard .text-zinc-300 {
+  color: #1c1917 !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .text-zinc-400,
+[data-theme="day"] .shelf-error-dashboard .text-zinc-500,
+[data-theme="sap"] .shelf-error-dashboard .text-zinc-400,
+[data-theme="sap"] .shelf-error-dashboard .text-zinc-500 {
+  color: #57534e !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .border-cyan-400\/40,
+[data-theme="day"] .shelf-error-dashboard .bg-cyan-500\/20,
+[data-theme="day"] .shelf-error-dashboard .text-cyan-100,
+[data-theme="day"] .shelf-error-dashboard .text-cyan-200,
+[data-theme="day"] .shelf-error-dashboard .bg-cyan-500\/15 {
+  border-color: rgba(180, 83, 9, 0.35) !important;
+  background-color: rgba(180, 83, 9, 0.12) !important;
+  color: #92400e !important;
+}
+
+[data-theme="sap"] .shelf-error-dashboard .border-cyan-400\/40,
+[data-theme="sap"] .shelf-error-dashboard .bg-cyan-500\/20,
+[data-theme="sap"] .shelf-error-dashboard .text-cyan-100,
+[data-theme="sap"] .shelf-error-dashboard .text-cyan-200,
+[data-theme="sap"] .shelf-error-dashboard .bg-cyan-500\/15 {
+  border-color: rgba(0, 112, 242, 0.35) !important;
+  background-color: rgba(0, 112, 242, 0.12) !important;
+  color: #0057d2 !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .border-cyan-400\/30,
+[data-theme="day"] .shelf-error-dashboard .hover\:border-cyan-400\/30:hover,
+[data-theme="day"] .shelf-error-dashboard .hover\:bg-cyan-500\/10:hover,
+[data-theme="day"] .shelf-error-dashboard .hover\:bg-cyan-500\/25:hover,
+[data-theme="day"] .shelf-error-dashboard .hover\:bg-cyan-500\/30:hover {
+  border-color: rgba(180, 83, 9, 0.3) !important;
+  background-color: rgba(180, 83, 9, 0.15) !important;
+}
+
+[data-theme="sap"] .shelf-error-dashboard .border-cyan-400\/30,
+[data-theme="sap"] .shelf-error-dashboard .hover\:border-cyan-400\/30:hover,
+[data-theme="sap"] .shelf-error-dashboard .hover\:bg-cyan-500\/10:hover,
+[data-theme="sap"] .shelf-error-dashboard .hover\:bg-cyan-500\/25:hover,
+[data-theme="sap"] .shelf-error-dashboard .hover\:bg-cyan-500\/30:hover {
+  border-color: rgba(0, 112, 242, 0.3) !important;
+  background-color: rgba(0, 112, 242, 0.15) !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .bg-white\/5,
+[data-theme="day"] .shelf-error-dashboard .hover\:bg-white\/5:hover,
+[data-theme="day"] .shelf-error-dashboard .hover\:bg-white\/10:hover,
+[data-theme="sap"] .shelf-error-dashboard .bg-white\/5,
+[data-theme="sap"] .shelf-error-dashboard .hover\:bg-white\/5:hover,
+[data-theme="sap"] .shelf-error-dashboard .hover\:bg-white\/10:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .bg-black\/30 {
+  background-color: #fff !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+[data-theme="sap"] .shelf-error-dashboard .bg-black\/30 {
+  background-color: #fff !important;
+  border: 1px solid rgba(0, 112, 242, 0.12) !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .text-cyan-400\/90 {
+  color: #92400e !important;
+}
+
+[data-theme="sap"] .shelf-error-dashboard .text-cyan-400\/90 {
+  color: #0057d2 !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .placeholder\:text-zinc-500::placeholder {
+  color: #a8a29e !important;
+}
+
+[data-theme="sap"] .shelf-error-dashboard .placeholder\:text-zinc-500::placeholder {
+  color: #94a3b8 !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .focus\:border-cyan-400\/40:focus,
+[data-theme="day"] .shelf-error-dashboard .focus\:ring-cyan-400\/50:focus,
+[data-theme="day"] .shelf-error-dashboard .focus\:ring-cyan-400\/20:focus {
+  border-color: rgba(180, 83, 9, 0.5) !important;
+  --tw-ring-color: rgba(180, 83, 9, 0.3) !important;
+}
+
+[data-theme="sap"] .shelf-error-dashboard .focus\:border-cyan-400\/40:focus,
+[data-theme="sap"] .shelf-error-dashboard .focus\:ring-cyan-400\/50:focus,
+[data-theme="sap"] .shelf-error-dashboard .focus\:ring-cyan-400\/20:focus {
+  border-color: rgba(0, 112, 242, 0.5) !important;
+  --tw-ring-color: rgba(0, 112, 242, 0.3) !important;
+}
+
+[data-theme="day"] .shelf-error-dashboard .bg-cyan-500\/80,
+[data-theme="day"] .shelf-error-dashboard .bg-cyan-500\/30 {
+  background-color: rgba(180, 83, 9, 0.6) !important;
+}
+
+[data-theme="sap"] .shelf-error-dashboard .bg-cyan-500\/80,
+[data-theme="sap"] .shelf-error-dashboard .bg-cyan-500\/30 {
+  background-color: rgba(0, 112, 242, 0.6) !important;
 }
 
 body {
@@ -11,6 +652,45 @@ body {
   min-height: 100vh;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar styling – theme-aware */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--shelf-scroll-thumb) var(--shelf-scroll-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--shelf-scroll-track);
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--shelf-scroll-thumb);
+  border-radius: 5px;
+  border: 2px solid var(--shelf-scroll-track);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(82 82 91);
+}
+
+[data-theme="day"] *::-webkit-scrollbar-thumb:hover,
+[data-theme="sap"] *::-webkit-scrollbar-thumb:hover {
+  background: rgb(113 113 122);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: rgb(113 113 122);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--shelf-scroll-track);
 }
 
 #root {
@@ -24,12 +704,335 @@ body {
 .shelf-grid .grid-stack-item .grid-stack-item-content {
   border-radius: 0.75rem;
   overflow: hidden;
-  left: 4px;
-  right: 4px;
-  top: 4px;
-  bottom: 4px;
+  inset: 0;
+  margin-right: 5px;
 }
+
 .shelf-grid .grid-stack-item.ui-draggable-dragging .grid-stack-item-content,
 .shelf-grid .grid-stack-item.ui-resizable-resizing .grid-stack-item-content {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.results-glow {
+  box-shadow:
+    0 0 0 1px rgba(16, 185, 129, 0.12),
+    0 0 32px rgba(34, 197, 94, 0.09),
+    0 0 72px rgba(59, 130, 246, 0.08),
+    0 0 112px rgba(236, 72, 153, 0.08);
+}
+
+@keyframes prompt-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* View slide transition (swipe between shelf / dashboard / flow) */
+.shelf-view-slide.shelf-view-slide--from-left {
+  animation: shelf-view-slide-in-left 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.shelf-view-slide.shelf-view-slide--from-right {
+  animation: shelf-view-slide-in-right 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes shelf-view-slide-in-left {
+  from {
+    opacity: 0.6;
+    transform: translateX(48px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes shelf-view-slide-in-right {
+  from {
+    opacity: 0.6;
+    transform: translateX(-48px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Visual Flow nodes: rounded shape with visible stroke */
+.shelf-flow-node {
+  border: 1.5px solid rgba(52, 211, 153, 0.4);
+  border-radius: 1rem;
+}
+
+/* Ready / no status: faint blue glow */
+.shelf-flow-node--ready {
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.22), 0 0 28px rgba(59, 130, 246, 0.1);
+}
+
+/* Blocked: as opaque as abeyed + italic + dusty overlay + BLOCKED label */
+.shelf-flow-node--blocked {
+  position: relative;
+  font-style: italic;
+  opacity: 0.58;
+  filter: saturate(0.7);
+  box-shadow: none;
+  border-color: rgba(52, 211, 153, 0.2);
+  overflow: hidden;
+}
+/* Dusty film overlay: noise texture + warm grey tint */
+.shelf-flow-node--blocked::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' fill='%23fff' fill-opacity='0.12'/%3E%3C/svg%3E"),
+    linear-gradient(145deg, rgba(180, 170, 155, 0.22) 0%, transparent 45%, rgba(130, 120, 110, 0.15) 100%);
+  mix-blend-mode: overlay;
+}
+[data-theme="day"] .shelf-flow-node--blocked::before,
+[data-theme="sap"] .shelf-flow-node--blocked::before {
+  mix-blend-mode: multiply;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' fill='%23000' fill-opacity='0.08'/%3E%3C/svg%3E"),
+    linear-gradient(145deg, rgba(120, 110, 100, 0.18) 0%, transparent 45%, rgba(100, 90, 80, 0.12) 100%);
+}
+
+.shelf-flow-node--blocked .shelf-flow-node-note,
+.shelf-flow-node--blocked .font-semibold {
+  color: rgb(161 161 170) !important; /* zinc-400, same as abeyed */
+}
+
+.shelf-flow-node--blocked::after {
+  content: "BLOCKED";
+  position: absolute;
+  bottom: 0.5rem;
+  right: 0.75rem;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.4);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+[data-theme="day"] .shelf-flow-node--blocked::after,
+[data-theme="sap"] .shelf-flow-node--blocked::after {
+  color: rgba(0, 0, 0, 0.3);
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3);
+}
+
+/* Abeyed: worn down, subdued, not visually grabbing */
+.shelf-flow-node--abeyed {
+  opacity: 0.58;
+  filter: saturate(0.7);
+  box-shadow: none;
+  border-color: rgba(52, 211, 153, 0.2);
+}
+.shelf-flow-node--abeyed .shelf-flow-node-note,
+.shelf-flow-node--abeyed .font-medium {
+  color: rgb(161 161 170) !important; /* zinc-400 */
+}
+[data-theme="day"] .shelf-flow-node {
+  border-color: rgba(180, 83, 9, 0.4);
+}
+[data-theme="sap"] .shelf-flow-node {
+  border-color: rgba(0, 112, 242, 0.4);
+}
+.shelf-flow-node-note {
+  color: rgb(212 212 216); /* zinc-300, readable on dark card */
+}
+[data-theme="day"] .shelf-flow-node-note,
+[data-theme="sap"] .shelf-flow-node-note {
+  color: var(--shelf-muted);
+}
+
+/* Visual Flow canvas – embedded look, matches page background */
+.visual-flow-canvas {
+  background: var(--shelf-card);
+}
+.visual-flow-react-flow {
+  background: transparent !important;
+}
+.visual-flow-react-flow .react-flow__viewport {
+  background: transparent;
+}
+.visual-flow-react-flow .react-flow__renderer {
+  background: transparent;
+}
+
+/* Visual Flow edges: nice glowing dashed line, no animation */
+.visual-flow-react-flow .react-flow__edge {
+  filter: drop-shadow(0 0 3px rgb(0 112 242 / 0.6))
+    drop-shadow(0 0 8px rgb(0 112 242 / 0.35));
+}
+.visual-flow-react-flow .react-flow__edge path {
+  stroke: #0070f2;
+  stroke-width: 3px;
+  stroke-linecap: round;
+  stroke-dasharray: 12 12;
+}
+
+/* Edit task card wrapper: smooth expand/collapse so canvas moves gradually */
+.shelf-flow-edit-card-wrapper {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.shelf-flow-edit-card-wrapper.shelf-flow-edit-card-wrapper--open {
+  max-height: 420px;
+}
+.shelf-flow-edit-card-wrapper.shelf-flow-edit-card-wrapper--closing {
+  max-height: 0;
+  transition-duration: 0.4s;
+  transition-timing-function: cubic-bezier(0.55, 0, 0.55, 0.2);
+}
+
+/* Edit task card: smooth, gradual enter and exit */
+@keyframes shelf-edit-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes shelf-edit-slide-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+}
+.shelf-flow-edit-card {
+  animation: shelf-edit-slide-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.shelf-flow-edit-card.shelf-flow-edit-card--exit {
+  animation: shelf-edit-slide-out 0.4s cubic-bezier(0.55, 0, 0.55, 0.2) forwards;
+}
+
+/* LLM Console Prompt Library — settings color scheme (light, blue/green) */
+.shelf-llm-pillar {
+  background: #ffffff;
+  border-left: 1px solid #c7d2fe;
+  box-shadow: -4px 0 12px rgb(0 0 0 / 0.04);
+}
+.shelf-llm-pillar-header {
+  border-color: #e0e7ff;
+}
+.shelf-llm-pillar-title {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #1a73e8;
+}
+.shelf-llm-pillar-subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+.shelf-llm-pillar-empty {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.shelf-llm-pillar-card {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #e0e7ff;
+  background: #ffffff;
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+.shelf-llm-pillar-card:hover {
+  border-color: #c7d2fe;
+  background: #f8fafc;
+}
+.shelf-llm-pillar-card--copied {
+  background: #d1fae5;
+  border-color: #a7f3d0;
+}
+.shelf-llm-pillar-card-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #1a73e8;
+}
+.shelf-llm-pillar-card-action {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #86efac;
+}
+.shelf-llm-pillar-card--copied .shelf-llm-pillar-card-action {
+  color: #059669;
+}
+.shelf-llm-pillar-card-body {
+  font-size: 12px;
+  color: #64748b;
+  font-family: ui-monospace, monospace;
+}
+
+/* Day/SAP: flow canvas matches card */
+[data-theme="day"] .visual-flow-canvas,
+[data-theme="sap"] .visual-flow-canvas {
+  background: var(--shelf-card);
+}
+
+/* Visual Flow tag: default (dark theme) – light text on tinted bg */
+.visual-flow-tag--violet { color: rgb(196 181 253); }
+.visual-flow-tag--fuchsia { color: rgb(233 213 255); }
+.visual-flow-tag--purple { color: rgb(216 180 254); }
+.visual-flow-tag--indigo { color: rgb(199 210 254); }
+.visual-flow-tag--navy { color: rgb(186 230 253); }        /* sky-200 */
+.visual-flow-tag--royal-blue { color: rgb(191 219 254); }  /* blue-200 */
+.visual-flow-tag--royal-green { color: rgb(167 243 208); } /* emerald-200 */
+
+/* SAP/day: tag text very dark, same hue as background */
+[data-theme="sap"] .visual-flow-tag--violet,
+[data-theme="day"] .visual-flow-tag--violet {
+  color: rgb(46 16 101) !important;   /* violet-950 */
+}
+[data-theme="sap"] .visual-flow-tag--fuchsia,
+[data-theme="day"] .visual-flow-tag--fuchsia {
+  color: rgb(74 4 78) !important;     /* fuchsia-950 */
+}
+[data-theme="sap"] .visual-flow-tag--purple,
+[data-theme="day"] .visual-flow-tag--purple {
+  color: rgb(59 7 100) !important;   /* purple-950 */
+}
+[data-theme="sap"] .visual-flow-tag--indigo,
+[data-theme="day"] .visual-flow-tag--indigo {
+  color: rgb(30 27 75) !important;   /* indigo-950 */
+}
+[data-theme="sap"] .visual-flow-tag--navy,
+[data-theme="day"] .visual-flow-tag--navy {
+  color: rgb(30 58 138) !important;   /* blue-900, navy */
+}
+[data-theme="sap"] .visual-flow-tag--royal-blue,
+[data-theme="day"] .visual-flow-tag--royal-blue {
+  color: rgb(30 64 175) !important;   /* blue-800, royal */
+}
+[data-theme="sap"] .visual-flow-tag--royal-green,
+[data-theme="day"] .visual-flow-tag--royal-green {
+  color: rgb(6 78 59) !important;     /* emerald-900 */
 }

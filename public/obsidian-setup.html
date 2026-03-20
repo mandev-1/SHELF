@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ShELF · Obsidian connection setup</title>
+  <style>
+    :root { --bg: #18181b; --fg: #e4e4e7; --muted: #71717a; --accent: #34d399; --card: rgba(255,255,255,0.05); --border: rgba(255,255,255,0.1); }
+    * { box-sizing: border-box; }
+    body { font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; margin: 0; padding: 2rem; max-width: 52rem; margin-left: auto; margin-right: auto; }
+    h1 { font-size: 1.5rem; color: var(--accent); margin-top: 0; }
+    h2 { font-size: 1.1rem; margin-top: 1.5rem; color: var(--fg); }
+    p { margin: 0.5rem 0; color: var(--muted); }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ol, ul { margin: 0.5rem 0; padding-left: 1.5rem; color: var(--muted); }
+    li { margin: 0.25rem 0; }
+    code { background: var(--card); padding: 0.15em 0.4em; border-radius: 0.25rem; font-size: 0.9em; color: var(--accent); }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1rem 1.25rem; margin: 1rem 0; }
+    .back { display: inline-block; margin-bottom: 1rem; font-size: 0.875rem; }
+  </style>
+</head>
+<body>
+  <a href="index.html" class="back">← Back to ShELF</a>
+  <h1>Obsidian connection setup</h1>
+  <p>ShELF can send your Pillar todo log (task notes, completions, comments) to a note in Obsidian. This guide walks you through the setup.</p>
+
+  <h2>1. Install the Local REST API plugin in Obsidian</h2>
+  <ol>
+    <li>Open <strong>Obsidian</strong> and go to <strong>Settings → Community plugins</strong>.</li>
+    <li>If needed, turn <strong>Restricted mode</strong> off and click <strong>Browse</strong>.</li>
+    <li>Search for <strong>Local REST API</strong> (by coddingtonbear) and install it.</li>
+    <li>Enable the plugin, then open <strong>Settings → Local REST API</strong>.</li>
+  </ol>
+
+  <h2>2. Enable and configure the API</h2>
+  <div class="card">
+    <ul>
+      <li>Turn <strong>Enable Local REST API</strong> on.</li>
+      <li>Note the <strong>Port</strong> (default <code>27124</code>) and whether you use <strong>HTTPS</strong> or HTTP.</li>
+      <li>Set or copy the <strong>API Key</strong> — you’ll paste this into ShELF.</li>
+    </ul>
+  </div>
+  <p>If you use HTTPS, you may need to trust the plugin’s certificate in your browser (or use HTTP for local use).</p>
+
+  <h2>3. Create a note (or folder) for logs</h2>
+  <p>Decide where ShELF should append log lines:</p>
+  <ul>
+    <li><strong>Single note</strong> — e.g. <code>ShELF/todo-log.md</code>. All logs go to this file.</li>
+    <li><strong>Daily notes</strong> — enable “Use daily note” in ShELF and set a folder path (e.g. <code>Daily</code> or <code>ShELF/daily</code>). ShELF will append to <code>YYYY-MM-DD.md</code> inside that folder.</li>
+  </ul>
+  <p>Create the note or folder in your vault if it doesn’t exist; the API can create the file on first write.</p>
+
+  <h2>4. Fill in ShELF settings</h2>
+  <p>In ShELF, open <strong>Settings</strong> (gear icon) and expand <strong>Obsidian log</strong>. Then:</p>
+  <ol>
+    <li><strong>Enable todo log to Obsidian</strong> — turn this on.</li>
+    <li><strong>Base URL</strong> — <code>http://127.0.0.1:27124</code> (or <code>https://127.0.0.1:27124</code> if you use HTTPS and the port you set in Obsidian).</li>
+    <li><strong>API Key</strong> — paste the key from Obsidian’s Local REST API settings.</li>
+    <li><strong>Note path</strong> — e.g. <code>ShELF/todo-log.md</code> for a single note, or the folder path (e.g. <code>Daily</code>) if you use daily notes.</li>
+  </ol>
+  <p>Click <strong>Test connection</strong> to send a test line to Obsidian. If it works, you’re done.</p>
+
+  <h2>5. Optional: open the log from ShELF</h2>
+  <p>Use <strong>Open task log in Obsidian</strong> in settings to open the current log note in Obsidian. In Obsidian you can then use “Reveal in folder” to open the directory that contains the markdown files.</p>
+
+  <p style="margin-top: 2rem; font-size: 0.875rem;">Plugin docs: <a href="https://github.com/coddingtonbear/obsidian-local-rest-api" target="_blank" rel="noopener">Local REST API for Obsidian</a></p>
+</body>
+</html>

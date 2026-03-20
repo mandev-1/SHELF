@@ -1,18 +1,20 @@
 {
   "name": "shelf-bookmarks",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.7",
   "type": "module",
   "scripts": {
-    "dev": "vite build --watch",
+    "dev": "vite",
+    "build:watch": "vite build --watch",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "release": "node scripts/release.js",
-    "updaterelease": "node scripts/release.js"
+    "release": "node scripts/release.js release",
+    "updaterelease": "node scripts/release.js update"
   },
   "dependencies": {
     "@heroui/react": "rc",
     "@heroui/styles": "rc",
+    "@xyflow/react": "^12.10.1",
     "gridstack": "^12.4.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
