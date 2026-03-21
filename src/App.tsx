@@ -78,6 +78,7 @@ function App() {
   const [pendingEditPromptId, setPendingEditPromptId] = useState<string | null>(null);
   const [celebration, setCelebration] = useState<string | null>(null);
   const celebrationTimerRef = useRef<number | null>(null);
+  const [addTaskToast, setAddTaskToast] = useState(false);
   const [viewSlideDir, setViewSlideDir] = useState<"left" | "right" | null>(null);
 
   const showTaskCelebration = useCallback(() => {
@@ -389,6 +390,34 @@ function App() {
                   setLastTool("llm-console");
                   openLLMConsoleOverlay(llmConsoleUrl);
                 }}
+                onAddTask={(err) => {
+                  const note = [
+                    err.keyProblem,
+                    err.affectedFiles.length
+                      ? `Affected: ${err.affectedFiles.map((af) => (af.line && af.line !== "n/A" ? `${af.file}:${af.line}` : af.file)).join(", ")}`
+                      : "",
+                    err.affectedIds.length ? `IDs: ${err.affectedIds.join(", ")}` : "",
+                  ]
+                    .filter(Boolean)
+                    .join("\n\n");
+                  const d = new Date();
+                  const dd = String(d.getDate()).padStart(2, "0");
+                  const mm = String(d.getMonth() + 1).padStart(2, "0");
+                  setPillarTodos((prev) => [
+                    ...prev,
+                    {
+                      id: crypto.randomUUID(),
+                      text: err.error,
+                      done: false,
+                      subtitle: `Added ${dd}-${mm}`,
+                      note: note || undefined,
+                      tag: err.importance,
+                      blockStatus: "ready" as const,
+                    },
+                  ]);
+                  setAddTaskToast(true);
+                  window.setTimeout(() => setAddTaskToast(false), 1800);
+                }}
               />
             </div>
           ) : dashboardView === "visual-flow" ? (
@@ -494,6 +523,17 @@ function App() {
         >
           <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/20 px-4 py-3 text-sm font-medium text-emerald-100 shadow-[0_0_24px_rgba(16,185,129,0.2)]">
             {celebration}
+          </div>
+        </div>
+      )}
+      {addTaskToast && (
+        <div
+          className="pointer-events-none fixed right-6 bottom-6 z-[300] animate-[toast-enter_180ms_ease-out]"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/15 px-4 py-3 text-sm font-medium text-emerald-100 shadow-[0_0_20px_rgba(16,185,129,0.15)]">
+            This task was added to your To-Do list.
           </div>
         </div>
       )}

@@ -28,14 +28,14 @@
 }
 
 [data-theme="sap"] {
-  --shelf-bg: linear-gradient(to bottom right, #f0f4f8, #e8eef5, #dee8f0);
+  --shelf-bg: linear-gradient(to bottom right, #e8eef5, #dee6f0, #d4dce8);
   --shelf-fg: #0a0a0a;
   --shelf-muted: #4a5568;
   --shelf-accent: #0070f2;
   --shelf-accent-hover: #1b90ff;
   --shelf-border: rgba(0, 112, 242, 0.15);
-  --shelf-card: rgba(255, 255, 255, 0.9);
-  --shelf-scroll-track: rgb(226 232 240);
+  --shelf-card: rgba(232, 238, 247, 0.95);
+  --shelf-scroll-track: rgb(212 220 232);
   --shelf-scroll-thumb: rgb(148 163 184);
 }
 
@@ -79,13 +79,16 @@
 [data-theme="day"] .bg-black\/30,
 [data-theme="day"] .bg-black\/45,
 [data-theme="day"] .bg-black\/50,
-[data-theme="day"] .bg-black\/92,
+[data-theme="day"] .bg-black\/92 {
+  background-color: rgba(255, 255, 255, 0.92);
+}
+
 [data-theme="sap"] .bg-black\/20,
 [data-theme="sap"] .bg-black\/30,
 [data-theme="sap"] .bg-black\/45,
 [data-theme="sap"] .bg-black\/50,
 [data-theme="sap"] .bg-black\/92 {
-  background-color: rgba(255, 255, 255, 0.92);
+  background-color: rgba(232, 238, 247, 0.95);
 }
 
 /* Day accent: replace emerald/cyan with warm amber */
@@ -491,10 +494,14 @@
 }
 
 /* Error Dashboard: day & sap theme overrides */
-[data-theme="day"] .shelf-error-dashboard,
-[data-theme="sap"] .shelf-error-dashboard {
+[data-theme="day"] .shelf-error-dashboard {
   background: rgba(255, 255, 255, 0.95) !important;
   border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="sap"] .shelf-error-dashboard {
+  background: rgba(232, 238, 247, 0.98) !important;
+  border-color: rgba(0, 112, 242, 0.12) !important;
 }
 
 [data-theme="day"] .shelf-error-dashboard .border-white\/10 {
@@ -508,12 +515,15 @@
 [data-theme="day"] .shelf-error-dashboard .bg-black\/20,
 [data-theme="day"] .shelf-error-dashboard .bg-black\/15,
 [data-theme="day"] .shelf-error-dashboard .bg-black\/30,
-[data-theme="day"] .shelf-error-dashboard .bg-zinc-900\/50,
+[data-theme="day"] .shelf-error-dashboard .bg-zinc-900\/50 {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+
 [data-theme="sap"] .shelf-error-dashboard .bg-black\/20,
 [data-theme="sap"] .shelf-error-dashboard .bg-black\/15,
 [data-theme="sap"] .shelf-error-dashboard .bg-black\/30,
 [data-theme="sap"] .shelf-error-dashboard .bg-zinc-900\/50 {
-  background-color: rgba(255, 255, 255, 0.9) !important;
+  background-color: rgba(232, 238, 247, 0.95) !important;
 }
 
 [data-theme="day"] .shelf-error-dashboard .bg-white\/\[0\.02\] {
@@ -521,7 +531,7 @@
 }
 
 [data-theme="sap"] .shelf-error-dashboard .bg-white\/\[0\.02\] {
-  background-color: rgba(248, 250, 252, 0.9) !important;
+  background-color: rgba(220, 230, 242, 0.9) !important;
 }
 
 [data-theme="day"] .shelf-error-dashboard .bg-zinc-800\/40 {
@@ -530,8 +540,8 @@
 }
 
 [data-theme="sap"] .shelf-error-dashboard .bg-zinc-800\/40 {
-  background-color: rgba(248, 250, 252, 0.95) !important;
-  border-color: rgba(0, 112, 242, 0.1) !important;
+  background-color: rgba(232, 238, 247, 0.98) !important;
+  border-color: rgba(0, 112, 242, 0.12) !important;
 }
 
 [data-theme="day"] .shelf-error-dashboard .text-zinc-100,
@@ -605,6 +615,79 @@
 [data-theme="sap"] .shelf-error-dashboard .bg-black\/30 {
   background-color: #fff !important;
   border: 1px solid rgba(0, 112, 242, 0.12) !important;
+}
+
+/* Add-as-task confirmation modal: SAP theme */
+[data-theme="sap"] .shelf-add-task-confirm-backdrop {
+  background: rgba(0, 112, 242, 0.08) !important;
+  backdrop-filter: blur(8px);
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog {
+  background: linear-gradient(to bottom, #ffffff, #f5f8fc) !important;
+  border: 1px solid rgba(0, 112, 242, 0.2) !important;
+  box-shadow: 0 8px 32px rgba(0, 112, 242, 0.12), 0 2px 8px rgba(0, 112, 242, 0.08) !important;
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog .shelf-add-task-confirm-title {
+  color: #0a0a0a !important;
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog .shelf-add-task-confirm-body {
+  color: #4a5568 !important;
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog .shelf-add-task-confirm-cancel {
+  background: transparent !important;
+  border-color: rgba(0, 112, 242, 0.25) !important;
+  color: #0057d2 !important;
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog .shelf-add-task-confirm-cancel:hover {
+  background: rgba(0, 112, 242, 0.08) !important;
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog .shelf-add-task-confirm-add {
+  background: #0070f2 !important;
+  border-color: #0070f2 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog .shelf-add-task-confirm-add:hover {
+  background: #1b90ff !important;
+  border-color: #1b90ff !important;
+}
+
+/* Importance tags: readable contrast on day & sap (light) themes */
+[data-theme="day"] .shelf-error-dashboard .shelf-error-importance-tag--very-high,
+[data-theme="sap"] .shelf-error-dashboard .shelf-error-importance-tag--very-high {
+  background-color: #fecdd3 !important;
+  color: #9f1239 !important;
+  border-color: #e11d48 !important;
+}
+[data-theme="day"] .shelf-error-dashboard .shelf-error-importance-tag--high,
+[data-theme="sap"] .shelf-error-dashboard .shelf-error-importance-tag--high {
+  background-color: #ffedd5 !important;
+  color: #9a3412 !important;
+  border-color: #ea580c !important;
+}
+[data-theme="day"] .shelf-error-dashboard .shelf-error-importance-tag--moderate,
+[data-theme="sap"] .shelf-error-dashboard .shelf-error-importance-tag--moderate {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+  border-color: #d97706 !important;
+}
+[data-theme="day"] .shelf-error-dashboard .shelf-error-importance-tag--low,
+[data-theme="sap"] .shelf-error-dashboard .shelf-error-importance-tag--low {
+  background-color: #d1fae5 !important;
+  color: #065f46 !important;
+  border-color: #10b981 !important;
+}
+[data-theme="day"] .shelf-error-dashboard .shelf-error-importance-tag--unknown,
+[data-theme="sap"] .shelf-error-dashboard .shelf-error-importance-tag--unknown {
+  background-color: #e4e4e7 !important;
+  color: #3f3f46 !important;
+  border-color: #71717a !important;
 }
 
 [data-theme="day"] .shelf-error-dashboard .text-cyan-400\/90 {

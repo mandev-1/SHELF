@@ -97,11 +97,13 @@ const BLOCK_STATUS_OPTIONS: { value: ShelfTodoBlockStatus; label: string }[] = [
 
 function NodeEditCard({
   todo,
+  showTodoDates = false,
   onSave,
   onClose,
   onClosingStart,
 }: {
   todo: ShelfPillarTodoItem;
+  showTodoDates?: boolean;
   onSave: (updates: Partial<ShelfPillarTodoItem>) => void;
   onClose: () => void;
   onClosingStart?: () => void;
@@ -222,15 +224,17 @@ function NodeEditCard({
           className="shelf-note-popover-textarea min-h-[60px] w-full resize-y rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
           rows={2}
         />
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-medium text-zinc-500">Date</label>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 focus:outline-none font-mono"
-          />
-        </div>
+        {showTodoDates && (
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-medium text-zinc-500">Date</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 focus:outline-none font-mono"
+            />
+          </div>
+        )}
         <div className="flex flex-col gap-1">
           <label className="text-[10px] font-medium text-zinc-500">Status</label>
           <select
@@ -536,7 +540,9 @@ function VisualFlowPanelInner({
           lines.push(`Title: ${todo.text || "(empty)"} → ${updates.text || "(empty)"}`);
         }
         if (updates.note !== undefined && updates.note !== (todo.note ?? "")) {
-          lines.push(`Description: ${(todo.note ?? "") ? "updated" : "added"}`);
+          const oldNote = todo.note ?? "";
+          const newNote = updates.note ?? "";
+          lines.push(`Description: ${oldNote || "(empty)"} → ${newNote || "(empty)"}`);
         }
         if (updates.subtitle !== undefined && updates.subtitle !== (todo.subtitle ?? "")) {
           lines.push(`Subtitle: ${todo.subtitle || "(empty)"} → ${updates.subtitle || "(empty)"}`);
@@ -817,6 +823,7 @@ function VisualFlowPanelInner({
               <EditCardWrapper key={editNodeId}>
                 <NodeEditCard
                   todo={t}
+                  showTodoDates={showTodoDates}
                   onSave={(updates) => {
                     handleEditTodoWithLog(editNodeId, updates);
                     setEditNodeId(null);

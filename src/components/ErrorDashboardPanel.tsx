@@ -3,11 +3,60 @@ import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type Clipb
 const DASHBOARDS_KEY = "shelf-error-dashboards";
 const CURRENT_DASHBOARD_KEY = "shelf-error-dashboard-current";
 
+const ADD_TASK_TOOLTIPS = [
+  "Add to backlog",
+  "Create remediation task",
+  "Log for triage",
+  "Queue for resolution",
+  "Add to action items",
+  "Create follow-up task 🚧",
+  "Assign to sprint",
+  "Escalate to backlog 💪",
+  "Raise as technical debt",
+  "Add to incident log",
+  "Create work item",
+  "Flag for resolution",
+  "Add to backlog 🔲",
+  "Schedule for remediation",
+  "Log as action required",
+  "Create defect follow-up",
+  "Queue for sprint planning",
+  "Add to technical backlog",
+  "Raise as blocker 💪",
+  "Create resolution task",
+  "Add to incident backlog",
+  "Flag for engineering review",
+  "Schedule follow-up 🚧",
+  "Add to improvement log",
+  "Create remediation work item",
+  "Queue for triage review",
+  "Log for sprint assignment",
+  "Add to technical debt 🔲",
+  "Raise for prioritization",
+  "Create incident follow-up",
+  "Add to resolution queue",
+  "Flag for sprint backlog",
+  "Schedule remediation 💪",
+  "Add to action backlog",
+  "Create defect resolution task",
+  "Queue for engineering",
+  "Log as sprint candidate",
+  "Add to backlog for review 🚧",
+  "Raise for sprint planning",
+  "Create follow-up work item",
+  "Add to remediation queue 🔲",
+];
+
 interface SavedDashboard {
   id: string;
   name: string;
   rawJson: string;
   sourceLabel?: string;
+}
+
+interface RawAffectedFile {
+  Affected_File?: unknown;
+  Line?: unknown;
 }
 
 interface RawDashboardError {
@@ -17,6 +66,12 @@ interface RawDashboardError {
   Importance?: unknown;
   Count?: unknown;
   Affected_IDs?: unknown;
+  Affected_Files?: unknown;
+}
+
+interface AffectedFile {
+  file: string;
+  line: string;
 }
 
 interface DashboardError {
@@ -26,6 +81,7 @@ interface DashboardError {
   importance: string;
   count: number;
   affectedIds: string[];
+  affectedFiles: AffectedFile[];
 }
 
 interface DashboardPayload {
@@ -65,6 +121,17 @@ function readStringArray(input: unknown): string[] {
   return input.filter((item): item is string => typeof item === "string");
 }
 
+function readAffectedFiles(input: unknown): AffectedFile[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((item): item is RawAffectedFile => item !== null && typeof item === "object")
+    .map((item) => ({
+      file: readString(item.Affected_File, ""),
+      line: readString(item.Line, "n/A"),
+    }))
+    .filter((af) => af.file || af.line);
+}
+
 function normalizePayload(input: unknown): DashboardPayload {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("JSON root must be an object.");
@@ -88,6 +155,7 @@ function normalizePayload(input: unknown): DashboardPayload {
         importance: normalizeImportance(readString(item.Importance, "Unknown")),
         count,
         affectedIds: readStringArray(item.Affected_IDs),
+        affectedFiles: readAffectedFiles(item.Affected_Files),
       } satisfies DashboardError;
     });
 
@@ -99,6 +167,10 @@ function normalizePayload(input: unknown): DashboardPayload {
     foundDistinct,
     errors,
   };
+}
+
+function importanceSlug(importance: string): string {
+  return importance.toLowerCase().replace(/\s+/g, "-") || "unknown";
 }
 
 function importanceColor(importance: string): string {
@@ -158,7 +230,8 @@ function migrateLegacyStorage(): { dashboards: SavedDashboard[]; currentId: stri
 export function ErrorDashboardPanel({
   fullPage = false,
   onOpenLLMConsole,
-}: { fullPage?: boolean; onOpenLLMConsole?: () => void }) {
+  onAddTask,
+}: { fullPage?: boolean; onOpenLLMConsole?: () => void; onAddTask?: (error: DashboardError) => void }) {
   const [dashboards, setDashboards] = useState<SavedDashboard[]>(() => []);
   const [currentId, setCurrentId] = useState<string | null>(() => null);
   const [rawJson, setRawJson] = useState("");
@@ -166,9 +239,11 @@ export function ErrorDashboardPanel({
   const [errorText, setErrorText] = useState<string | null>(null);
   const [sourceLabel, setSourceLabel] = useState<string | null>(null);
   const [showInputPanel, setShowInputPanel] = useState(() => true);
+  const [showSummaryBar, setShowSummaryBar] = useState(() => true);
   const [showCoveragePanel, setShowCoveragePanel] = useState(() => false);
   const [showImportancePanel, setShowImportancePanel] = useState(() => false);
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [confirmAddError, setConfirmAddError] = useState<DashboardError | null>(null);
   const [initDone, setInitDone] = useState(false);
 
   const persistDashboards = useCallback((list: SavedDashboard[], selectedId: string | null) => {
@@ -385,12 +460,14 @@ export function ErrorDashboardPanel({
 
   const collapseEverything = () => {
     setShowInputPanel(false);
+    setShowSummaryBar(false);
     setShowCoveragePanel(false);
     setShowImportancePanel(false);
   };
 
   const expandEverything = () => {
     setShowInputPanel(true);
+    setShowSummaryBar(true);
     setShowCoveragePanel(true);
     setShowImportancePanel(true);
   };
@@ -399,12 +476,16 @@ export function ErrorDashboardPanel({
     if (!fullPage) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      if (confirmAddError) {
+        setConfirmAddError(null);
+        return;
+      }
       if (editingNameId) return;
       collapseEverything();
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [fullPage, editingNameId]);
+  }, [fullPage, editingNameId, confirmAddError]);
 
   const sortedErrors = useMemo(
     () => (payload ? [...payload.errors].sort((a, b) => b.count - a.count) : []),
@@ -579,7 +660,8 @@ export function ErrorDashboardPanel({
 
       {payload ? (
         <>
-          {/* Compact summary bar — single row, doesn't compete with list */}
+          {/* Compact summary bar — single row, hide with ESC in fullPage */}
+          {(!fullPage || showSummaryBar) ? (
           <div className="shrink-0 border-b border-white/10 bg-black/30 px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className={summaryGridClass}>
@@ -653,6 +735,7 @@ export function ErrorDashboardPanel({
               </div>
             ) : null}
           </div>
+          ) : null}
 
           {/* Primary content: error list */}
           <div className={fullPage ? "flex-1 min-h-0 overflow-auto" : "max-h-80 overflow-auto"}>
@@ -661,12 +744,13 @@ export function ErrorDashboardPanel({
                 Errors · {sortedErrors.length} distinct
               </h2>
               <ul className="space-y-4">
-                {sortedErrors.map((item) => {
+                {sortedErrors.map((item, idx) => {
                   const ratio = payload.totalCount ? Math.round((item.count / payload.totalCount) * 100) : 0;
+                  const addTooltip = ADD_TASK_TOOLTIPS[idx % ADD_TASK_TOOLTIPS.length];
                   return (
                     <li
                       key={`${item.error}-${item.count}`}
-                      className="rounded-xl border border-white/10 bg-zinc-800/40 p-4 shadow-sm"
+                      className="relative rounded-xl border border-white/10 bg-zinc-800/40 p-4 pr-12 shadow-sm"
                     >
                       {/* Level 1: Error title */}
                       <div className="mb-2 flex items-start justify-between gap-3">
@@ -683,7 +767,9 @@ export function ErrorDashboardPanel({
                       </p>
                       {/* Level 3: Metadata row */}
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
-                        <span className={`rounded px-1.5 py-0.5 font-medium ${importanceColor(item.importance)}`}>
+                        <span
+                          className={`shelf-error-importance-tag shelf-error-importance-tag--${importanceSlug(item.importance)} rounded px-1.5 py-0.5 font-medium ${importanceColor(item.importance)}`}
+                        >
                           {item.importance}
                         </span>
                         <span className="text-zinc-500">{ratio}% of total</span>
@@ -703,6 +789,32 @@ export function ErrorDashboardPanel({
                           IDs: {item.affectedIds.join(", ")}
                         </div>
                       ) : null}
+                      {item.affectedFiles.length > 0 ? (
+                        <div className="mt-2 space-y-1">
+                          <div className="text-[10px] font-medium text-zinc-500">Affected files</div>
+                          <ul className="space-y-1 font-mono text-[10px]">
+                            {item.affectedFiles.map((af, idx) => (
+                              <li key={idx} className="flex items-baseline gap-2 text-zinc-400">
+                                <span className="min-w-0 truncate" title={af.file}>{af.file}</span>
+                                {af.line && af.line !== "n/A" ? (
+                                  <span className="shrink-0 text-zinc-600">:{af.line}</span>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {onAddTask ? (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmAddError(item)}
+                          className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 hover:text-emerald-100"
+                          title={addTooltip}
+                          aria-label={addTooltip}
+                        >
+                          +
+                        </button>
+                      ) : null}
                     </li>
                   );
                 })}
@@ -717,6 +829,53 @@ export function ErrorDashboardPanel({
       )}
         </>
       )}
+
+      {/* Add-as-task confirmation dialog */}
+      {confirmAddError && onAddTask ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-task-confirm-title"
+        >
+          <button
+            type="button"
+            className="shelf-add-task-confirm-backdrop absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setConfirmAddError(null)}
+            aria-label="Cancel"
+          />
+          <div
+            className="shelf-add-task-confirm-dialog relative w-full max-w-md rounded-xl border border-white/10 bg-zinc-900 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="add-task-confirm-title" className="shelf-add-task-confirm-title mb-2 text-sm font-medium text-zinc-100">
+              Add as todo?
+            </h3>
+            <p className="shelf-add-task-confirm-body mb-4 line-clamp-2 text-xs text-zinc-400">
+              {confirmAddError.error}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmAddError(null)}
+                className="shelf-add-task-confirm-cancel rounded-lg border border-white/10 px-3 py-1.5 text-xs text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onAddTask(confirmAddError);
+                  setConfirmAddError(null);
+                }}
+                className="shelf-add-task-confirm-add rounded-lg bg-emerald-500/25 px-3 py-1.5 text-xs font-medium text-emerald-100 hover:bg-emerald-500/35"
+              >
+                Add as task
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
