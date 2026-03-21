@@ -611,6 +611,11 @@ function VisualFlowPanelInner({
   const onNodeDragStop = useCallback(
     (_e: React.MouseEvent, node: Node) => {
       hasInteracted.current = true;
+      const selectedCount = nodes.filter((n) => n.selected).length;
+      if (selectedCount > 1) {
+        persist();
+        return;
+      }
       const positions: Record<string, { x: number; y: number }> = {};
       nodes.forEach((n) => {
         if (n.position) positions[n.id] = { x: n.position.x, y: n.position.y };
@@ -868,6 +873,7 @@ function VisualFlowPanelInner({
                 onPaneContextMenu={onPaneContextMenu}
                 onEdgeContextMenu={onEdgeContextMenuHandler}
                 onEdgeClick={() => {}}
+                multiSelectionKeyCode={["Control", "Meta"]}
                 fitView
                 fitViewOptions={{ padding: 0.2 }}
                 defaultEdgeOptions={{
@@ -887,7 +893,7 @@ function VisualFlowPanelInner({
                     Right-click on the canvas to create a task, or add todos in the Pillar.
                   </p>
                   <p className="text-xs text-zinc-500">
-                    Drag nodes to arrange, connect handles to define sequence.
+                    Drag nodes to arrange, Ctrl+click to select multiple, connect handles to define sequence.
                   </p>
                 </div>
               )}

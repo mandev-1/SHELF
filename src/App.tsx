@@ -305,7 +305,7 @@ function App() {
       />
       <div className="flex-1 flex flex-col min-w-0" data-swipe-area>
         <header className="shrink-0 border-b border-white/10 px-6 py-5">
-          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="max-w-[1640px] mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             {editingName ? (
               <Input
                 autoFocus
@@ -381,7 +381,7 @@ function App() {
             onAnimationEnd={() => setViewSlideDir(null)}
           >
           {dashboardView === "error" ? (
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-[1640px] mx-auto">
               <ErrorDashboardPanel
                 fullPage
                 onOpenLLMConsole={() => {
@@ -391,7 +391,7 @@ function App() {
               />
             </div>
           ) : dashboardView === "visual-flow" ? (
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-[1640px] mx-auto">
               <VisualFlowPanel
                 todos={pillarTodos}
                 visualFlow={visualFlow}
@@ -419,7 +419,7 @@ function App() {
               />
             </div>
           ) : (
-            <div className="max-w-6xl mx-auto">
+            <div className="max-w-[1640px] mx-auto">
               <div className="mb-6">
                 <PromptLibraryCard
                   prompts={prompts}
