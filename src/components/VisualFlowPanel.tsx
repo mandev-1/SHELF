@@ -10,6 +10,7 @@ import {
   Position,
   BaseEdge,
   getBezierPath,
+  SelectionMode,
   type Node,
   type Edge,
   type Connection,
@@ -362,8 +363,11 @@ function TodoFlowNode(props: NodeProps) {
   const { text, note, tag, subtitle, blockStatus, handleConfig } = (props.data ?? {}) as TodoFlowNodeData;
   const statusClass = nodeStatusClass(blockStatus);
   const config = handleConfig ?? "horizontal";
+  const isSelected = props.selected === true;
   return (
-    <div className={`shelf-flow-node shelf-top6-card group flex w-full min-h-[4rem] flex-col gap-1.5 bg-black/35 px-1 py-2.5 shadow-sm ${statusClass}`}>
+    <div
+      className={`shelf-flow-node shelf-top6-card group flex w-full min-h-[4rem] flex-col gap-1.5 bg-black/35 px-1 py-2.5 shadow-sm ${statusClass} ${isSelected ? "shelf-flow-node--selected" : ""}`}
+    >
       <FlowHandles config={config} />
       <div className="min-w-0 flex-1 overflow-visible px-2 pr-3 pl-3">
         <div className="font-semibold leading-snug text-white group-hover:text-emerald-100 break-words whitespace-pre-wrap">
@@ -873,7 +877,9 @@ function VisualFlowPanelInner({
                 onPaneContextMenu={onPaneContextMenu}
                 onEdgeContextMenu={onEdgeContextMenuHandler}
                 onEdgeClick={() => {}}
-                multiSelectionKeyCode={["Control", "Meta"]}
+                selectionKeyCode={["Control", "Meta"]}
+                multiSelectionKeyCode={["Shift"]}
+                selectionMode={SelectionMode.Partial}
                 fitView
                 fitViewOptions={{ padding: 0.2 }}
                 defaultEdgeOptions={{
@@ -893,7 +899,7 @@ function VisualFlowPanelInner({
                     Right-click on the canvas to create a task, or add todos in the Pillar.
                   </p>
                   <p className="text-xs text-zinc-500">
-                    Drag nodes to arrange, Ctrl+click to select multiple, connect handles to define sequence.
+                    Drag nodes to arrange. Ctrl+drag to draw selection rectangle. Selected nodes move in bulk.
                   </p>
                 </div>
               )}
