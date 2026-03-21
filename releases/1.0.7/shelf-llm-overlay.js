@@ -103,7 +103,33 @@
       root.remove();
     });
 
+    const openLibraryBtn = document.createElement("button");
+    openLibraryBtn.type = "button";
+    openLibraryBtn.textContent = "Edit in Shelf";
+    Object.assign(openLibraryBtn.style, {
+      padding: "4px 10px",
+      fontSize: "11px",
+      fontWeight: "500",
+      color: "#1a73e8",
+      background: "none",
+      border: "1px solid #c7d2fe",
+      borderRadius: "6px",
+      cursor: "pointer",
+    });
+    openLibraryBtn.addEventListener("mouseenter", () => {
+      openLibraryBtn.style.background = "#e0e7ff";
+    });
+    openLibraryBtn.addEventListener("mouseleave", () => {
+      openLibraryBtn.style.background = "none";
+    });
+    openLibraryBtn.addEventListener("click", () => {
+      if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
+        chrome.runtime.sendMessage({ type: "openPromptLibrary" });
+      }
+    });
+
     header.appendChild(title);
+    header.appendChild(openLibraryBtn);
     header.appendChild(closeBtn);
     root.appendChild(header);
 
@@ -117,7 +143,9 @@
     });
     root.appendChild(body);
 
-    const promptList = Object.values(prompts || {}).filter((p) => p && typeof p.body === "string");
+    const promptList = Object.values(prompts || {})
+      .filter((p) => p && typeof p.body === "string")
+      .reverse();
 
     if (promptList.length === 0) {
       const empty = document.createElement("p");

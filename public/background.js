@@ -18,6 +18,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     handleCloseLLMConsole().then(sendResponse).catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
+  if (msg.type === "openPromptLibrary") {
+    handleOpenPromptLibrary().then(sendResponse).catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
 });
 
 async function handleOpenLLMConsole(url) {
@@ -31,6 +35,12 @@ async function handleOpenLLMConsole(url) {
 }
 
 async function handleCloseLLMConsole() {
+  const dashboardUrl = chrome.runtime.getURL("index.html");
+  await chrome.tabs.create({ url: dashboardUrl });
+  return { ok: true };
+}
+
+async function handleOpenPromptLibrary() {
   const dashboardUrl = chrome.runtime.getURL("index.html");
   await chrome.tabs.create({ url: dashboardUrl });
   return { ok: true };

@@ -821,8 +821,8 @@ function VisualFlowPanelInner({
         </h1>
       </div>
 
-      <div className="flex-1 overflow-auto min-h-0">
-        <div className="p-6">
+      <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
+        <div className="shrink-0 p-6 pb-0">
           {editNodeId && (() => {
             const t = todos.find((x) => x.id === editNodeId);
             if (!t || !onEditTodo) return null;
@@ -839,11 +839,10 @@ function VisualFlowPanelInner({
               </EditCardWrapper>
             );
           })()}
-          <section>
-            <div
-              className="relative rounded-xl border border-white/10 visual-flow-canvas"
-              style={{ height: 480 }}
-            >
+        </div>
+        <div className="flex-1 min-h-0 px-6 pb-6">
+          <section className="h-full">
+            <div className="relative h-full min-h-[280px] rounded-xl border border-white/10 visual-flow-canvas">
               <ReactFlow
                 nodes={nodes}
                 edges={edges}

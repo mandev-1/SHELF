@@ -864,6 +864,10 @@ body {
 .visual-flow-canvas {
   background: var(--shelf-card);
 }
+.visual-flow-canvas .react-flow {
+  width: 100%;
+  height: 100%;
+}
 .visual-flow-react-flow {
   background: transparent !important;
 }
