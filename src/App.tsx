@@ -57,6 +57,7 @@ function App() {
     setShelfName,
     resolvedTheme,
     pillarTodos,
+    showTodoDates,
     visualFlow,
     setVisualFlow,
     prompts,
@@ -394,6 +395,7 @@ function App() {
             <div className="max-w-[1640px] mx-auto">
               <VisualFlowPanel
                 todos={pillarTodos}
+                showTodoDates={showTodoDates}
                 visualFlow={visualFlow}
                 onVisualFlowChange={setVisualFlow}
                 onEditTodo={(id, updates) =>

@@ -55,6 +55,8 @@ type TodoFlowNodeData = {
   tag?: string;
   subtitle?: string;
   blockStatus?: ShelfTodoBlockStatus;
+  date?: string;
+  showTodoDates?: boolean;
   handleConfig?: ShelfTodoHandleConfig;
   onNoteChange?: (newNote: string) => void;
 };
@@ -109,6 +111,7 @@ function NodeEditCard({
   const [tag, setTag] = useState(todo.tag ?? "");
   const [subtitle, setSubtitle] = useState(todo.subtitle ?? "");
   const [blockStatus, setBlockStatus] = useState<ShelfTodoBlockStatus | "">(todo.blockStatus ?? "");
+  const [date, setDate] = useState(todo.date ?? "");
   const [isClosing, setIsClosing] = useState(false);
   const [escapePrompted, setEscapePrompted] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -127,9 +130,10 @@ function NodeEditCard({
       tag: tag || undefined,
       subtitle: subtitle || undefined,
       blockStatus: blockStatus || undefined,
+      date: date.trim() || undefined,
     });
     requestClose();
-  }, [text, note, tag, subtitle, blockStatus, onSave, requestClose]);
+  }, [text, note, tag, subtitle, blockStatus, date, onSave, requestClose]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -218,6 +222,15 @@ function NodeEditCard({
           className="shelf-note-popover-textarea min-h-[60px] w-full resize-y rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
           rows={2}
         />
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-medium text-zinc-500">Date</label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 focus:outline-none font-mono"
+          />
+        </div>
         <div className="flex flex-col gap-1">
           <label className="text-[10px] font-medium text-zinc-500">Status</label>
           <select
@@ -314,10 +327,11 @@ function FlowHandles({ config }: { config: ShelfTodoHandleConfig }) {
 }
 
 function TodoFlowNode(props: NodeProps) {
-  const { text, note, tag, subtitle, blockStatus, handleConfig } = (props.data ?? {}) as TodoFlowNodeData;
+  const { text, note, tag, subtitle, blockStatus, date, showTodoDates, handleConfig } = (props.data ?? {}) as TodoFlowNodeData;
   const statusClass = nodeStatusClass(blockStatus);
   const config = handleConfig ?? "horizontal";
   const isSelected = props.selected === true;
+  const showDate = showTodoDates && date && blockStatus !== "blocked";
   return (
     <div
       className={`shelf-flow-node shelf-top6-card group flex w-full min-h-[4rem] flex-col gap-1.5 bg-black/35 px-1 py-2.5 shadow-sm ${statusClass} ${isSelected ? "shelf-flow-node--selected" : ""}`}
@@ -338,6 +352,7 @@ function TodoFlowNode(props: NodeProps) {
           </span>
         )}
       </div>
+      {showDate && <span className="shelf-flow-node-date">{date}</span>}
     </div>
   );
 }
@@ -360,7 +375,8 @@ function computeNodeWidth(todo: ShelfPillarTodoItem): number {
 function buildInitialNodes(
   todos: ShelfPillarTodoItem[],
   storedPositions?: Record<string, { x: number; y: number }>,
-  onEditTodo?: (id: string, updates: Partial<ShelfPillarTodoItem>) => void
+  onEditTodo?: (id: string, updates: Partial<ShelfPillarTodoItem>) => void,
+  showTodoDates?: boolean
 ): Node[] {
   return todos.map((todo, i) => {
     const pos = storedPositions?.[todo.id];
@@ -375,6 +391,8 @@ function buildInitialNodes(
         tag: todo.tag,
         subtitle: todo.subtitle,
         blockStatus: todo.blockStatus,
+        date: todo.date,
+        showTodoDates: !!showTodoDates,
         handleConfig: todo.handleConfig ?? "horizontal",
         onNoteChange:
           onEditTodo && todo.note
@@ -478,6 +496,7 @@ function buildInitialEdges(
 
 function VisualFlowPanelInner({
   todos,
+  showTodoDates = false,
   visualFlow,
   onVisualFlowChange,
   onEditTodo,
@@ -488,6 +507,7 @@ function VisualFlowPanelInner({
   fullPage = false,
 }: {
   todos: ShelfPillarTodoItem[];
+  showTodoDates?: boolean;
   visualFlow: VisualFlowData;
   onVisualFlowChange: (data: VisualFlowData) => void;
   onEditTodo?: (id: string, updates: Partial<ShelfPillarTodoItem>) => void;
@@ -505,10 +525,43 @@ function VisualFlowPanelInner({
   const menuRef = useRef<HTMLDivElement>(null);
   const edgeMenuRef = useRef<HTMLDivElement>(null);
   const paneMenuRef = useRef<HTMLDivElement>(null);
+  const hasInteracted = useRef(false);
+
+  const handleEditTodoWithLog = useCallback(
+    (id: string, updates: Partial<ShelfPillarTodoItem>) => {
+      const todo = todos.find((t) => t.id === id);
+      if (todo && onTodoLog && !(updates.done === true && Object.keys(updates).length === 1)) {
+        const lines: string[] = [];
+        if (updates.text !== undefined && updates.text !== todo.text) {
+          lines.push(`Title: ${todo.text || "(empty)"} → ${updates.text || "(empty)"}`);
+        }
+        if (updates.note !== undefined && updates.note !== (todo.note ?? "")) {
+          lines.push(`Description: ${(todo.note ?? "") ? "updated" : "added"}`);
+        }
+        if (updates.subtitle !== undefined && updates.subtitle !== (todo.subtitle ?? "")) {
+          lines.push(`Subtitle: ${todo.subtitle || "(empty)"} → ${updates.subtitle || "(empty)"}`);
+        }
+        if (updates.tag !== undefined && updates.tag !== (todo.tag ?? "")) {
+          lines.push(`Tag: ${todo.tag || "(empty)"} → ${updates.tag || "(empty)"}`);
+        }
+        if (updates.blockStatus !== undefined && String(updates.blockStatus) !== String(todo.blockStatus ?? "")) {
+          lines.push(`Status: ${todo.blockStatus || "—"} → ${updates.blockStatus || "—"}`);
+        }
+        if (updates.date !== undefined && String(updates.date || "") !== String(todo.date ?? "")) {
+          lines.push(`Date: ${todo.date || "—"} → ${updates.date || "—"}`);
+        }
+        if (lines.length) {
+          onTodoLog(`Visual Flow: updated task "${todo.text}":\n${lines.join("\n")}`);
+        }
+      }
+      onEditTodo?.(id, updates);
+    },
+    [onEditTodo, onTodoLog, todos]
+  );
 
   const initialNodes = useMemo(
-    () => buildInitialNodes(todos, visualFlow.nodePositions, onEditTodo),
-    [todos, visualFlow.nodePositions, onEditTodo]
+    () => buildInitialNodes(todos, visualFlow.nodePositions, handleEditTodoWithLog, showTodoDates),
+    [todos, visualFlow.nodePositions, handleEditTodoWithLog, showTodoDates]
   );
   const initialEdges = useMemo(
     () => buildInitialEdges(todos, visualFlow.edges),
@@ -520,16 +573,14 @@ function VisualFlowPanelInner({
 
   useEffect(() => {
     setNodes((current) => {
-      const fresh = buildInitialNodes(todos, visualFlow.nodePositions, onEditTodo);
+      const fresh = buildInitialNodes(todos, visualFlow.nodePositions, handleEditTodoWithLog, showTodoDates);
       return fresh.map((n) => {
         const existing = current.find((c) => c.id === n.id);
         return existing?.selected !== undefined ? { ...n, selected: existing.selected } : n;
       });
     });
     setEdges(buildInitialEdges(todos, visualFlow.edges));
-  }, [todos, visualFlow.nodePositions, visualFlow.edges, onEditTodo, setNodes, setEdges]);
-
-  const hasInteracted = useRef(false);
+  }, [todos, visualFlow.nodePositions, visualFlow.edges, handleEditTodoWithLog, showTodoDates, setNodes, setEdges]);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -696,7 +747,8 @@ function VisualFlowPanelInner({
     });
     setPaneMenu(null);
     setEditNodeId(newTodo.id);
-  }, [onAddTodo, onVisualFlowChange, paneMenu, visualFlow, todos]);
+    onTodoLog?.(`Visual Flow: added new task "${newTodo.text}"`);
+  }, [onAddTodo, onVisualFlowChange, onTodoLog, paneMenu, visualFlow, todos]);
 
   const handleEdit = useCallback(
     (id: string) => {
@@ -715,11 +767,12 @@ function VisualFlowPanelInner({
       setNodeMenu(null);
       setEditNodeId(null);
       onDeleteTodo?.(id);
+      if (todo) onTodoLog?.(`Visual Flow: removed task "${todo.text}"`);
       hasInteracted.current = true;
       setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
       setNodes((ns) => ns.filter((n) => n.id !== id));
     },
-    [onDeleteTodo, setEdges, setNodes, todos]
+    [onDeleteTodo, onTodoLog, setEdges, setNodes, todos]
   );
 
   const handleMarkCompleted = useCallback(
@@ -765,7 +818,7 @@ function VisualFlowPanelInner({
                 <NodeEditCard
                   todo={t}
                   onSave={(updates) => {
-                    onEditTodo(editNodeId, updates);
+                    handleEditTodoWithLog(editNodeId, updates);
                     setEditNodeId(null);
                   }}
                   onClose={() => setEditNodeId(null)}

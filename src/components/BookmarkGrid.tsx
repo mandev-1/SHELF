@@ -874,6 +874,8 @@ export function BookmarkGrid() {
     separators,
     goals,
     showGoals,
+    showTodoDates,
+    setShowTodoDates,
     gridLocked,
     ready,
     saveLayout,
@@ -1172,6 +1174,14 @@ export function BookmarkGrid() {
             >
               <span>Show Goal</span>
               <span className="text-xs text-emerald-300/60">{showGoals ? "On" : "Off"}</span>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => setShowTodoDates(!showTodoDates)}
+            >
+              <span>Show dates on todos</span>
+              <span className="text-xs text-emerald-300/60">{showTodoDates ? "On" : "Off"}</span>
             </button>
             <div className="my-1.5 border-t border-white/10" />
             <div className="rounded-xl border border-white/10 bg-white/5 p-2">

@@ -773,8 +773,27 @@ body {
 
 /* Visual Flow nodes: rounded shape with visible stroke */
 .shelf-flow-node {
+  position: relative;
   border: 1.5px solid rgba(52, 211, 153, 0.4);
   border-radius: 1rem;
+}
+/* Task date: red monospace, same spot as BLOCKED label */
+.shelf-flow-node-date {
+  position: absolute;
+  bottom: 0.5rem;
+  right: 0.75rem;
+  font-family: ui-monospace, monospace;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: rgb(248 113 113); /* red-400 */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+[data-theme="day"] .shelf-flow-node-date,
+[data-theme="sap"] .shelf-flow-node-date {
+  color: rgb(185 28 28); /* red-700 */
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3);
 }
 
 /* Ready / no status: faint blue glow */

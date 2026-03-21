@@ -25,6 +25,7 @@ const LABELS_KEY = "shelf-labels";
 const SEPARATORS_KEY = "shelf-separators";
 const GOALS_KEY = "shelf-goals";
 const SHOW_GOALS_KEY = "show-goals";
+const SHOW_TODO_DATES_KEY = "show-todo-dates";
 const BOOKMARK_VIEW_KEY = "bookmark-view";
 const BOOKMARK_OVERRIDES_KEY = "bookmark-overrides";
 const PILLAR_KEY = "pillar-pins";
@@ -131,6 +132,7 @@ export function useShelfStorage() {
   const [separators, setSeparators] = useState<ShelfFolderSeparatorMap>({});
   const [goals, setGoals] = useState<ShelfGoalMap>({});
   const [showGoals, setShowGoals] = useState(false);
+  const [showTodoDates, setShowTodoDates] = useState(false);
   const [bookmarkViews, setBookmarkViews] = useState<ShelfBookmarkViewMap>({});
   const [bookmarkOverrides, setBookmarkOverrides] = useState<ShelfBookmarkOverrides>({});
   const [pillarPins, setPillarPins] = useState<{
@@ -173,6 +175,7 @@ export function useShelfStorage() {
         SEPARATORS_KEY,
         GOALS_KEY,
         SHOW_GOALS_KEY,
+        SHOW_TODO_DATES_KEY,
         BOOKMARK_VIEW_KEY,
         BOOKMARK_OVERRIDES_KEY,
         PILLAR_KEY,
@@ -223,6 +226,7 @@ export function useShelfStorage() {
       );
       setGoals(normalizeGoals(result[GOALS_KEY]));
       setShowGoals(result[SHOW_GOALS_KEY] === true);
+      setShowTodoDates(result[SHOW_TODO_DATES_KEY] === true);
       setBookmarkViews(
         result[BOOKMARK_VIEW_KEY] && typeof result[BOOKMARK_VIEW_KEY] === "object" && !Array.isArray(result[BOOKMARK_VIEW_KEY])
           ? (result[BOOKMARK_VIEW_KEY] as ShelfBookmarkViewMap)
@@ -259,6 +263,7 @@ export function useShelfStorage() {
               x.blockStatus === "blocked" || x.blockStatus === "ready" || x.blockStatus === "abeyed"
                 ? (x.blockStatus as ShelfTodoBlockStatus)
                 : undefined,
+            date: typeof x.date === "string" && x.date.trim() ? x.date.trim() : undefined,
             handleConfig:
               x.handleConfig === "horizontal" ||
               x.handleConfig === "vertical" ||
@@ -466,6 +471,7 @@ export function useShelfStorage() {
           t.blockStatus === "blocked" || t.blockStatus === "ready" || t.blockStatus === "abeyed"
             ? t.blockStatus
             : undefined,
+        date: typeof t.date === "string" && t.date.trim() ? t.date.trim() : undefined,
         handleConfig:
           t.handleConfig === "horizontal" ||
           t.handleConfig === "vertical" ||
@@ -490,6 +496,11 @@ export function useShelfStorage() {
   const setShowGoalsState = useCallback((next: boolean) => {
     setShowGoals(next);
     getStorage()?.set({ [SHOW_GOALS_KEY]: next });
+  }, []);
+
+  const setShowTodoDatesState = useCallback((next: boolean) => {
+    setShowTodoDates(next);
+    getStorage()?.set({ [SHOW_TODO_DATES_KEY]: next });
   }, []);
 
   const savePrompts = useCallback((next: ShelfPromptMap) => {
@@ -639,6 +650,7 @@ export function useShelfStorage() {
       separators,
       goals,
       showGoals,
+      showTodoDates,
       pillarPins,
       pillarTodos,
       prompts,
@@ -651,7 +663,7 @@ export function useShelfStorage() {
       visualFlow,
       llmConsoleUrl,
     };
-  }, [bookmarkOverrides, bookmarkSize, colors, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals, theme, visualFlow]);
+  }, [bookmarkOverrides, bookmarkSize, colors, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, theme, visualFlow]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -663,6 +675,7 @@ export function useShelfStorage() {
     if (typeof backup.shelfName === "string") setShelfNameState(backup.shelfName);
     if (typeof backup.gridLocked === "boolean") setGridLocked(backup.gridLocked);
     if (typeof backup.showGoals === "boolean") setShowGoals(backup.showGoals);
+    if (typeof backup.showTodoDates === "boolean") setShowTodoDates(backup.showTodoDates);
     if (backup.pillarPins && typeof backup.pillarPins === "object") {
       const raw = backup.pillarPins as any;
       setPillarPins({
@@ -686,6 +699,7 @@ export function useShelfStorage() {
       [SEPARATORS_KEY]: backup.separators ?? separators,
       [GOALS_KEY]: backup.goals ?? goals,
       [SHOW_GOALS_KEY]: typeof backup.showGoals === "boolean" ? backup.showGoals : showGoals,
+      [SHOW_TODO_DATES_KEY]: typeof backup.showTodoDates === "boolean" ? backup.showTodoDates : showTodoDates,
       [PILLAR_KEY]: backup.pillarPins
         ? {
             top: Array.isArray((backup.pillarPins as any).top) ? (backup.pillarPins as any).top.slice(0, 6) : [],
@@ -704,7 +718,7 @@ export function useShelfStorage() {
       [VISUAL_FLOW_KEY]: backup.visualFlow ?? visualFlow,
       [LLM_CONSOLE_URL_KEY]: typeof backup.llmConsoleUrl === "string" && backup.llmConsoleUrl.trim() ? backup.llmConsoleUrl.trim() : llmConsoleUrl,
     });
-  }, [bookmarkOverrides, bookmarkSize, colors, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals, theme, visualFlow]);
+  }, [bookmarkOverrides, bookmarkSize, colors, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, theme, visualFlow]);
 
   return {
     layout,
@@ -713,6 +727,8 @@ export function useShelfStorage() {
     separators,
     goals,
     showGoals,
+    showTodoDates,
+    setShowTodoDates: setShowTodoDatesState,
     bookmarkViews,
     bookmarkOverrides,
     setBookmarkOverride,
