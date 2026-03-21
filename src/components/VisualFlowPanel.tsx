@@ -355,8 +355,12 @@ function TodoFlowNode(props: NodeProps) {
             {tag}
           </span>
         )}
+        {showDate && (
+          <div className="shelf-flow-node-date mt-1.5">
+            {date}
+          </div>
+        )}
       </div>
-      {showDate && <span className="shelf-flow-node-date">{date}</span>}
     </div>
   );
 }
