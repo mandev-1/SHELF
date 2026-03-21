@@ -14,10 +14,6 @@
       "matches": [
         "<all_urls>"
       ],
-      "exclude_matches": [
-        "chrome://*/*",
-        "chrome-extension://*/*"
-      ],
       "js": [
         "shelf-llm-overlay.js"
       ],
