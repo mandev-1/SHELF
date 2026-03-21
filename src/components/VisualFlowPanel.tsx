@@ -32,52 +32,6 @@ const NODE_MIN_WIDTH = 260;
 const NODE_MAX_WIDTH = 360;
 const NODE_MIN_HEIGHT = 64;
 const SPACING = 24;
-const COLLISION_PADDING = 16;
-
-function rectsOverlap(
-  a: { x: number; y: number; w: number; h: number },
-  b: { x: number; y: number; w: number; h: number }
-): boolean {
-  return a.x < b.x + b.w + COLLISION_PADDING && a.x + a.w + COLLISION_PADDING > b.x && a.y < b.y + b.h + COLLISION_PADDING && a.y + a.h + COLLISION_PADDING > b.y;
-}
-
-function resolveCollisions(
-  positions: Record<string, { x: number; y: number }>,
-  allTodos: ShelfPillarTodoItem[],
-  newNodeId: string,
-  newPos: { x: number; y: number }
-): Record<string, { x: number; y: number }> {
-  const result = { ...positions, [newNodeId]: newPos };
-  const getRect = (id: string) => {
-    const todo = allTodos.find((t) => t.id === id);
-    const w = todo ? computeNodeWidth(todo) : NODE_MIN_WIDTH;
-    const h = NODE_MIN_HEIGHT;
-    const p = result[id] ?? { x: 0, y: 0 };
-    return { x: p.x, y: p.y, w, h };
-  };
-
-  let changed = true;
-  for (let iter = 0; iter < 50 && changed; iter++) {
-    changed = false;
-    for (const todo of allTodos) {
-      if (todo.id === newNodeId) continue;
-      const existingRect = getRect(todo.id);
-      const newRect = getRect(newNodeId);
-      if (!rectsOverlap(existingRect, newRect)) continue;
-      const existingCenterY = existingRect.y + existingRect.h / 2;
-      const newCenterY = newRect.y + newRect.h / 2;
-      const pushDown = existingCenterY < newCenterY;
-      const overlap = pushDown
-        ? existingRect.y + existingRect.h + COLLISION_PADDING - newRect.y
-        : newRect.y + newRect.h + COLLISION_PADDING - existingRect.y;
-      if (overlap > 0) {
-        result[todo.id] = { ...result[todo.id]!, y: result[todo.id]!.y + (pushDown ? overlap : -overlap) };
-        changed = true;
-      }
-    }
-  }
-  return result;
-}
 
 const TAG_PALETTES: { bg: string; palette: string }[] = [
   { bg: "bg-violet-700/18", palette: "visual-flow-tag--violet" },
@@ -565,7 +519,13 @@ function VisualFlowPanelInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   useEffect(() => {
-    setNodes(buildInitialNodes(todos, visualFlow.nodePositions, onEditTodo));
+    setNodes((current) => {
+      const fresh = buildInitialNodes(todos, visualFlow.nodePositions, onEditTodo);
+      return fresh.map((n) => {
+        const existing = current.find((c) => c.id === n.id);
+        return existing?.selected !== undefined ? { ...n, selected: existing.selected } : n;
+      });
+    });
     setEdges(buildInitialEdges(todos, visualFlow.edges));
   }, [todos, visualFlow.nodePositions, visualFlow.edges, onEditTodo, setNodes, setEdges]);
 
@@ -613,40 +573,11 @@ function VisualFlowPanelInner({
   }, [nodes, edges, persist]);
 
   const onNodeDragStop = useCallback(
-    (_e: React.MouseEvent, node: Node) => {
+    () => {
       hasInteracted.current = true;
-      const selectedCount = nodes.filter((n) => n.selected).length;
-      if (selectedCount > 1) {
-        persist();
-        return;
-      }
-      const positions: Record<string, { x: number; y: number }> = {};
-      nodes.forEach((n) => {
-        if (n.position) positions[n.id] = { x: n.position.x, y: n.position.y };
-      });
-      const pos = positions[node.id];
-      if (!pos) {
-        persist();
-        return;
-      }
-      const resolved = resolveCollisions(positions, todos, node.id, pos);
-      const changed = Object.keys(resolved).some(
-        (id) => resolved[id].x !== positions[id]?.x || resolved[id].y !== positions[id]?.y
-      );
-      if (changed) {
-        setNodes((nds) =>
-          nds.map((n) => {
-            const p = resolved[n.id];
-            if (!p || (n.position?.x === p.x && n.position?.y === p.y)) return n;
-            return { ...n, position: { x: p.x, y: p.y } };
-          })
-        );
-        persist(resolved);
-      } else {
-        persist();
-      }
+      persist();
     },
-    [nodes, todos, setNodes, persist]
+    [persist]
   );
 
   const onNodeContextMenu = useCallback(
@@ -758,16 +689,10 @@ function VisualFlowPanelInner({
     const width = NODE_MIN_WIDTH;
     const height = NODE_MIN_HEIGHT;
     const pos = { x: flowPos.x - width / 2, y: flowPos.y - height / 2 };
-    const resolved = resolveCollisions(
-      visualFlow.nodePositions ?? {},
-      [...todos, newTodo],
-      newTodo.id,
-      pos
-    );
     onAddTodo(newTodo);
     onVisualFlowChange({
       ...visualFlow,
-      nodePositions: resolved,
+      nodePositions: { ...(visualFlow.nodePositions ?? {}), [newTodo.id]: pos },
     });
     setPaneMenu(null);
     setEditNodeId(newTodo.id);
