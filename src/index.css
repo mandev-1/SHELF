@@ -39,6 +39,11 @@
   --shelf-scroll-thumb: rgb(148 163 184);
 }
 
+/* SAP on Windows: main content area gets a lighter background for better visibility */
+[data-theme="sap"][data-platform="windows"] .shelf-view-slide {
+  background: linear-gradient(to bottom right, #f2f7fc, #ecf2f9, #e4ecf6);
+}
+
 /* Theme overrides for light backgrounds (day, sap) */
 [data-theme="day"] .text-zinc-100,
 [data-theme="day"] .text-white,
@@ -429,6 +434,59 @@
 }
 [data-theme="day"] .shelf-note-popover-body input::placeholder {
   color: #94a3b8 !important;
+}
+
+/* Note in-body checkboxes (markdown - [ ]): day theme – light/white for contrast */
+[data-theme="day"] .shelf-note-checkbox--in-body {
+  background: #fff !important;
+  border-color: rgba(120, 113, 108, 0.45) !important;
+}
+[data-theme="day"] .shelf-note-checkbox--in-body.shelf-note-checkbox--interactive:hover {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+[data-theme="day"] .shelf-note-checkbox--in-body svg {
+  color: rgb(4 120 87) !important;
+}
+
+/* Focus drawer – day theme: match Pillar focused task background (warm amber) */
+[data-theme="day"] .shelf-flow-focus-drawer .shelf-flow-focus-todo-card {
+  background: rgb(180 83 9 / 0.07) !important;
+  border: none !important;
+}
+[data-theme="day"] .shelf-flow-focus-drawer .shelf-flow-focus-todo-card:hover {
+  background: rgb(180 83 9 / 0.1) !important;
+}
+
+/* SAP theme: in-body checkboxes – white for contrast on light backgrounds */
+[data-theme="sap"] .shelf-note-checkbox--in-body {
+  background: #fff !important;
+  border-color: rgba(0, 112, 242, 0.35) !important;
+}
+[data-theme="sap"] .shelf-note-checkbox--in-body.shelf-note-checkbox--interactive:hover {
+  background: rgba(0, 112, 242, 0.08) !important;
+  border-color: rgba(0, 112, 242, 0.5) !important;
+}
+[data-theme="sap"] .shelf-note-checkbox--in-body svg {
+  color: #0070f2 !important;
+}
+
+/* Focus drawer – SAP theme: light, clean todo cards */
+[data-theme="sap"] .shelf-flow-focus-drawer .shelf-flow-focus-todo-card {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(0, 112, 242, 0.2) !important;
+  box-shadow: 0 1px 3px rgba(0, 112, 242, 0.08);
+}
+[data-theme="sap"] .shelf-flow-focus-drawer .shelf-flow-focus-todo-card .shelf-note-checkbox {
+  background: #fff !important;
+  border-color: rgba(0, 112, 242, 0.35) !important;
+}
+[data-theme="sap"] .shelf-flow-focus-drawer .shelf-flow-focus-todo-card .shelf-note-checkbox:hover {
+  background: rgba(0, 112, 242, 0.08) !important;
+  border-color: rgba(0, 112, 242, 0.5) !important;
+}
+[data-theme="sap"] .shelf-flow-focus-drawer .shelf-flow-focus-todo-card .shelf-note-checkbox svg {
+  color: #0070f2 !important;
 }
 
 /* Prompt library: murky, contrasting typography */
@@ -870,6 +928,15 @@ body {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
+/* Drop indicator: where the bookmark will be pasted when reordering */
+.shelf-drop-indicator {
+  height: 3px;
+  width: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(16, 185, 129, 0.95) 15%, rgba(74, 222, 128, 1) 50%, rgba(16, 185, 129, 0.95) 85%, transparent 100%);
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.6), 0 0 4px rgba(16, 185, 129, 0.5);
+}
+
 .results-glow {
   box-shadow:
     0 0 0 1px rgba(16, 185, 129, 0.12),
@@ -900,31 +967,46 @@ body {
   }
 }
 
-/* View slide transition (swipe between shelf / dashboard / flow) */
+/* Silky easing for transitions */
+:root {
+  --shelf-ease-silk: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Focus drawer: canvas shifts smoothly when drawer opens */
+.shelf-flow-canvas-transition {
+  transition: margin-right 0.3s var(--shelf-ease-silk), transform 0.3s var(--shelf-ease-silk);
+}
+
+/* Focus drawer: slide in/out with silky ease */
+.shelf-flow-focus-drawer {
+  transition: transform 0.3s var(--shelf-ease-silk);
+}
+
+/* View slide transition (swipe between shelf / dashboard / flow) — silky smooth */
 .shelf-view-slide.shelf-view-slide--from-left {
-  animation: shelf-view-slide-in-left 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: shelf-view-slide-in-left 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 .shelf-view-slide.shelf-view-slide--from-right {
-  animation: shelf-view-slide-in-right 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: shelf-view-slide-in-right 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 @keyframes shelf-view-slide-in-left {
   from {
-    opacity: 0.6;
-    transform: translateX(48px);
+    opacity: 0.4;
+    transform: translateX(28px) scale(0.998);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
   }
 }
 @keyframes shelf-view-slide-in-right {
   from {
-    opacity: 0.6;
-    transform: translateX(-48px);
+    opacity: 0.4;
+    transform: translateX(-28px) scale(0.998);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
   }
 }
 

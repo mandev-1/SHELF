@@ -83,6 +83,8 @@ export interface ShelfPillarTodoItem {
   handleConfig?: ShelfTodoHandleConfig;
   /** Optional date string (e.g. YYYY-MM-DD). Shown in Visual Flow when showTodoDates is on. */
   date?: string;
+  /** When true, the task appears in the visual flow focus drawer. */
+  focused?: boolean;
 }
 
 export interface ObsidianLogConfig {
@@ -103,6 +105,7 @@ export type VisualFlowEdge = {
   target: string;
   arrow?: boolean;
   doubled?: boolean;
+  muted?: boolean;
 };
 
 export interface VisualFlowData {
@@ -134,6 +137,7 @@ export interface ShelfBackupData {
   llmConsoleUrl?: string;
   showBothNavButtons?: boolean;
   pillarTodoPins?: string[];
+  focusDesynced?: boolean;
 }
 
 export const ACCENT_COLORS = [

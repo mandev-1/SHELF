@@ -139,7 +139,9 @@ function FolderCard({
   const [draftLabel, setDraftLabel] = useState(label ?? getTitle(node));
   const [showMenu, setShowMenu] = useState(false);
   const [dropHint, setDropHint] = useState<{ overId: string; place: "before" | "after" } | null>(null);
+  const [isDropTarget, setIsDropTarget] = useState(false);
   const [bookmarkMenu, setBookmarkMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const folderRef = useRef<HTMLDivElement>(null);
   const [hoverExpandedId, setHoverExpandedId] = useState<string | null>(null);
   const bookmarkMenuOpen = bookmarkMenu !== null;
   const bookmarkMenuRef = useRef<HTMLDivElement | null>(null);
@@ -256,10 +258,29 @@ function FolderCard({
     setEditingLabel(false);
   };
 
+  const isBookmarkDrag = (dt: DataTransfer) =>
+    dt.types.includes("application/x-shelf-bookmark");
+
   return (
     <div
-      className="group grid-stack-item-content h-full flex flex-row rounded-xl border border-white/10 bg-white/5 overflow-hidden min-h-0"
-      onDragOver={(e) => e.preventDefault()}
+      ref={folderRef}
+      className={`group grid-stack-item-content h-full flex flex-row rounded-xl border overflow-hidden min-h-0 transition-all duration-150 ${
+        isDropTarget
+          ? "border-emerald-400/50 bg-emerald-500/15 shadow-[0_0_0_2px_rgba(16,185,129,0.25)]"
+          : "border-white/10 bg-white/5"
+      }`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (isBookmarkDrag(e.dataTransfer)) e.dataTransfer.dropEffect = "move";
+      }}
+      onDragEnter={(e) => {
+        if (isBookmarkDrag(e.dataTransfer)) setIsDropTarget(true);
+      }}
+      onDragLeave={(e) => {
+        const related = e.relatedTarget as Node | null;
+        if (related && folderRef.current?.contains(related)) return;
+        setIsDropTarget(false);
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -267,6 +288,7 @@ function FolderCard({
       }}
       onDrop={(e) => {
         e.preventDefault();
+        setIsDropTarget(false);
         const payload = readDragPayload(e.dataTransfer);
         if (!payload) return;
         if (payload.kind === "separator") {
@@ -551,11 +573,11 @@ function FolderCard({
                   className="cursor-move select-none"
                 >
                   {dropHint?.overId === item.sep.id && dropHint.place === "before" && (
-                    <div className="-mt-0.5 mb-1 h-0.5 w-full rounded bg-emerald-300/80 shadow-[0_0_18px_rgba(74,222,128,0.35)]" />
+                    <div className="shelf-drop-indicator -mt-0.5 mb-1" aria-hidden />
                   )}
                   <div className="my-2 h-px w-full bg-gradient-to-r from-transparent via-emerald-300/75 to-transparent" />
                   {dropHint?.overId === item.sep.id && dropHint.place === "after" && (
-                    <div className="mt-1 h-0.5 w-full rounded bg-emerald-300/80 shadow-[0_0_18px_rgba(74,222,128,0.35)]" />
+                    <div className="shelf-drop-indicator mt-1" aria-hidden />
                   )}
                 </div>
               ) : (
@@ -650,7 +672,7 @@ function FolderCard({
                   }`}
                 >
                   {dropHint?.overId === item.node.id && dropHint.place === "before" && (
-                    <div className="-mt-0.5 mb-1 h-0.5 w-full rounded bg-emerald-300/80 shadow-[0_0_18px_rgba(74,222,128,0.35)]" />
+                    <div className="shelf-drop-indicator -mt-0.5 mb-1" aria-hidden />
                   )}
                   <Link
                     href={item.node.url!}
@@ -696,7 +718,7 @@ function FolderCard({
                     </div>
                   </Link>
                   {dropHint?.overId === item.node.id && dropHint.place === "after" && (
-                    <div className="mt-1 h-0.5 w-full rounded bg-emerald-300/80 shadow-[0_0_18px_rgba(74,222,128,0.35)]" />
+                    <div className="shelf-drop-indicator mt-1" aria-hidden />
                   )}
                 </div>
               )
@@ -908,6 +930,8 @@ export function BookmarkGrid() {
     clearTaskLog,
     hiddenFolderIds,
     setHiddenFolders,
+    focusDesynced,
+    setFocusDesynced,
   } = useShelfStorage();
   const gridRef = useRef<HTMLDivElement>(null);
   const gridInstanceRef = useRef<GridStack | null>(null);
@@ -1130,6 +1154,16 @@ export function BookmarkGrid() {
                 ))}
               </div>
             </div>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => setFocusDesynced(!focusDesynced)}
+            >
+              <span>De-Sync focus of todos in Pillar and Drawer</span>
+              <span className={`text-xs ${focusDesynced ? "text-emerald-300" : "text-zinc-500"}`}>
+                {focusDesynced ? "On" : "Off"}
+              </span>
+            </button>
             <button
               type="button"
               className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"

@@ -70,6 +70,7 @@ function App() {
     setPillarPinOverride,
     pillarTodoPins,
     setPillarTodoPins,
+    focusDesynced,
     setPillarTodos,
     obsidianLog,
     logToObsidian,
@@ -155,6 +156,11 @@ function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", resolvedTheme);
   }, [resolvedTheme]);
+
+  useEffect(() => {
+    const isWin = /Win/.test(navigator.userAgent) || /Win/.test(navigator.platform ?? "");
+    document.documentElement.setAttribute("data-platform", isWin ? "windows" : "mac");
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -291,6 +297,7 @@ function App() {
         todos={pillarTodos}
         pillarTodoPins={pillarTodoPins}
         onSetPillarTodoPins={setPillarTodoPins}
+        focusDesynced={focusDesynced}
         onShowPinnedLimitToast={() => {
           setPinnedLimitToast(true);
           window.setTimeout(() => setPinnedLimitToast(false), 2500);
@@ -482,6 +489,8 @@ function App() {
                 showTodoDates={showTodoDates}
                 visualFlow={visualFlow}
                 onVisualFlowChange={setVisualFlow}
+                focusDesynced={focusDesynced}
+                setPillarTodoPins={setPillarTodoPins}
                 onEditTodo={(id, updates) =>
                   setPillarTodos((prev) =>
                     prev.map((t) => (t.id === id ? { ...t, ...updates } : t))

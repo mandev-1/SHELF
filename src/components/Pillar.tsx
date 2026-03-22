@@ -83,6 +83,7 @@ export function Pillar({
   onSetPinOverride,
   pillarTodoPins = [],
   onSetPillarTodoPins,
+  focusDesynced = false,
   onShowPinnedLimitToast,
   todos,
   onSetTodos,
@@ -99,6 +100,7 @@ export function Pillar({
   onSetPinOverride: (bookmarkId: string, override: { title?: string; imageUrl?: string } | null) => void;
   pillarTodoPins?: string[];
   onSetPillarTodoPins?: (next: string[] | ((prev: string[]) => string[])) => void;
+  focusDesynced?: boolean;
   onShowPinnedLimitToast?: () => void;
   todos: ShelfPillarTodoItem[];
   onSetTodos: (next: ShelfPillarTodoItem[] | ((prev: ShelfPillarTodoItem[]) => ShelfPillarTodoItem[])) => void;
@@ -165,30 +167,57 @@ export function Pillar({
   };
 
   const sortedTodos = useMemo(() => {
-    const pinSet = new Set(pillarTodoPins);
+    const pinSet = focusDesynced
+      ? new Set(pillarTodoPins)
+      : new Set(todos.filter((t) => t.focused).map((t) => t.id));
+    const orderIds = focusDesynced
+      ? pillarTodoPins
+      : [
+          ...pillarTodoPins.filter((id) => pinSet.has(id)),
+          ...todos.filter((t) => t.focused).map((t) => t.id).filter((id) => !pillarTodoPins.includes(id)),
+        ];
     return [...todos].sort((a, b) => {
       const aPinned = pinSet.has(a.id);
       const bPinned = pinSet.has(b.id);
       if (aPinned && !bPinned) return -1;
       if (!aPinned && bPinned) return 1;
       if (aPinned && bPinned) {
-        const aIdx = pillarTodoPins.indexOf(a.id);
-        const bIdx = pillarTodoPins.indexOf(b.id);
-        return aIdx - bIdx;
+        const aIdx = orderIds.indexOf(a.id);
+        const bIdx = orderIds.indexOf(b.id);
+        return (aIdx >= 0 ? aIdx : 999) - (bIdx >= 0 ? bIdx : 999);
       }
       return 0;
     });
-  }, [todos, pillarTodoPins]);
+  }, [todos, pillarTodoPins, focusDesynced]);
 
   const toggleTodoFocus = (id: string) => {
-    if (!onSetPillarTodoPins) return;
-    const isFocused = pillarTodoPins.includes(id);
-    if (isFocused) {
-      onSetPillarTodoPins((prev) => prev.filter((x) => x !== id));
-    } else if (pillarTodoPins.length >= MAX_PILLAR_TODO_PINS) {
-      onShowPinnedLimitToast?.();
+    if (focusDesynced) {
+      if (!onSetPillarTodoPins) return;
+      const isFocused = pillarTodoPins.includes(id);
+      if (isFocused) {
+        onSetPillarTodoPins((prev) => prev.filter((x) => x !== id));
+      } else if (pillarTodoPins.length >= MAX_PILLAR_TODO_PINS) {
+        onShowPinnedLimitToast?.();
+      } else {
+        onSetPillarTodoPins((prev) => [...prev.filter((x) => x !== id), id]);
+      }
     } else {
-      onSetPillarTodoPins((prev) => [...prev.filter((x) => x !== id), id]);
+      const todo = todos.find((t) => t.id === id);
+      if (!todo) return;
+      const willBeFocused = !todo.focused;
+      if (willBeFocused) {
+        const currentFocusedIds = todos.filter((t) => t.focused).map((t) => t.id);
+        if (currentFocusedIds.length >= MAX_PILLAR_TODO_PINS) {
+          onShowPinnedLimitToast?.();
+          return;
+        }
+      }
+      onSetTodos((prev) => {
+        const next = prev.map((t) => (t.id === id ? { ...t, focused: willBeFocused } : t));
+        const focusedIds = next.filter((t) => t.focused).map((t) => t.id).slice(0, MAX_PILLAR_TODO_PINS);
+        onSetPillarTodoPins?.(focusedIds);
+        return next;
+      });
     }
   };
 
@@ -372,7 +401,7 @@ export function Pillar({
               <div className="text-xs text-zinc-500">No tasks yet</div>
             ) : (
               sortedTodos.map((t) => {
-                const isFocused = pillarTodoPins.includes(t.id);
+                const isFocused = focusDesynced ? pillarTodoPins.includes(t.id) : !!t.focused;
                 const focusRank = isFocused ? pillarTodoPins.indexOf(t.id) + 1 : undefined;
                 return (
                 <div
@@ -565,7 +594,7 @@ export function Pillar({
                 <label className="flex shrink-0 items-center gap-1.5 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={pillarTodoPins.includes(t.id)}
+                    checked={focusDesynced ? pillarTodoPins.includes(t.id) : !!t.focused}
                     onChange={() => toggleTodoFocus(t.id)}
                     className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 text-emerald-500 focus:ring-emerald-400/50"
                     aria-label="Focus task"
