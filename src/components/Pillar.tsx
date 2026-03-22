@@ -72,6 +72,8 @@ function readDragPayload(dt: DataTransfer): DragPayload | null {
   return id ? { kind: "bookmark", id } : null;
 }
 
+const MAX_PILLAR_TODO_PINS = 6;
+
 export function Pillar({
   shelfName,
   tree,
@@ -79,6 +81,9 @@ export function Pillar({
   pinOverrides,
   onSetPinned,
   onSetPinOverride,
+  pillarTodoPins = [],
+  onSetPillarTodoPins,
+  onShowPinnedLimitToast,
   todos,
   onSetTodos,
   onTodoLog,
@@ -92,6 +97,9 @@ export function Pillar({
   pinOverrides?: Record<string, { title?: string; imageUrl?: string }>;
   onSetPinned: (next: { top: string[] }) => void;
   onSetPinOverride: (bookmarkId: string, override: { title?: string; imageUrl?: string } | null) => void;
+  pillarTodoPins?: string[];
+  onSetPillarTodoPins?: (next: string[] | ((prev: string[]) => string[])) => void;
+  onShowPinnedLimitToast?: () => void;
   todos: ShelfPillarTodoItem[];
   onSetTodos: (next: ShelfPillarTodoItem[] | ((prev: ShelfPillarTodoItem[]) => ShelfPillarTodoItem[])) => void;
   onTodoLog?: (entry: string) => void;
@@ -152,7 +160,36 @@ export function Pillar({
     if (!window.confirm(`Remove ${label}? This will clear it from your list.`)) return;
     if (!window.confirm(`Are you sure? This cannot be undone.`)) return;
     onSetTodos((prev) => prev.filter((item) => item.id !== id));
+    onSetPillarTodoPins?.((prev) => prev.filter((x) => x !== id));
     if (t) onTodoLog?.(`removed task ${t.text}`);
+  };
+
+  const sortedTodos = useMemo(() => {
+    const pinSet = new Set(pillarTodoPins);
+    return [...todos].sort((a, b) => {
+      const aPinned = pinSet.has(a.id);
+      const bPinned = pinSet.has(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      if (aPinned && bPinned) {
+        const aIdx = pillarTodoPins.indexOf(a.id);
+        const bIdx = pillarTodoPins.indexOf(b.id);
+        return aIdx - bIdx;
+      }
+      return 0;
+    });
+  }, [todos, pillarTodoPins]);
+
+  const toggleTodoFocus = (id: string) => {
+    if (!onSetPillarTodoPins) return;
+    const isFocused = pillarTodoPins.includes(id);
+    if (isFocused) {
+      onSetPillarTodoPins((prev) => prev.filter((x) => x !== id));
+    } else if (pillarTodoPins.length >= MAX_PILLAR_TODO_PINS) {
+      onShowPinnedLimitToast?.();
+    } else {
+      onSetPillarTodoPins((prev) => [...prev.filter((x) => x !== id), id]);
+    }
   };
 
   const setTodoUrl = (id: string, url: string | undefined) => {
@@ -331,13 +368,17 @@ export function Pillar({
             />
           </div>
           <div className="min-w-0 space-y-1">
-            {todos.length === 0 ? (
+            {sortedTodos.length === 0 ? (
               <div className="text-xs text-zinc-500">No tasks yet</div>
             ) : (
-              todos.map((t) => (
+              sortedTodos.map((t) => {
+                const isFocused = pillarTodoPins.includes(t.id);
+                const focusRank = isFocused ? pillarTodoPins.indexOf(t.id) + 1 : undefined;
+                return (
                 <div
                   key={t.id}
-                  className={`shelf-todo-item group relative min-w-0 rounded-xl px-2 py-1.5 hover:bg-white/5 ${t.blockStatus === "blocked" ? "shelf-todo-item--blocked italic opacity-60" : ""}`}
+                  className={`shelf-todo-item group relative min-w-0 rounded-xl px-2 py-1.5 hover:bg-white/5 ${t.blockStatus === "blocked" ? "shelf-todo-item--blocked italic opacity-60" : ""} ${isFocused ? "shelf-todo-item--focused" : ""}`}
+                  data-focus-rank={focusRank}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     setNotePopover({ id: t.id, x: e.clientX, y: e.clientY });
@@ -406,7 +447,8 @@ export function Pillar({
                     </div>
                   )}
                 </div>
-              ))
+              );
+              })
             )}
           </div>
         </div>
@@ -517,8 +559,20 @@ export function Pillar({
               top: Math.max(8, Math.min(notePopover.y, window.innerHeight - 180)),
             }}
           >
-            <div className="shelf-note-popover-header border-b border-white/10 px-2 py-1.5 text-[10px] text-zinc-500">
-              Note: {t.text}
+            <div className="shelf-note-popover-header flex items-center justify-between gap-2 border-b border-white/10 px-2 py-1.5 text-[10px] text-zinc-500">
+              <span className="min-w-0 truncate">Note: {t.text}</span>
+              {onSetPillarTodoPins && (
+                <label className="flex shrink-0 items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={pillarTodoPins.includes(t.id)}
+                    onChange={() => toggleTodoFocus(t.id)}
+                    className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 text-emerald-500 focus:ring-emerald-400/50"
+                    aria-label="Focus task"
+                  />
+                  <span className="text-[9px] text-zinc-500">Focus</span>
+                </label>
+              )}
             </div>
             <div className="shelf-note-popover-body space-y-2 px-2 py-2">
               <Input

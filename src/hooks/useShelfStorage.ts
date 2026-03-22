@@ -40,6 +40,8 @@ const THEME_KEY = "shelf-theme";
 const BOOKMARK_SIZE_KEY = "bookmark-size";
 const VISUAL_FLOW_KEY = "shelf-visual-flow";
 const LLM_CONSOLE_URL_KEY = "shelf-llm-console-url";
+const SHOW_BOTH_NAV_BUTTONS_KEY = "shelf-show-both-nav-buttons";
+const PILLAR_TODO_PINS_KEY = "shelf-pillar-todo-pins";
 
 const DEFAULT_PROMPTS: ShelfPromptMap = {
   hacker: {
@@ -158,6 +160,8 @@ export function useShelfStorage() {
   const [bookmarkSize, setBookmarkSizeState] = useState<BookmarkSize>("normal");
   const [visualFlow, setVisualFlowState] = useState<VisualFlowData>({});
   const [llmConsoleUrl, setLlmConsoleUrlState] = useState("https://example.org");
+  const [showBothNavButtons, setShowBothNavButtons] = useState(false);
+  const [pillarTodoPins, setPillarTodoPinsState] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
 
   const load = useCallback(() => {
@@ -190,6 +194,8 @@ export function useShelfStorage() {
         BOOKMARK_SIZE_KEY,
         VISUAL_FLOW_KEY,
         LLM_CONSOLE_URL_KEY,
+        SHOW_BOTH_NAV_BUTTONS_KEY,
+        PILLAR_TODO_PINS_KEY,
       ],
       (result: { [key: string]: unknown }) => {
       setLayout(Array.isArray(result[LAYOUT_KEY]) ? (result[LAYOUT_KEY] as ShelfLayoutItem[]) : []);
@@ -307,6 +313,13 @@ export function useShelfStorage() {
       if (typeof rawUrl === "string" && rawUrl.trim()) {
         setLlmConsoleUrlState(rawUrl.trim());
       }
+      setShowBothNavButtons(result[SHOW_BOTH_NAV_BUTTONS_KEY] === true);
+      const rawPins = result[PILLAR_TODO_PINS_KEY];
+      setPillarTodoPinsState(
+        Array.isArray(rawPins)
+          ? (rawPins as unknown[]).filter((id): id is string => typeof id === "string").slice(0, 6)
+          : []
+      );
       const vf = result[VISUAL_FLOW_KEY];
       if (vf && typeof vf === "object" && !Array.isArray(vf)) {
         const raw = vf as Record<string, unknown>;
@@ -544,6 +557,20 @@ export function useShelfStorage() {
     getStorage()?.set({ [LLM_CONSOLE_URL_KEY]: url });
   }, []);
 
+  const setShowBothNavButtonsState = useCallback((next: boolean) => {
+    setShowBothNavButtons(next);
+    getStorage()?.set({ [SHOW_BOTH_NAV_BUTTONS_KEY]: next });
+  }, []);
+
+  const setPillarTodoPins = useCallback((next: string[] | ((prev: string[]) => string[])) => {
+    setPillarTodoPinsState((prev) => {
+      const list = typeof next === "function" ? next(prev) : next;
+      const normalized = list.filter((id) => typeof id === "string").slice(0, 6);
+      getStorage()?.set({ [PILLAR_TODO_PINS_KEY]: normalized });
+      return normalized;
+    });
+  }, []);
+
   const setPromptRowsState = useCallback((next: 1 | 2) => {
     setPromptRows(next);
     getStorage()?.set({ [PROMPT_ROWS_KEY]: next });
@@ -659,11 +686,14 @@ export function useShelfStorage() {
       promptRows,
       hiddenFolderIds,
       bookmarkOverrides,
+      bookmarkViews,
       bookmarkSize,
       visualFlow,
       llmConsoleUrl,
+      showBothNavButtons,
+      pillarTodoPins,
     };
-  }, [bookmarkOverrides, bookmarkSize, colors, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, theme, visualFlow]);
+  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, colors, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -686,10 +716,26 @@ export function useShelfStorage() {
     if (Array.isArray(backup.pillarTodos)) setPillarTodos(backup.pillarTodos);
     if (Array.isArray(backup.hiddenFolderIds)) setHiddenFolderIds(backup.hiddenFolderIds);
     if (backup.bookmarkOverrides && typeof backup.bookmarkOverrides === "object") setBookmarkOverrides(backup.bookmarkOverrides);
+    if (backup.bookmarkViews && typeof backup.bookmarkViews === "object" && !Array.isArray(backup.bookmarkViews)) {
+      const raw = backup.bookmarkViews as Record<string, { expanded?: boolean }>;
+      const next: ShelfBookmarkViewMap = {};
+      for (const [id, v] of Object.entries(raw)) {
+        if (id && v && typeof v === "object") {
+          next[id] = { expanded: Boolean(v.expanded) };
+        }
+      }
+      setBookmarkViews(next);
+    }
     if (backup.bookmarkSize === "senior") setBookmarkSizeState("senior");
     if (backup.visualFlow && typeof backup.visualFlow === "object") setVisualFlowState(backup.visualFlow);
     if (typeof backup.llmConsoleUrl === "string" && backup.llmConsoleUrl.trim()) {
       setLlmConsoleUrlState(backup.llmConsoleUrl.trim());
+    }
+    if (typeof backup.showBothNavButtons === "boolean") setShowBothNavButtons(backup.showBothNavButtons);
+    if (Array.isArray(backup.pillarTodoPins)) {
+      setPillarTodoPinsState(
+        (backup.pillarTodoPins as unknown[]).filter((id): id is string => typeof id === "string").slice(0, 6)
+      );
     }
 
     getStorage()?.set({
@@ -714,11 +760,14 @@ export function useShelfStorage() {
       [HIDDEN_FOLDERS_KEY]: Array.isArray(backup.hiddenFolderIds) ? backup.hiddenFolderIds : hiddenFolderIds,
       [THEME_KEY]: backup.theme ?? theme,
       [BOOKMARK_OVERRIDES_KEY]: backup.bookmarkOverrides ?? bookmarkOverrides,
+      [BOOKMARK_VIEW_KEY]: backup.bookmarkViews && typeof backup.bookmarkViews === "object" ? backup.bookmarkViews : bookmarkViews,
       [BOOKMARK_SIZE_KEY]: backup.bookmarkSize ?? bookmarkSize,
       [VISUAL_FLOW_KEY]: backup.visualFlow ?? visualFlow,
       [LLM_CONSOLE_URL_KEY]: typeof backup.llmConsoleUrl === "string" && backup.llmConsoleUrl.trim() ? backup.llmConsoleUrl.trim() : llmConsoleUrl,
+      [SHOW_BOTH_NAV_BUTTONS_KEY]: typeof backup.showBothNavButtons === "boolean" ? backup.showBothNavButtons : showBothNavButtons,
+      [PILLAR_TODO_PINS_KEY]: Array.isArray(backup.pillarTodoPins) ? backup.pillarTodoPins.slice(0, 6) : pillarTodoPins,
     });
-  }, [bookmarkOverrides, bookmarkSize, colors, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, pillarPins, pillarTodos, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, theme, visualFlow]);
+  }, [bookmarkOverrides, bookmarkSize, colors, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow]);
 
   return {
     layout,
@@ -735,6 +784,8 @@ export function useShelfStorage() {
     pillarPins,
     pillarTodos,
     setPillarTodos: setPillarTodosState,
+    pillarTodoPins,
+    setPillarTodoPins,
     obsidianLog,
     setObsidianLogConfig,
     logToObsidian,
@@ -773,6 +824,8 @@ export function useShelfStorage() {
     setVisualFlow,
     llmConsoleUrl,
     setLlmConsoleUrl,
+    showBothNavButtons,
+    setShowBothNavButtons: setShowBothNavButtonsState,
     exportBackup,
     importBackup,
     reload: load,

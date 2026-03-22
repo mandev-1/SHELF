@@ -68,17 +68,21 @@ function App() {
     pillarPins,
     setPillarPins,
     setPillarPinOverride,
+    pillarTodoPins,
+    setPillarTodoPins,
     setPillarTodos,
     obsidianLog,
     logToObsidian,
     appendTaskLog,
     llmConsoleUrl,
+    showBothNavButtons,
   } = useShelfStorage();
   const [editingName, setEditingName] = useState(false);
   const [pendingEditPromptId, setPendingEditPromptId] = useState<string | null>(null);
   const [celebration, setCelebration] = useState<string | null>(null);
   const celebrationTimerRef = useRef<number | null>(null);
   const [addTaskToast, setAddTaskToast] = useState(false);
+  const [pinnedLimitToast, setPinnedLimitToast] = useState(false);
   const [viewSlideDir, setViewSlideDir] = useState<"left" | "right" | null>(null);
 
   const showTaskCelebration = useCallback(() => {
@@ -285,6 +289,12 @@ function App() {
         onSetPinned={setPillarPins}
         onSetPinOverride={setPillarPinOverride}
         todos={pillarTodos}
+        pillarTodoPins={pillarTodoPins}
+        onSetPillarTodoPins={setPillarTodoPins}
+        onShowPinnedLimitToast={() => {
+          setPinnedLimitToast(true);
+          window.setTimeout(() => setPinnedLimitToast(false), 2500);
+        }}
         onSetTodos={setPillarTodos}
         onTodoLog={(entry) => {
           const time = new Date().toTimeString().slice(0, 5);
@@ -350,29 +360,74 @@ function App() {
                 </SearchField.Group>
               </SearchField>
             </Surface>
-            <button
-              type="button"
-              onClick={() => {
-                if (dashboardView !== "shelf") {
-                  setViewSlideDir("right");
-                  setDashboardView("shelf");
-                } else if (lastTool === "llm-console") {
-                  openLLMConsoleOverlay(llmConsoleUrl);
-                } else {
-                  setViewSlideDir("left");
-                  setDashboardView(lastTool);
-                }
-              }}
-              className="shrink-0 rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20"
-            >
-              {dashboardView !== "shelf"
-                ? "Back to Shelf"
-                : lastTool === "visual-flow"
-                  ? "Visual Flow of Action"
-                  : lastTool === "llm-console"
-                    ? "Open LLM Console"
-                    : "Open Dashboard"}
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              {showBothNavButtons ? (
+                <>
+                  {dashboardView !== "shelf" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewSlideDir("right");
+                        setDashboardView("shelf");
+                      }}
+                      className="rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20"
+                    >
+                      Back to Shelf
+                    </button>
+                  )}
+                  {dashboardView !== "error" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLastTool("error");
+                        setViewSlideDir("left");
+                        setDashboardView("error");
+                      }}
+                      className="rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20"
+                    >
+                      Go to Dashboard
+                    </button>
+                  )}
+                  {dashboardView !== "visual-flow" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLastTool("visual-flow");
+                        setViewSlideDir("left");
+                        setDashboardView("visual-flow");
+                      }}
+                      className="rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20"
+                    >
+                      Visual Flow
+                    </button>
+                  )}
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (dashboardView !== "shelf") {
+                      setViewSlideDir("right");
+                      setDashboardView("shelf");
+                    } else if (lastTool === "llm-console") {
+                      openLLMConsoleOverlay(llmConsoleUrl);
+                    } else {
+                      setViewSlideDir("left");
+                      setDashboardView(lastTool);
+                    }
+                  }}
+                  className="rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20"
+                >
+                  {dashboardView !== "shelf"
+                    ? "Back to Shelf"
+                    : lastTool === "visual-flow"
+                      ? "Visual Flow of Action"
+                      : lastTool === "llm-console"
+                        ? "Open LLM Console"
+                        : "Open Dashboard"}
+                </button>
+              )}
+            </div>
           </div>
         </header>
 
@@ -534,6 +589,17 @@ function App() {
         >
           <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/15 px-4 py-3 text-sm font-medium text-emerald-100 shadow-[0_0_20px_rgba(16,185,129,0.15)]">
             This task was added to your To-Do list.
+          </div>
+        </div>
+      )}
+      {pinnedLimitToast && (
+        <div
+          className="pointer-events-none fixed right-6 bottom-6 z-[300] animate-[toast-enter_180ms_ease-out]"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="rounded-2xl border border-amber-400/25 bg-amber-500/15 px-4 py-3 text-sm font-medium text-amber-100 shadow-[0_0_20px_rgba(245,158,11,0.15)]">
+            Please optimize your current task allocation before adding further priorities.
           </div>
         </div>
       )}

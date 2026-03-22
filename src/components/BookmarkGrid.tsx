@@ -645,7 +645,7 @@ function FolderCard({
                   }}
                   className={`cursor-move ${
                     (bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id || bookmarkSize === "senior")
-                      ? "rounded-xl border border-emerald-400/15 bg-black/25 p-3"
+                      ? "shelf-bookmark-expanded rounded-xl border border-emerald-400/15 bg-black/25 p-3"
                       : ""
                   }`}
                 >
@@ -876,6 +876,8 @@ export function BookmarkGrid() {
     showGoals,
     showTodoDates,
     setShowTodoDates,
+    showBothNavButtons,
+    setShowBothNavButtons,
     gridLocked,
     ready,
     saveLayout,
@@ -1086,9 +1088,10 @@ export function BookmarkGrid() {
           onClick={() => setShowSettings(false)}
         >
           <div
-            className={`absolute bottom-20 right-4 rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)] ${showObsidianConfig || showHiddenFolders ? "w-72" : "w-64"}`}
+            className={`absolute bottom-20 right-4 flex max-h-[calc(100vh-6rem)] flex-col rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)] ${showObsidianConfig || showHiddenFolders ? "w-72" : "w-64"}`}
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
               <div className="mb-1.5 text-xs font-medium text-emerald-200">Theme</div>
               <div className="flex flex-wrap gap-1.5">
@@ -1182,6 +1185,14 @@ export function BookmarkGrid() {
             >
               <span>Show dates on todos</span>
               <span className="text-xs text-emerald-300/60">{showTodoDates ? "On" : "Off"}</span>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => setShowBothNavButtons(!showBothNavButtons)}
+            >
+              <span>Show both Dashboard and Visual Flow buttons</span>
+              <span className="text-xs text-emerald-300/60">{showBothNavButtons ? "On" : "Off"}</span>
             </button>
             <div className="my-1.5 border-t border-white/10" />
             <div className="rounded-xl border border-white/10 bg-white/5 p-2">
@@ -1366,6 +1377,7 @@ export function BookmarkGrid() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       )}

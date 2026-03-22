@@ -128,9 +128,12 @@ export interface ShelfBackupData {
   promptRows: 1 | 2;
   hiddenFolderIds?: string[];
   bookmarkOverrides?: ShelfBookmarkOverrides;
+  bookmarkViews?: ShelfBookmarkViewMap;
   bookmarkSize?: BookmarkSize;
   visualFlow?: VisualFlowData;
   llmConsoleUrl?: string;
+  showBothNavButtons?: boolean;
+  pillarTodoPins?: string[];
 }
 
 export const ACCENT_COLORS = [
