@@ -2,6 +2,26 @@
 @import "@heroui/styles";
 @import "gridstack/dist/gridstack.min.css";
 
+/* Low performance landing: faint cursive quote rotator */
+.shelf-low-perf-quote {
+  font-family: "Segoe Script", "Snell Roundhand", "Apple Chancery", "Brush Script MT", "Lucida Handwriting", cursive;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--shelf-muted);
+  opacity: 0.38;
+  letter-spacing: 0.03em;
+  line-height: 1.55;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+[data-theme="day"] .shelf-low-perf-quote,
+[data-theme="sap"] .shelf-low-perf-quote {
+  opacity: 0.45;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.shelf-low-perf-quote__fade {
+  transition: opacity 0.7s ease-in-out;
+}
+
 :root {
   --font-sans: "DM Sans", system-ui, sans-serif;
   --shelf-bg: linear-gradient(to bottom right, #09090b, #18181b, #09090b);

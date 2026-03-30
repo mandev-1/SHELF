@@ -43,6 +43,7 @@ const LLM_CONSOLE_URL_KEY = "shelf-llm-console-url";
 const SHOW_BOTH_NAV_BUTTONS_KEY = "shelf-show-both-nav-buttons";
 const PILLAR_TODO_PINS_KEY = "shelf-pillar-todo-pins";
 const FOCUS_DESYNCED_KEY = "shelf-focus-desynced";
+export const LOW_PERFORMANCE_MODE_KEY = "shelf-low-performance-mode";
 
 const DEFAULT_PROMPTS: ShelfPromptMap = {
   hacker: {
@@ -164,6 +165,7 @@ export function useShelfStorage() {
   const [showBothNavButtons, setShowBothNavButtons] = useState(false);
   const [pillarTodoPins, setPillarTodoPinsState] = useState<string[]>([]);
   const [focusDesynced, setFocusDesyncedState] = useState(false);
+  const [lowPerformanceMode, setLowPerformanceModeState] = useState(false);
   const [ready, setReady] = useState(false);
 
   const load = useCallback(() => {
@@ -199,6 +201,7 @@ export function useShelfStorage() {
         SHOW_BOTH_NAV_BUTTONS_KEY,
         PILLAR_TODO_PINS_KEY,
         FOCUS_DESYNCED_KEY,
+        LOW_PERFORMANCE_MODE_KEY,
       ],
       (result: { [key: string]: unknown }) => {
       setLayout(Array.isArray(result[LAYOUT_KEY]) ? (result[LAYOUT_KEY] as ShelfLayoutItem[]) : []);
@@ -325,6 +328,7 @@ export function useShelfStorage() {
           : []
       );
       setFocusDesyncedState(result[FOCUS_DESYNCED_KEY] === true);
+      setLowPerformanceModeState(result[LOW_PERFORMANCE_MODE_KEY] === true);
       const vf = result[VISUAL_FLOW_KEY];
       if (vf && typeof vf === "object" && !Array.isArray(vf)) {
         const raw = vf as Record<string, unknown>;
@@ -583,6 +587,11 @@ export function useShelfStorage() {
     getStorage()?.set({ [FOCUS_DESYNCED_KEY]: next });
   }, []);
 
+  const setLowPerformanceMode = useCallback((next: boolean) => {
+    setLowPerformanceModeState(next);
+    getStorage()?.set({ [LOW_PERFORMANCE_MODE_KEY]: next });
+  }, []);
+
   const setPromptRowsState = useCallback((next: 1 | 2) => {
     setPromptRows(next);
     getStorage()?.set({ [PROMPT_ROWS_KEY]: next });
@@ -705,8 +714,9 @@ export function useShelfStorage() {
       showBothNavButtons,
       pillarTodoPins,
       focusDesynced,
+      lowPerformanceMode,
     };
-  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow]);
+  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -751,6 +761,7 @@ export function useShelfStorage() {
       );
     }
     if (typeof backup.focusDesynced === "boolean") setFocusDesyncedState(backup.focusDesynced);
+    if (typeof backup.lowPerformanceMode === "boolean") setLowPerformanceModeState(backup.lowPerformanceMode);
 
     getStorage()?.set({
       [LAYOUT_KEY]: backup.layout ?? layout,
@@ -781,8 +792,9 @@ export function useShelfStorage() {
       [SHOW_BOTH_NAV_BUTTONS_KEY]: typeof backup.showBothNavButtons === "boolean" ? backup.showBothNavButtons : showBothNavButtons,
       [PILLAR_TODO_PINS_KEY]: Array.isArray(backup.pillarTodoPins) ? backup.pillarTodoPins.slice(0, 6) : pillarTodoPins,
       [FOCUS_DESYNCED_KEY]: typeof backup.focusDesynced === "boolean" ? backup.focusDesynced : focusDesynced,
+      [LOW_PERFORMANCE_MODE_KEY]: typeof backup.lowPerformanceMode === "boolean" ? backup.lowPerformanceMode : lowPerformanceMode,
     });
-  }, [bookmarkOverrides, bookmarkSize, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow]);
+  }, [bookmarkOverrides, bookmarkSize, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow]);
 
   return {
     layout,
@@ -803,6 +815,8 @@ export function useShelfStorage() {
     setPillarTodoPins,
     focusDesynced,
     setFocusDesynced,
+    lowPerformanceMode,
+    setLowPerformanceMode,
     obsidianLog,
     setObsidianLogConfig,
     logToObsidian,

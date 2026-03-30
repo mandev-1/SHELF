@@ -138,6 +138,7 @@ export interface ShelfBackupData {
   showBothNavButtons?: boolean;
   pillarTodoPins?: string[];
   focusDesynced?: boolean;
+  lowPerformanceMode?: boolean;
 }
 
 export const ACCENT_COLORS = [

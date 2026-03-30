@@ -932,6 +932,8 @@ export function BookmarkGrid() {
     setHiddenFolders,
     focusDesynced,
     setFocusDesynced,
+    lowPerformanceMode,
+    setLowPerformanceMode,
   } = useShelfStorage();
   const gridRef = useRef<HTMLDivElement>(null);
   const gridInstanceRef = useRef<GridStack | null>(null);
@@ -1162,6 +1164,16 @@ export function BookmarkGrid() {
               <span>De-Sync focus of todos in Pillar and Drawer</span>
               <span className={`text-xs ${focusDesynced ? "text-emerald-300" : "text-zinc-500"}`}>
                 {focusDesynced ? "On" : "Off"}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => setLowPerformanceMode(!lowPerformanceMode)}
+            >
+              <span className="pr-2">Low performance start (search + pins only on new tab)</span>
+              <span className={`text-xs shrink-0 ${lowPerformanceMode ? "text-emerald-300" : "text-zinc-500"}`}>
+                {lowPerformanceMode ? "On" : "Off"}
               </span>
             </button>
             <button
