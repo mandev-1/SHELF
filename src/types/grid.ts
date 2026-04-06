@@ -111,6 +111,9 @@ export type VisualFlowEdge = {
 export interface VisualFlowData {
   nodePositions?: Record<string, { x: number; y: number }>;
   edges?: VisualFlowEdge[];
+  /** Second canvas layer — same item shape as pillar todos, separate from main flow */
+  grazelandNodePositions?: Record<string, { x: number; y: number }>;
+  grazelandEdges?: VisualFlowEdge[];
 }
 
 export interface ShelfBackupData {
@@ -134,6 +137,8 @@ export interface ShelfBackupData {
   bookmarkViews?: ShelfBookmarkViewMap;
   bookmarkSize?: BookmarkSize;
   visualFlow?: VisualFlowData;
+  /** Items for the Grazeland plane only (same fields as pillar todos; not shown on main canvas or Pillar) */
+  grazelandItems?: ShelfPillarTodoItem[];
   llmConsoleUrl?: string;
   showBothNavButtons?: boolean;
   pillarTodoPins?: string[];

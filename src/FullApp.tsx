@@ -10,6 +10,7 @@ import { Pillar } from "./components/Pillar";
 import { ErrorDashboardPanel } from "./components/ErrorDashboardPanel";
 import { VisualFlowPanel } from "./components/VisualFlowPanel";
 import { pickCelebrationPhrase } from "./utils/celebration";
+import type { ShelfPillarTodoItem } from "./types/grid";
 
 const DASHBOARD_OPEN_KEY = "shelf-dashboard-view";
 const DASHBOARD_LAST_TOOL_KEY = "shelf-dashboard-last-tool";
@@ -71,6 +72,8 @@ export default function FullApp() {
     pillarTodoPins,
     setPillarTodoPins,
     focusDesynced,
+    grazelandItems,
+    setGrazelandItems,
     setPillarTodos,
     obsidianLog,
     logToObsidian,
@@ -94,6 +97,35 @@ export default function FullApp() {
       celebrationTimerRef.current = null;
     }, 2500);
   }, []);
+
+  const handleVisualFlowEditTodo = useCallback(
+    (id: string, updates: Partial<ShelfPillarTodoItem>) => {
+      setPillarTodos((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+    },
+    [setPillarTodos]
+  );
+
+  const handleVisualFlowDeleteTodo = useCallback(
+    (id: string) => {
+      setPillarTodos((prev) => prev.filter((t) => t.id !== id));
+      setPillarTodoPins((prev) => prev.filter((x) => x !== id));
+    },
+    [setPillarTodos, setPillarTodoPins]
+  );
+
+  const handleVisualFlowEditGrazeland = useCallback(
+    (id: string, updates: Partial<ShelfPillarTodoItem>) => {
+      setGrazelandItems((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+    },
+    [setGrazelandItems]
+  );
+
+  const handleVisualFlowDeleteGrazeland = useCallback(
+    (id: string) => {
+      setGrazelandItems((prev) => prev.filter((t) => t.id !== id));
+    },
+    [setGrazelandItems]
+  );
   const { results: searchResults, loading: searchLoading } =
     useBookmarksSearch(searchQuery);
   const { tree } = useBookmarksTree();
@@ -486,21 +518,21 @@ export default function FullApp() {
             <div className="max-w-[1640px] mx-auto">
               <VisualFlowPanel
                 todos={pillarTodos}
+                grazelandItems={grazelandItems}
                 showTodoDates={showTodoDates}
                 visualFlow={visualFlow}
                 onVisualFlowChange={setVisualFlow}
                 focusDesynced={focusDesynced}
                 setPillarTodoPins={setPillarTodoPins}
-                onEditTodo={(id, updates) =>
-                  setPillarTodos((prev) =>
-                    prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
-                  )
-                }
-                onDeleteTodo={(id) =>
-                  setPillarTodos((prev) => prev.filter((t) => t.id !== id))
-                }
+                onEditTodo={handleVisualFlowEditTodo}
+                onDeleteTodo={handleVisualFlowDeleteTodo}
                 onAddTodo={(todo) =>
                   setPillarTodos((prev) => [...prev, todo])
+                }
+                onEditGrazelandItem={handleVisualFlowEditGrazeland}
+                onDeleteGrazelandItem={handleVisualFlowDeleteGrazeland}
+                onAddGrazelandItem={(todo) =>
+                  setGrazelandItems((prev) => [...prev, todo])
                 }
                 onTaskCompleted={showTaskCelebration}
                 onTodoLog={(entry) => {

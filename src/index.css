@@ -1030,6 +1030,32 @@ body {
   }
 }
 
+/* Visual Flow: task completed — gentle exit before removal */
+@keyframes shelf-flow-node-complete {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+  55% {
+    opacity: 0.85;
+    transform: scale(0.98) translateY(4px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.92) translateY(14px);
+    filter: blur(3px);
+  }
+}
+.react-flow__node.shelf-flow-node-exiting {
+  pointer-events: none;
+  z-index: 0 !important;
+}
+.react-flow__node.shelf-flow-node-exiting .shelf-flow-node {
+  animation: shelf-flow-node-complete 0.72s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  border-color: rgba(52, 211, 153, 0.25);
+}
+
 /* Visual Flow nodes: rounded shape with visible stroke */
 .shelf-flow-node {
   position: relative;

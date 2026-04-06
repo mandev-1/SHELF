@@ -39,6 +39,7 @@ const PROMPT_ROWS_KEY = "prompt-rows";
 const THEME_KEY = "shelf-theme";
 const BOOKMARK_SIZE_KEY = "bookmark-size";
 const VISUAL_FLOW_KEY = "shelf-visual-flow";
+const GRAZELAND_ITEMS_KEY = "shelf-grazeland-items";
 const LLM_CONSOLE_URL_KEY = "shelf-llm-console-url";
 const SHOW_BOTH_NAV_BUTTONS_KEY = "shelf-show-both-nav-buttons";
 const PILLAR_TODO_PINS_KEY = "shelf-pillar-todo-pins";
@@ -161,6 +162,7 @@ export function useShelfStorage() {
   const [timeTick, setTimeTick] = useState(() => Date.now());
   const [bookmarkSize, setBookmarkSizeState] = useState<BookmarkSize>("normal");
   const [visualFlow, setVisualFlowState] = useState<VisualFlowData>({});
+  const [grazelandItems, setGrazelandItemsState] = useState<ShelfPillarTodoItem[]>([]);
   const [llmConsoleUrl, setLlmConsoleUrlState] = useState("https://example.org");
   const [showBothNavButtons, setShowBothNavButtons] = useState(false);
   const [pillarTodoPins, setPillarTodoPinsState] = useState<string[]>([]);
@@ -197,6 +199,7 @@ export function useShelfStorage() {
         THEME_KEY,
         BOOKMARK_SIZE_KEY,
         VISUAL_FLOW_KEY,
+        GRAZELAND_ITEMS_KEY,
         LLM_CONSOLE_URL_KEY,
         SHOW_BOTH_NAV_BUTTONS_KEY,
         PILLAR_TODO_PINS_KEY,
@@ -289,6 +292,37 @@ export function useShelfStorage() {
             focused: Boolean(x.focused),
           }));
       });
+      setGrazelandItemsState(() => {
+        const raw = result[GRAZELAND_ITEMS_KEY];
+        if (!Array.isArray(raw)) return [];
+        return raw
+          .filter((x: any) => x && typeof x === "object" && typeof x.id === "string" && typeof x.text === "string")
+          .map((x: any) => ({
+            id: x.id,
+            text: String(x.text),
+            done: Boolean(x.done),
+            url: typeof x.url === "string" && x.url.trim() ? x.url.trim() : undefined,
+            note: typeof x.note === "string" ? x.note : undefined,
+            subtitle: typeof x.subtitle === "string" ? x.subtitle : undefined,
+            tag: typeof x.tag === "string" ? x.tag : undefined,
+            blockStatus:
+              x.blockStatus === "blocked" || x.blockStatus === "ready" || x.blockStatus === "abeyed"
+                ? (x.blockStatus as ShelfTodoBlockStatus)
+                : undefined,
+            date: typeof x.date === "string" && x.date.trim() ? x.date.trim() : undefined,
+            handleConfig:
+              x.handleConfig === "horizontal" ||
+              x.handleConfig === "vertical" ||
+              x.handleConfig === "top" ||
+              x.handleConfig === "bottom" ||
+              x.handleConfig === "left" ||
+              x.handleConfig === "right" ||
+              x.handleConfig === "hidden"
+                ? (x.handleConfig as ShelfTodoHandleConfig)
+                : undefined,
+            focused: Boolean(x.focused),
+          }));
+      });
       const rawObs = result[OBSIDIAN_LOG_KEY];
       if (rawObs && typeof rawObs === "object" && !Array.isArray(rawObs)) {
         const o = rawObs as Record<string, unknown>;
@@ -332,10 +366,9 @@ export function useShelfStorage() {
       const vf = result[VISUAL_FLOW_KEY];
       if (vf && typeof vf === "object" && !Array.isArray(vf)) {
         const raw = vf as Record<string, unknown>;
-        setVisualFlowState({
-          nodePositions: raw.nodePositions && typeof raw.nodePositions === "object" ? (raw.nodePositions as Record<string, { x: number; y: number }>) : undefined,
-          edges: Array.isArray(raw.edges)
-            ? (raw.edges as unknown[])
+        const parseEdges = (arr: unknown) =>
+          Array.isArray(arr)
+            ? (arr as unknown[])
                 .filter((e: unknown) => e && typeof e === "object" && typeof (e as any).source === "string" && typeof (e as any).target === "string")
                 .map((e: any) => ({
                   source: e.source,
@@ -344,7 +377,15 @@ export function useShelfStorage() {
                   ...(e.doubled && { doubled: true }),
                   ...(e.muted && { muted: true }),
                 }))
-            : undefined,
+            : undefined;
+        setVisualFlowState({
+          nodePositions: raw.nodePositions && typeof raw.nodePositions === "object" ? (raw.nodePositions as Record<string, { x: number; y: number }>) : undefined,
+          edges: parseEdges(raw.edges),
+          grazelandNodePositions:
+            raw.grazelandNodePositions && typeof raw.grazelandNodePositions === "object"
+              ? (raw.grazelandNodePositions as Record<string, { x: number; y: number }>)
+              : undefined,
+          grazelandEdges: parseEdges(raw.grazelandEdges),
         });
       }
       setReady(true);
@@ -508,6 +549,39 @@ export function useShelfStorage() {
         focused: Boolean(t.focused),
       }));
       getStorage()?.set({ [PILLAR_TODOS_KEY]: normalized });
+      return normalized;
+    });
+  }, []);
+
+  const setGrazelandItems = useCallback((next: ShelfPillarTodoItem[] | ((prev: ShelfPillarTodoItem[]) => ShelfPillarTodoItem[])) => {
+    setGrazelandItemsState((prev) => {
+      const list = typeof next === "function" ? next(prev) : next;
+      const normalized = list.map((t) => ({
+        id: t.id,
+        text: t.text,
+        done: Boolean(t.done),
+        url: typeof t.url === "string" && t.url.trim() ? t.url.trim() : undefined,
+        note: typeof t.note === "string" ? t.note : undefined,
+        subtitle: typeof t.subtitle === "string" ? t.subtitle : undefined,
+        tag: typeof t.tag === "string" ? t.tag : undefined,
+        blockStatus:
+          t.blockStatus === "blocked" || t.blockStatus === "ready" || t.blockStatus === "abeyed"
+            ? t.blockStatus
+            : undefined,
+        date: typeof t.date === "string" && t.date.trim() ? t.date.trim() : undefined,
+        handleConfig:
+          t.handleConfig === "horizontal" ||
+          t.handleConfig === "vertical" ||
+          t.handleConfig === "top" ||
+          t.handleConfig === "bottom" ||
+          t.handleConfig === "left" ||
+          t.handleConfig === "right" ||
+          t.handleConfig === "hidden"
+            ? t.handleConfig
+            : undefined,
+        focused: Boolean(t.focused),
+      }));
+      getStorage()?.set({ [GRAZELAND_ITEMS_KEY]: normalized });
       return normalized;
     });
   }, []);
@@ -710,13 +784,14 @@ export function useShelfStorage() {
       bookmarkViews,
       bookmarkSize,
       visualFlow,
+      grazelandItems,
       llmConsoleUrl,
       showBothNavButtons,
       pillarTodoPins,
       focusDesynced,
       lowPerformanceMode,
     };
-  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow]);
+  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -751,6 +826,7 @@ export function useShelfStorage() {
     }
     if (backup.bookmarkSize === "senior") setBookmarkSizeState("senior");
     if (backup.visualFlow && typeof backup.visualFlow === "object") setVisualFlowState(backup.visualFlow);
+    if (Array.isArray(backup.grazelandItems)) setGrazelandItems(backup.grazelandItems as ShelfPillarTodoItem[]);
     if (typeof backup.llmConsoleUrl === "string" && backup.llmConsoleUrl.trim()) {
       setLlmConsoleUrlState(backup.llmConsoleUrl.trim());
     }
@@ -788,13 +864,14 @@ export function useShelfStorage() {
       [BOOKMARK_VIEW_KEY]: backup.bookmarkViews && typeof backup.bookmarkViews === "object" ? backup.bookmarkViews : bookmarkViews,
       [BOOKMARK_SIZE_KEY]: backup.bookmarkSize ?? bookmarkSize,
       [VISUAL_FLOW_KEY]: backup.visualFlow ?? visualFlow,
+      [GRAZELAND_ITEMS_KEY]: Array.isArray(backup.grazelandItems) ? backup.grazelandItems : grazelandItems,
       [LLM_CONSOLE_URL_KEY]: typeof backup.llmConsoleUrl === "string" && backup.llmConsoleUrl.trim() ? backup.llmConsoleUrl.trim() : llmConsoleUrl,
       [SHOW_BOTH_NAV_BUTTONS_KEY]: typeof backup.showBothNavButtons === "boolean" ? backup.showBothNavButtons : showBothNavButtons,
       [PILLAR_TODO_PINS_KEY]: Array.isArray(backup.pillarTodoPins) ? backup.pillarTodoPins.slice(0, 6) : pillarTodoPins,
       [FOCUS_DESYNCED_KEY]: typeof backup.focusDesynced === "boolean" ? backup.focusDesynced : focusDesynced,
       [LOW_PERFORMANCE_MODE_KEY]: typeof backup.lowPerformanceMode === "boolean" ? backup.lowPerformanceMode : lowPerformanceMode,
     });
-  }, [bookmarkOverrides, bookmarkSize, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow]);
+  }, [bookmarkOverrides, bookmarkSize, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setGrazelandItems]);
 
   return {
     layout,
@@ -853,6 +930,8 @@ export function useShelfStorage() {
     setBookmarkSize,
     visualFlow,
     setVisualFlow,
+    grazelandItems,
+    setGrazelandItems,
     llmConsoleUrl,
     setLlmConsoleUrl,
     showBothNavButtons,
