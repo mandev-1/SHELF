@@ -43,6 +43,12 @@ function buildReleaseDir(version) {
   cpSync(join(DIST, "index.html"), join(releaseDir, "index.html"));
   cpSync(join(DIST, "manifest.json"), join(releaseDir, "manifest.json"));
   cpSync(join(DIST, "assets"), join(releaseDir, "assets"), { recursive: true });
+  if (existsSync(join(DIST, "background.js"))) {
+    cpSync(join(DIST, "background.js"), join(releaseDir, "background.js"));
+  }
+  if (existsSync(join(DIST, "shelf-llm-overlay.js"))) {
+    cpSync(join(DIST, "shelf-llm-overlay.js"), join(releaseDir, "shelf-llm-overlay.js"));
+  }
   if (existsSync(join(DIST, "obsidian-setup.html"))) {
     cpSync(join(DIST, "obsidian-setup.html"), join(releaseDir, "obsidian-setup.html"));
   }

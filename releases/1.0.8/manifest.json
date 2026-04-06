@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "ShELF Bookmarks",
+  "version": "1.0.8",
+  "description": "Organize your bookmarks on every new tab.",
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "shelf-llm-overlay.js"
+      ],
+      "run_at": "document_end"
+    }
+  ],
+  "permissions": [
+    "bookmarks",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:27124/*",
+    "http://localhost:27124/*",
+    "https://127.0.0.1:27124/*",
+    "https://localhost:27124/*",
+    "<all_urls>"
+  ]
+}

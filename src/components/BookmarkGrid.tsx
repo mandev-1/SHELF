@@ -139,7 +139,9 @@ function FolderCard({
   const [draftLabel, setDraftLabel] = useState(label ?? getTitle(node));
   const [showMenu, setShowMenu] = useState(false);
   const [dropHint, setDropHint] = useState<{ overId: string; place: "before" | "after" } | null>(null);
+  const [isDropTarget, setIsDropTarget] = useState(false);
   const [bookmarkMenu, setBookmarkMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const folderRef = useRef<HTMLDivElement>(null);
   const [hoverExpandedId, setHoverExpandedId] = useState<string | null>(null);
   const bookmarkMenuOpen = bookmarkMenu !== null;
   const bookmarkMenuRef = useRef<HTMLDivElement | null>(null);
@@ -256,10 +258,29 @@ function FolderCard({
     setEditingLabel(false);
   };
 
+  const isBookmarkDrag = (dt: DataTransfer) =>
+    dt.types.includes("application/x-shelf-bookmark");
+
   return (
     <div
-      className="group grid-stack-item-content h-full flex flex-row rounded-xl border border-white/10 bg-white/5 overflow-hidden min-h-0"
-      onDragOver={(e) => e.preventDefault()}
+      ref={folderRef}
+      className={`group grid-stack-item-content h-full flex flex-row rounded-xl border overflow-hidden min-h-0 transition-all duration-150 ${
+        isDropTarget
+          ? "border-emerald-400/50 bg-emerald-500/15 shadow-[0_0_0_2px_rgba(16,185,129,0.25)]"
+          : "border-white/10 bg-white/5"
+      }`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (isBookmarkDrag(e.dataTransfer)) e.dataTransfer.dropEffect = "move";
+      }}
+      onDragEnter={(e) => {
+        if (isBookmarkDrag(e.dataTransfer)) setIsDropTarget(true);
+      }}
+      onDragLeave={(e) => {
+        const related = e.relatedTarget as Node | null;
+        if (related && folderRef.current?.contains(related)) return;
+        setIsDropTarget(false);
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -267,6 +288,7 @@ function FolderCard({
       }}
       onDrop={(e) => {
         e.preventDefault();
+        setIsDropTarget(false);
         const payload = readDragPayload(e.dataTransfer);
         if (!payload) return;
         if (payload.kind === "separator") {
@@ -551,11 +573,11 @@ function FolderCard({
                   className="cursor-move select-none"
                 >
                   {dropHint?.overId === item.sep.id && dropHint.place === "before" && (
-                    <div className="-mt-0.5 mb-1 h-0.5 w-full rounded bg-emerald-300/80 shadow-[0_0_18px_rgba(74,222,128,0.35)]" />
+                    <div className="shelf-drop-indicator -mt-0.5 mb-1" aria-hidden />
                   )}
                   <div className="my-2 h-px w-full bg-gradient-to-r from-transparent via-emerald-300/75 to-transparent" />
                   {dropHint?.overId === item.sep.id && dropHint.place === "after" && (
-                    <div className="mt-1 h-0.5 w-full rounded bg-emerald-300/80 shadow-[0_0_18px_rgba(74,222,128,0.35)]" />
+                    <div className="shelf-drop-indicator mt-1" aria-hidden />
                   )}
                 </div>
               ) : (
@@ -645,12 +667,12 @@ function FolderCard({
                   }}
                   className={`cursor-move ${
                     (bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id || bookmarkSize === "senior")
-                      ? "rounded-xl border border-emerald-400/15 bg-black/25 p-3"
+                      ? "shelf-bookmark-expanded rounded-xl border border-emerald-400/15 bg-black/25 p-3"
                       : ""
                   }`}
                 >
                   {dropHint?.overId === item.node.id && dropHint.place === "before" && (
-                    <div className="-mt-0.5 mb-1 h-0.5 w-full rounded bg-emerald-300/80 shadow-[0_0_18px_rgba(74,222,128,0.35)]" />
+                    <div className="shelf-drop-indicator -mt-0.5 mb-1" aria-hidden />
                   )}
                   <Link
                     href={item.node.url!}
@@ -696,7 +718,7 @@ function FolderCard({
                     </div>
                   </Link>
                   {dropHint?.overId === item.node.id && dropHint.place === "after" && (
-                    <div className="mt-1 h-0.5 w-full rounded bg-emerald-300/80 shadow-[0_0_18px_rgba(74,222,128,0.35)]" />
+                    <div className="shelf-drop-indicator mt-1" aria-hidden />
                   )}
                 </div>
               )
@@ -874,6 +896,10 @@ export function BookmarkGrid() {
     separators,
     goals,
     showGoals,
+    showTodoDates,
+    setShowTodoDates,
+    showBothNavButtons,
+    setShowBothNavButtons,
     gridLocked,
     ready,
     saveLayout,
@@ -904,6 +930,10 @@ export function BookmarkGrid() {
     clearTaskLog,
     hiddenFolderIds,
     setHiddenFolders,
+    focusDesynced,
+    setFocusDesynced,
+    lowPerformanceMode,
+    setLowPerformanceMode,
   } = useShelfStorage();
   const gridRef = useRef<HTMLDivElement>(null);
   const gridInstanceRef = useRef<GridStack | null>(null);
@@ -1084,9 +1114,10 @@ export function BookmarkGrid() {
           onClick={() => setShowSettings(false)}
         >
           <div
-            className={`absolute bottom-20 right-4 rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)] ${showObsidianConfig || showHiddenFolders ? "w-72" : "w-64"}`}
+            className={`absolute bottom-20 right-4 flex max-h-[calc(100vh-6rem)] flex-col rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)] ${showObsidianConfig || showHiddenFolders ? "w-72" : "w-64"}`}
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
               <div className="mb-1.5 text-xs font-medium text-emerald-200">Theme</div>
               <div className="flex flex-wrap gap-1.5">
@@ -1125,6 +1156,26 @@ export function BookmarkGrid() {
                 ))}
               </div>
             </div>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => setFocusDesynced(!focusDesynced)}
+            >
+              <span>De-Sync focus of todos in Pillar and Drawer</span>
+              <span className={`text-xs ${focusDesynced ? "text-emerald-300" : "text-zinc-500"}`}>
+                {focusDesynced ? "On" : "Off"}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => setLowPerformanceMode(!lowPerformanceMode)}
+            >
+              <span className="pr-2">Low performance start (search + pins only on new tab)</span>
+              <span className={`text-xs shrink-0 ${lowPerformanceMode ? "text-emerald-300" : "text-zinc-500"}`}>
+                {lowPerformanceMode ? "On" : "Off"}
+              </span>
+            </button>
             <button
               type="button"
               className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
@@ -1172,6 +1223,22 @@ export function BookmarkGrid() {
             >
               <span>Show Goal</span>
               <span className="text-xs text-emerald-300/60">{showGoals ? "On" : "Off"}</span>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => setShowTodoDates(!showTodoDates)}
+            >
+              <span>Show dates on todos</span>
+              <span className="text-xs text-emerald-300/60">{showTodoDates ? "On" : "Off"}</span>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => setShowBothNavButtons(!showBothNavButtons)}
+            >
+              <span>Show both Dashboard and Visual Flow buttons</span>
+              <span className="text-xs text-emerald-300/60">{showBothNavButtons ? "On" : "Off"}</span>
             </button>
             <div className="my-1.5 border-t border-white/10" />
             <div className="rounded-xl border border-white/10 bg-white/5 p-2">
@@ -1248,7 +1315,7 @@ export function BookmarkGrid() {
             )}
             <div className="rounded-xl border border-white/10 bg-white/5 p-2">
               <div className="mb-1.5 text-xs font-medium text-emerald-200">LLM Console URL</div>
-              <p className="mb-2 text-[10px] text-zinc-500">Embedded in LLM Console. Works best with local UIs (Ollama, LM Studio). Use &quot;Open in tab&quot; if blocked.</p>
+              <p className="mb-2 text-[10px] text-zinc-500">Opens in the current tab with Prompt Library overlay. Works with any URL (ChatGPT, Claude, Ollama, LM Studio, etc.).</p>
               <Input
                 variant="secondary"
                 value={llmConsoleUrl}
@@ -1356,6 +1423,7 @@ export function BookmarkGrid() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       )}

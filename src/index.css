@@ -2,6 +2,26 @@
 @import "@heroui/styles";
 @import "gridstack/dist/gridstack.min.css";
 
+/* Low performance landing: faint cursive quote rotator */
+.shelf-low-perf-quote {
+  font-family: "Segoe Script", "Snell Roundhand", "Apple Chancery", "Brush Script MT", "Lucida Handwriting", cursive;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--shelf-muted);
+  opacity: 0.38;
+  letter-spacing: 0.03em;
+  line-height: 1.55;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+[data-theme="day"] .shelf-low-perf-quote,
+[data-theme="sap"] .shelf-low-perf-quote {
+  opacity: 0.45;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.shelf-low-perf-quote__fade {
+  transition: opacity 0.7s ease-in-out;
+}
+
 :root {
   --font-sans: "DM Sans", system-ui, sans-serif;
   --shelf-bg: linear-gradient(to bottom right, #09090b, #18181b, #09090b);
@@ -28,15 +48,20 @@
 }
 
 [data-theme="sap"] {
-  --shelf-bg: linear-gradient(to bottom right, #f0f4f8, #e8eef5, #dee8f0);
+  --shelf-bg: linear-gradient(to bottom right, #e8eef5, #dee6f0, #d4dce8);
   --shelf-fg: #0a0a0a;
   --shelf-muted: #4a5568;
   --shelf-accent: #0070f2;
   --shelf-accent-hover: #1b90ff;
   --shelf-border: rgba(0, 112, 242, 0.15);
-  --shelf-card: rgba(255, 255, 255, 0.9);
-  --shelf-scroll-track: rgb(226 232 240);
+  --shelf-card: rgba(232, 238, 247, 0.95);
+  --shelf-scroll-track: rgb(212 220 232);
   --shelf-scroll-thumb: rgb(148 163 184);
+}
+
+/* SAP on Windows: main content area gets a lighter background for better visibility */
+[data-theme="sap"][data-platform="windows"] .shelf-view-slide {
+  background: linear-gradient(to bottom right, #f2f7fc, #ecf2f9, #e4ecf6);
 }
 
 /* Theme overrides for light backgrounds (day, sap) */
@@ -79,13 +104,16 @@
 [data-theme="day"] .bg-black\/30,
 [data-theme="day"] .bg-black\/45,
 [data-theme="day"] .bg-black\/50,
-[data-theme="day"] .bg-black\/92,
+[data-theme="day"] .bg-black\/92 {
+  background-color: rgba(255, 255, 255, 0.92);
+}
+
 [data-theme="sap"] .bg-black\/20,
 [data-theme="sap"] .bg-black\/30,
 [data-theme="sap"] .bg-black\/45,
 [data-theme="sap"] .bg-black\/50,
 [data-theme="sap"] .bg-black\/92 {
-  background-color: rgba(255, 255, 255, 0.92);
+  background-color: rgba(232, 238, 247, 0.95);
 }
 
 /* Day accent: replace emerald/cyan with warm amber */
@@ -198,6 +226,23 @@
   color: #4f5863 !important;
 }
 
+/* Bookmark “make bigger” (expanded): day theme – earthy tones */
+[data-theme="day"] .shelf-bookmark-expanded {
+  background: linear-gradient(135deg, #e8e2d8 0%, #ddd6c8 100%) !important;
+  border-color: rgba(139, 99, 65, 0.3) !important;
+}
+[data-theme="day"] .shelf-bookmark-expanded .text-zinc-200,
+[data-theme="day"] .shelf-bookmark-expanded .text-white {
+  color: #2d2620 !important;
+}
+[data-theme="day"] .shelf-bookmark-expanded .text-zinc-400 {
+  color: #5c5248 !important;
+}
+[data-theme="day"] .shelf-bookmark-expanded:hover .text-zinc-200,
+[data-theme="day"] .shelf-bookmark-expanded .hover\:text-white:hover {
+  color: #1a1612 !important;
+}
+
 /* Pillar Error Dashboard card: day theme – dark text & button for contrast on light cyan */
 [data-theme="day"] .shelf-error-dashboard-pillar .text-cyan-100 {
   color: #92400e !important;
@@ -262,6 +307,63 @@
 [data-theme="sap"] .shelf-todo-item--blocked::after {
   color: rgba(0, 0, 0, 0.3);
 }
+
+/* Pillar focused todo: slightly more contrasting background */
+.shelf-todo-item--focused {
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+.shelf-todo-item--focused:hover {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+/* Dark: gradient emphasis – 1st strongest, 2nd less, etc. */
+.shelf-todo-item--focused[data-focus-rank="1"] { background: rgba(16, 185, 129, 0.2) !important; }
+.shelf-todo-item--focused[data-focus-rank="2"] { background: rgba(16, 185, 129, 0.16) !important; }
+.shelf-todo-item--focused[data-focus-rank="3"] { background: rgba(16, 185, 129, 0.14) !important; }
+.shelf-todo-item--focused[data-focus-rank="4"] { background: rgba(16, 185, 129, 0.12) !important; }
+.shelf-todo-item--focused[data-focus-rank="5"] { background: rgba(16, 185, 129, 0.1) !important; }
+.shelf-todo-item--focused[data-focus-rank="6"] { background: rgba(16, 185, 129, 0.08) !important; }
+.shelf-todo-item--focused[data-focus-rank="1"]:hover { background: rgba(16, 185, 129, 0.24) !important; }
+.shelf-todo-item--focused[data-focus-rank="2"]:hover { background: rgba(16, 185, 129, 0.2) !important; }
+.shelf-todo-item--focused[data-focus-rank="3"]:hover { background: rgba(16, 185, 129, 0.18) !important; }
+.shelf-todo-item--focused[data-focus-rank="4"]:hover { background: rgba(16, 185, 129, 0.16) !important; }
+.shelf-todo-item--focused[data-focus-rank="5"]:hover { background: rgba(16, 185, 129, 0.14) !important; }
+.shelf-todo-item--focused[data-focus-rank="6"]:hover { background: rgba(16, 185, 129, 0.12) !important; }
+
+/* Day: gradient emphasis, no strokes */
+[data-theme="day"] .shelf-todo-item--focused {
+  border: none !important;
+}
+[data-theme="day"] .shelf-todo-item--focused[data-focus-rank="1"] { background: rgb(180 83 9 / 0.07) !important; }
+[data-theme="day"] .shelf-todo-item--focused[data-focus-rank="2"] { background: rgb(180 83 9 / 0.06) !important; }
+[data-theme="day"] .shelf-todo-item--focused[data-focus-rank="3"] { background: rgb(180 83 9 / 0.05) !important; }
+[data-theme="day"] .shelf-todo-item--focused[data-focus-rank="4"] { background: rgb(180 83 9 / 0.045) !important; }
+[data-theme="day"] .shelf-todo-item--focused[data-focus-rank="5"] { background: rgb(180 83 9 / 0.04) !important; }
+[data-theme="day"] .shelf-todo-item--focused[data-focus-rank="6"] { background: rgb(180 83 9 / 0.035) !important; }
+[data-theme="day"] .shelf-todo-item--focused[data-focus-rank="1"]:hover { background: rgb(180 83 9 / 0.1) !important; }
+[data-theme="day"] .shelf-todo-item--focused[data-focus-rank="2"]:hover { background: rgb(180 83 9 / 0.08) !important; }
+[data-theme="day"] .shelf-todo-item--focused[data-focus-rank="3"]:hover { background: rgb(180 83 9 / 0.07) !important; }
+[data-theme="day"] .shelf-todo-item--focused[data-focus-rank="4"]:hover { background: rgb(180 83 9 / 0.06) !important; }
+[data-theme="day"] .shelf-todo-item--focused[data-focus-rank="5"]:hover { background: rgb(180 83 9 / 0.055) !important; }
+[data-theme="day"] .shelf-todo-item--focused[data-focus-rank="6"]:hover { background: rgb(180 83 9 / 0.05) !important; }
+
+[data-theme="sap"] .shelf-todo-item--focused {
+  border: 1px solid rgba(0, 112, 242, 0.2);
+}
+[data-theme="sap"] .shelf-todo-item--focused:hover {
+  border-color: rgba(0, 112, 242, 0.3);
+}
+[data-theme="sap"] .shelf-todo-item--focused[data-focus-rank="1"] { background: rgba(0, 112, 242, 0.18) !important; }
+[data-theme="sap"] .shelf-todo-item--focused[data-focus-rank="2"] { background: rgba(0, 112, 242, 0.15) !important; }
+[data-theme="sap"] .shelf-todo-item--focused[data-focus-rank="3"] { background: rgba(0, 112, 242, 0.13) !important; }
+[data-theme="sap"] .shelf-todo-item--focused[data-focus-rank="4"] { background: rgba(0, 112, 242, 0.11) !important; }
+[data-theme="sap"] .shelf-todo-item--focused[data-focus-rank="5"] { background: rgba(0, 112, 242, 0.09) !important; }
+[data-theme="sap"] .shelf-todo-item--focused[data-focus-rank="6"] { background: rgba(0, 112, 242, 0.08) !important; }
+[data-theme="sap"] .shelf-todo-item--focused[data-focus-rank="1"]:hover { background: rgba(0, 112, 242, 0.22) !important; }
+[data-theme="sap"] .shelf-todo-item--focused[data-focus-rank="2"]:hover { background: rgba(0, 112, 242, 0.19) !important; }
+[data-theme="sap"] .shelf-todo-item--focused[data-focus-rank="3"]:hover { background: rgba(0, 112, 242, 0.16) !important; }
+[data-theme="sap"] .shelf-todo-item--focused[data-focus-rank="4"]:hover { background: rgba(0, 112, 242, 0.14) !important; }
+[data-theme="sap"] .shelf-todo-item--focused[data-focus-rank="5"]:hover { background: rgba(0, 112, 242, 0.12) !important; }
+[data-theme="sap"] .shelf-todo-item--focused[data-focus-rank="6"]:hover { background: rgba(0, 112, 242, 0.1) !important; }
 
 /* Pillar todo tag: dark theme – light text */
 .shelf-todo-tag--violet { color: rgb(196 181 253); }
@@ -352,6 +454,59 @@
 }
 [data-theme="day"] .shelf-note-popover-body input::placeholder {
   color: #94a3b8 !important;
+}
+
+/* Note in-body checkboxes (markdown - [ ]): day theme – light/white for contrast */
+[data-theme="day"] .shelf-note-checkbox--in-body {
+  background: #fff !important;
+  border-color: rgba(120, 113, 108, 0.45) !important;
+}
+[data-theme="day"] .shelf-note-checkbox--in-body.shelf-note-checkbox--interactive:hover {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+[data-theme="day"] .shelf-note-checkbox--in-body svg {
+  color: rgb(4 120 87) !important;
+}
+
+/* Focus drawer – day theme: match Pillar focused task background (warm amber) */
+[data-theme="day"] .shelf-flow-focus-drawer .shelf-flow-focus-todo-card {
+  background: rgb(180 83 9 / 0.07) !important;
+  border: none !important;
+}
+[data-theme="day"] .shelf-flow-focus-drawer .shelf-flow-focus-todo-card:hover {
+  background: rgb(180 83 9 / 0.1) !important;
+}
+
+/* SAP theme: in-body checkboxes – white for contrast on light backgrounds */
+[data-theme="sap"] .shelf-note-checkbox--in-body {
+  background: #fff !important;
+  border-color: rgba(0, 112, 242, 0.35) !important;
+}
+[data-theme="sap"] .shelf-note-checkbox--in-body.shelf-note-checkbox--interactive:hover {
+  background: rgba(0, 112, 242, 0.08) !important;
+  border-color: rgba(0, 112, 242, 0.5) !important;
+}
+[data-theme="sap"] .shelf-note-checkbox--in-body svg {
+  color: #0070f2 !important;
+}
+
+/* Focus drawer – SAP theme: light, clean todo cards */
+[data-theme="sap"] .shelf-flow-focus-drawer .shelf-flow-focus-todo-card {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(0, 112, 242, 0.2) !important;
+  box-shadow: 0 1px 3px rgba(0, 112, 242, 0.08);
+}
+[data-theme="sap"] .shelf-flow-focus-drawer .shelf-flow-focus-todo-card .shelf-note-checkbox {
+  background: #fff !important;
+  border-color: rgba(0, 112, 242, 0.35) !important;
+}
+[data-theme="sap"] .shelf-flow-focus-drawer .shelf-flow-focus-todo-card .shelf-note-checkbox:hover {
+  background: rgba(0, 112, 242, 0.08) !important;
+  border-color: rgba(0, 112, 242, 0.5) !important;
+}
+[data-theme="sap"] .shelf-flow-focus-drawer .shelf-flow-focus-todo-card .shelf-note-checkbox svg {
+  color: #0070f2 !important;
 }
 
 /* Prompt library: murky, contrasting typography */
@@ -491,10 +646,14 @@
 }
 
 /* Error Dashboard: day & sap theme overrides */
-[data-theme="day"] .shelf-error-dashboard,
-[data-theme="sap"] .shelf-error-dashboard {
+[data-theme="day"] .shelf-error-dashboard {
   background: rgba(255, 255, 255, 0.95) !important;
   border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-theme="sap"] .shelf-error-dashboard {
+  background: rgba(232, 238, 247, 0.98) !important;
+  border-color: rgba(0, 112, 242, 0.12) !important;
 }
 
 [data-theme="day"] .shelf-error-dashboard .border-white\/10 {
@@ -508,12 +667,15 @@
 [data-theme="day"] .shelf-error-dashboard .bg-black\/20,
 [data-theme="day"] .shelf-error-dashboard .bg-black\/15,
 [data-theme="day"] .shelf-error-dashboard .bg-black\/30,
-[data-theme="day"] .shelf-error-dashboard .bg-zinc-900\/50,
+[data-theme="day"] .shelf-error-dashboard .bg-zinc-900\/50 {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+
 [data-theme="sap"] .shelf-error-dashboard .bg-black\/20,
 [data-theme="sap"] .shelf-error-dashboard .bg-black\/15,
 [data-theme="sap"] .shelf-error-dashboard .bg-black\/30,
 [data-theme="sap"] .shelf-error-dashboard .bg-zinc-900\/50 {
-  background-color: rgba(255, 255, 255, 0.9) !important;
+  background-color: rgba(232, 238, 247, 0.95) !important;
 }
 
 [data-theme="day"] .shelf-error-dashboard .bg-white\/\[0\.02\] {
@@ -521,7 +683,7 @@
 }
 
 [data-theme="sap"] .shelf-error-dashboard .bg-white\/\[0\.02\] {
-  background-color: rgba(248, 250, 252, 0.9) !important;
+  background-color: rgba(220, 230, 242, 0.9) !important;
 }
 
 [data-theme="day"] .shelf-error-dashboard .bg-zinc-800\/40 {
@@ -530,8 +692,8 @@
 }
 
 [data-theme="sap"] .shelf-error-dashboard .bg-zinc-800\/40 {
-  background-color: rgba(248, 250, 252, 0.95) !important;
-  border-color: rgba(0, 112, 242, 0.1) !important;
+  background-color: rgba(232, 238, 247, 0.98) !important;
+  border-color: rgba(0, 112, 242, 0.12) !important;
 }
 
 [data-theme="day"] .shelf-error-dashboard .text-zinc-100,
@@ -605,6 +767,79 @@
 [data-theme="sap"] .shelf-error-dashboard .bg-black\/30 {
   background-color: #fff !important;
   border: 1px solid rgba(0, 112, 242, 0.12) !important;
+}
+
+/* Add-as-task confirmation modal: SAP theme */
+[data-theme="sap"] .shelf-add-task-confirm-backdrop {
+  background: rgba(0, 112, 242, 0.08) !important;
+  backdrop-filter: blur(8px);
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog {
+  background: linear-gradient(to bottom, #ffffff, #f5f8fc) !important;
+  border: 1px solid rgba(0, 112, 242, 0.2) !important;
+  box-shadow: 0 8px 32px rgba(0, 112, 242, 0.12), 0 2px 8px rgba(0, 112, 242, 0.08) !important;
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog .shelf-add-task-confirm-title {
+  color: #0a0a0a !important;
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog .shelf-add-task-confirm-body {
+  color: #4a5568 !important;
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog .shelf-add-task-confirm-cancel {
+  background: transparent !important;
+  border-color: rgba(0, 112, 242, 0.25) !important;
+  color: #0057d2 !important;
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog .shelf-add-task-confirm-cancel:hover {
+  background: rgba(0, 112, 242, 0.08) !important;
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog .shelf-add-task-confirm-add {
+  background: #0070f2 !important;
+  border-color: #0070f2 !important;
+  color: #ffffff !important;
+}
+
+[data-theme="sap"] .shelf-add-task-confirm-dialog .shelf-add-task-confirm-add:hover {
+  background: #1b90ff !important;
+  border-color: #1b90ff !important;
+}
+
+/* Importance tags: readable contrast on day & sap (light) themes */
+[data-theme="day"] .shelf-error-dashboard .shelf-error-importance-tag--very-high,
+[data-theme="sap"] .shelf-error-dashboard .shelf-error-importance-tag--very-high {
+  background-color: #fecdd3 !important;
+  color: #9f1239 !important;
+  border-color: #e11d48 !important;
+}
+[data-theme="day"] .shelf-error-dashboard .shelf-error-importance-tag--high,
+[data-theme="sap"] .shelf-error-dashboard .shelf-error-importance-tag--high {
+  background-color: #ffedd5 !important;
+  color: #9a3412 !important;
+  border-color: #ea580c !important;
+}
+[data-theme="day"] .shelf-error-dashboard .shelf-error-importance-tag--moderate,
+[data-theme="sap"] .shelf-error-dashboard .shelf-error-importance-tag--moderate {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+  border-color: #d97706 !important;
+}
+[data-theme="day"] .shelf-error-dashboard .shelf-error-importance-tag--low,
+[data-theme="sap"] .shelf-error-dashboard .shelf-error-importance-tag--low {
+  background-color: #d1fae5 !important;
+  color: #065f46 !important;
+  border-color: #10b981 !important;
+}
+[data-theme="day"] .shelf-error-dashboard .shelf-error-importance-tag--unknown,
+[data-theme="sap"] .shelf-error-dashboard .shelf-error-importance-tag--unknown {
+  background-color: #e4e4e7 !important;
+  color: #3f3f46 !important;
+  border-color: #71717a !important;
 }
 
 [data-theme="day"] .shelf-error-dashboard .text-cyan-400\/90 {
@@ -713,6 +948,15 @@ body {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
+/* Drop indicator: where the bookmark will be pasted when reordering */
+.shelf-drop-indicator {
+  height: 3px;
+  width: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(16, 185, 129, 0.95) 15%, rgba(74, 222, 128, 1) 50%, rgba(16, 185, 129, 0.95) 85%, transparent 100%);
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.6), 0 0 4px rgba(16, 185, 129, 0.5);
+}
+
 .results-glow {
   box-shadow:
     0 0 0 1px rgba(16, 185, 129, 0.12),
@@ -743,38 +987,94 @@ body {
   }
 }
 
-/* View slide transition (swipe between shelf / dashboard / flow) */
+/* Silky easing for transitions */
+:root {
+  --shelf-ease-silk: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Focus drawer: canvas shifts smoothly when drawer opens */
+.shelf-flow-canvas-transition {
+  transition: margin-right 0.3s var(--shelf-ease-silk), transform 0.3s var(--shelf-ease-silk);
+}
+
+/* Focus drawer: slide in/out with silky ease */
+.shelf-flow-focus-drawer {
+  transition: transform 0.3s var(--shelf-ease-silk);
+}
+
+/* View slide transition (swipe between shelf / dashboard / flow) — silky smooth */
 .shelf-view-slide.shelf-view-slide--from-left {
-  animation: shelf-view-slide-in-left 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: shelf-view-slide-in-left 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 .shelf-view-slide.shelf-view-slide--from-right {
-  animation: shelf-view-slide-in-right 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: shelf-view-slide-in-right 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 @keyframes shelf-view-slide-in-left {
   from {
-    opacity: 0.6;
-    transform: translateX(48px);
+    opacity: 0.4;
+    transform: translateX(28px) scale(0.998);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
   }
 }
 @keyframes shelf-view-slide-in-right {
   from {
-    opacity: 0.6;
-    transform: translateX(-48px);
+    opacity: 0.4;
+    transform: translateX(-28px) scale(0.998);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
   }
+}
+
+/* Visual Flow: task completed — gentle exit before removal */
+@keyframes shelf-flow-node-complete {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+  55% {
+    opacity: 0.85;
+    transform: scale(0.98) translateY(4px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.92) translateY(14px);
+    filter: blur(3px);
+  }
+}
+.react-flow__node.shelf-flow-node-exiting {
+  pointer-events: none;
+  z-index: 0 !important;
+}
+.react-flow__node.shelf-flow-node-exiting .shelf-flow-node {
+  animation: shelf-flow-node-complete 0.72s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  border-color: rgba(52, 211, 153, 0.25);
 }
 
 /* Visual Flow nodes: rounded shape with visible stroke */
 .shelf-flow-node {
+  position: relative;
   border: 1.5px solid rgba(52, 211, 153, 0.4);
   border-radius: 1rem;
+}
+/* Task date: red monospace, below content */
+.shelf-flow-node-date {
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgb(248 113 113); /* red-400 */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+[data-theme="day"] .shelf-flow-node-date,
+[data-theme="sap"] .shelf-flow-node-date {
+  color: rgb(185 28 28); /* red-700 */
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3);
 }
 
 /* Ready / no status: faint blue glow */
@@ -849,6 +1149,68 @@ body {
 [data-theme="day"] .shelf-flow-node {
   border-color: rgba(180, 83, 9, 0.4);
 }
+
+/* Visual Flow ready nodes: day theme – earthy tones (match bookmark expanded) */
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node--ready {
+  background: linear-gradient(135deg, #e8e2d8 0%, #ddd6c8 100%) !important;
+  border-color: rgba(139, 99, 65, 0.35) !important;
+  box-shadow: 0 2px 12px rgba(139, 99, 65, 0.12), 0 0 1px rgba(139, 99, 65, 0.15) !important;
+}
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node--ready .font-semibold,
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node--ready .text-white {
+  color: #2d2620 !important;
+}
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node--ready .group-hover\:text-emerald-100:hover {
+  color: #1a1612 !important;
+}
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node--ready .shelf-flow-node-note {
+  color: #5c5248 !important;
+}
+
+/* Blocked & abeyed: adjusted font – softer weight, cleaner appearance */
+[data-theme="day"] .shelf-flow-node--blocked::after,
+[data-theme="sap"] .shelf-flow-node--blocked::after {
+  font-weight: 600 !important;
+  letter-spacing: 0.08em !important;
+  font-size: 0.85rem !important;
+}
+[data-theme="day"] .shelf-flow-node--blocked,
+[data-theme="day"] .shelf-flow-node--abeyed {
+  font-style: normal !important;
+}
+[data-theme="day"] .shelf-flow-node--blocked .shelf-flow-node-note,
+[data-theme="day"] .shelf-flow-node--blocked .font-semibold,
+[data-theme="day"] .shelf-flow-node--abeyed .shelf-flow-node-note,
+[data-theme="day"] .shelf-flow-node--abeyed .font-medium {
+  color: #6b6360 !important;
+  font-style: italic !important;
+}
+
+/* Day theme only: blocked & abeyed – subdued, low-attention */
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node--blocked,
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node--abeyed {
+  opacity: 0.42 !important;
+  filter: saturate(0.5) brightness(1.05) !important;
+  background: rgba(235, 230, 222, 0.85) !important;
+  border-color: rgba(139, 99, 65, 0.12) !important;
+  box-shadow: none !important;
+}
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node--blocked::before {
+  opacity: 0.5 !important;
+}
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node--blocked::after {
+  color: rgba(0, 0, 0, 0.18) !important;
+  text-shadow: none !important;
+  font-weight: 500 !important;
+  font-size: 0.75rem !important;
+}
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node--blocked .shelf-flow-node-note,
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node--blocked .font-semibold,
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node--abeyed .shelf-flow-node-note,
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node--abeyed .font-medium {
+  color: #8a8380 !important;
+}
+
 [data-theme="sap"] .shelf-flow-node {
   border-color: rgba(0, 112, 242, 0.4);
 }
@@ -863,6 +1225,18 @@ body {
 /* Visual Flow canvas – embedded look, matches page background */
 .visual-flow-canvas {
   background: var(--shelf-card);
+}
+.visual-flow-canvas .shelf-flow-node--selected {
+  box-shadow: 0 0 0 2px rgb(16 185 129), 0 0 16px rgb(16 185 129 / 0.4);
+  background: rgba(16 185 129 / 0.15);
+}
+.visual-flow-canvas .react-flow__node.selected .shelf-flow-node {
+  box-shadow: 0 0 0 2px rgb(16 185 129), 0 0 16px rgb(16 185 129 / 0.4);
+  background: rgba(16 185 129 / 0.15);
+}
+.visual-flow-canvas .react-flow {
+  width: 100%;
+  height: 100%;
 }
 .visual-flow-react-flow {
   background: transparent !important;

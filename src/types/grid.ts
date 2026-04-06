@@ -81,6 +81,10 @@ export interface ShelfPillarTodoItem {
   blockStatus?: ShelfTodoBlockStatus;
   /** Per-node handle config: horizontal (L+R), vertical (T+B), or single side. Hidden = no connection points. */
   handleConfig?: ShelfTodoHandleConfig;
+  /** Optional date string (e.g. YYYY-MM-DD). Shown in Visual Flow when showTodoDates is on. */
+  date?: string;
+  /** When true, the task appears in the visual flow focus drawer. */
+  focused?: boolean;
 }
 
 export interface ObsidianLogConfig {
@@ -101,11 +105,15 @@ export type VisualFlowEdge = {
   target: string;
   arrow?: boolean;
   doubled?: boolean;
+  muted?: boolean;
 };
 
 export interface VisualFlowData {
   nodePositions?: Record<string, { x: number; y: number }>;
   edges?: VisualFlowEdge[];
+  /** Second canvas layer — same item shape as pillar todos, separate from main flow */
+  grazelandNodePositions?: Record<string, { x: number; y: number }>;
+  grazelandEdges?: VisualFlowEdge[];
 }
 
 export interface ShelfBackupData {
@@ -117,6 +125,7 @@ export interface ShelfBackupData {
   separators: ShelfFolderSeparatorMap;
   goals: ShelfGoalMap;
   showGoals: boolean;
+  showTodoDates?: boolean;
   pillarPins?: { top: string[]; list?: string[]; overrides?: Record<string, { title?: string; imageUrl?: string }> };
   pillarTodos?: ShelfPillarTodoItem[];
   prompts: ShelfPromptMap;
@@ -125,9 +134,16 @@ export interface ShelfBackupData {
   promptRows: 1 | 2;
   hiddenFolderIds?: string[];
   bookmarkOverrides?: ShelfBookmarkOverrides;
+  bookmarkViews?: ShelfBookmarkViewMap;
   bookmarkSize?: BookmarkSize;
   visualFlow?: VisualFlowData;
+  /** Items for the Grazeland plane only (same fields as pillar todos; not shown on main canvas or Pillar) */
+  grazelandItems?: ShelfPillarTodoItem[];
   llmConsoleUrl?: string;
+  showBothNavButtons?: boolean;
+  pillarTodoPins?: string[];
+  focusDesynced?: boolean;
+  lowPerformanceMode?: boolean;
 }
 
 export const ACCENT_COLORS = [

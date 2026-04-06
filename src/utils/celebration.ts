@@ -2,6 +2,7 @@
 export const CELEBRATION_PHRASES: readonly string[] = [
   "Hooray! 🎉",
   "Done! ✓",
+  "Off the map — great work! ✨",
   "Task crushed! 🏆",
   "Nice work! ✓",
   "Mission accomplished! 🎯",
