@@ -290,7 +290,9 @@ export function Pillar({
 
         <div
           className={`shelf-top6-zone min-w-0 rounded-2xl border p-3 transition ${
-            overZone === "top" ? "border-emerald-300/50 bg-emerald-400/10" : "border-white/10 bg-black/20"
+            overZone === "top"
+              ? "shelf-top6-zone--drag border-emerald-300/50 bg-emerald-400/10"
+              : "border-white/10 bg-black/20"
           }`}
           onDragOver={(e) => {
             e.preventDefault();

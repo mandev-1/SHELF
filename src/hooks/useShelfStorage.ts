@@ -1,21 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
-import type {
-  BookmarkSize,
-  ObsidianLogConfig,
-  ShelfBackupData,
-  ShelfTheme,
-  ShelfTodoBlockStatus,
-  ShelfTodoHandleConfig,
-  ShelfBookmarkOverrides,
-  ShelfBookmarkViewMap,
-  ShelfFolderSeparatorMap,
-  ShelfGoalMap,
-  ShelfLayoutItem,
-  ShelfPillarTodoItem,
-  ShelfPromptMap,
-  ShelfPromptVersion,
-  ShelfSectionColors,
-  VisualFlowData,
+import {
+  isSectorColorKey,
+  type BookmarkSize,
+  type ObsidianLogConfig,
+  type ShelfBackupData,
+  type ShelfTheme,
+  type ShelfTodoBlockStatus,
+  type ShelfTodoHandleConfig,
+  type ShelfBookmarkOverrides,
+  type ShelfBookmarkViewMap,
+  type ShelfFolderSeparatorMap,
+  type ShelfGoalMap,
+  type ShelfLayoutItem,
+  type ShelfPillarTodoItem,
+  type ShelfPromptMap,
+  type ShelfPromptVersion,
+  type ShelfSectionColors,
+  type SectorColorKey,
+  type VisualFlowData,
 } from "../types/grid";
 
 const LAYOUT_KEY = "shelf-layout";
@@ -290,6 +292,8 @@ export function useShelfStorage() {
                 ? (x.handleConfig as ShelfTodoHandleConfig)
                 : undefined,
             focused: Boolean(x.focused),
+            sectorName: typeof x.sectorName === "string" && x.sectorName.trim() ? x.sectorName.trim() : undefined,
+            sectorColor: isSectorColorKey(x.sectorColor) ? x.sectorColor : undefined,
           }));
       });
       setGrazelandItemsState(() => {
@@ -321,6 +325,8 @@ export function useShelfStorage() {
                 ? (x.handleConfig as ShelfTodoHandleConfig)
                 : undefined,
             focused: Boolean(x.focused),
+            sectorName: typeof x.sectorName === "string" && x.sectorName.trim() ? x.sectorName.trim() : undefined,
+            sectorColor: isSectorColorKey(x.sectorColor) ? x.sectorColor : undefined,
           }));
       });
       const rawObs = result[OBSIDIAN_LOG_KEY];
@@ -378,6 +384,17 @@ export function useShelfStorage() {
                   ...(e.muted && { muted: true }),
                 }))
             : undefined;
+        const sectorColorsRaw = raw.sectorColors;
+        let sectorColors: Record<string, SectorColorKey> | undefined;
+        if (sectorColorsRaw && typeof sectorColorsRaw === "object" && !Array.isArray(sectorColorsRaw)) {
+          const next: Record<string, SectorColorKey> = {};
+          for (const [k, v] of Object.entries(sectorColorsRaw as Record<string, unknown>)) {
+            const key = typeof k === "string" ? k.trim() : "";
+            if (!key || !isSectorColorKey(v)) continue;
+            next[key] = v;
+          }
+          if (Object.keys(next).length > 0) sectorColors = next;
+        }
         setVisualFlowState({
           nodePositions: raw.nodePositions && typeof raw.nodePositions === "object" ? (raw.nodePositions as Record<string, { x: number; y: number }>) : undefined,
           edges: parseEdges(raw.edges),
@@ -386,6 +403,7 @@ export function useShelfStorage() {
               ? (raw.grazelandNodePositions as Record<string, { x: number; y: number }>)
               : undefined,
           grazelandEdges: parseEdges(raw.grazelandEdges),
+          ...(sectorColors && { sectorColors }),
         });
       }
       setReady(true);
@@ -547,6 +565,8 @@ export function useShelfStorage() {
             ? t.handleConfig
             : undefined,
         focused: Boolean(t.focused),
+        sectorName: typeof t.sectorName === "string" && t.sectorName.trim() ? t.sectorName.trim() : undefined,
+        sectorColor: isSectorColorKey(t.sectorColor) ? t.sectorColor : undefined,
       }));
       getStorage()?.set({ [PILLAR_TODOS_KEY]: normalized });
       return normalized;
@@ -580,6 +600,8 @@ export function useShelfStorage() {
             ? t.handleConfig
             : undefined,
         focused: Boolean(t.focused),
+        sectorName: typeof t.sectorName === "string" && t.sectorName.trim() ? t.sectorName.trim() : undefined,
+        sectorColor: isSectorColorKey(t.sectorColor) ? t.sectorColor : undefined,
       }));
       getStorage()?.set({ [GRAZELAND_ITEMS_KEY]: normalized });
       return normalized;

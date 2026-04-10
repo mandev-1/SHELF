@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -19,12 +19,16 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Input } from "@heroui/react";
-import type {
-  ShelfPillarTodoItem,
-  ShelfTodoBlockStatus,
-  ShelfTodoHandleConfig,
-  VisualFlowData,
-  VisualFlowEdge,
+import {
+  SECTOR_COLOR_OPTIONS,
+  SECTOR_HEX,
+  type SectorColorKey,
+  type ShelfPillarTodoItem,
+  type ShelfTodoBlockStatus,
+  type ShelfTodoHandleConfig,
+  type VisualFlowData,
+  type VisualFlowEdge,
+  resolveVisualFlowSectorColor,
 } from "../types/grid";
 import { NoteContent, linkifyText } from "./NoteContent";
 
@@ -58,12 +62,94 @@ type TodoFlowNodeData = {
   date?: string;
   showTodoDates?: boolean;
   handleConfig?: ShelfTodoHandleConfig;
+  sectorName?: string;
+  sectorColor?: SectorColorKey;
   onNoteChange?: (newNote: string) => void;
   /** True while “mark completed” exit animation runs */
   completing?: boolean;
   /** Grazeland plane — subtle distinct styling */
   grazelandPlane?: boolean;
 };
+
+function rgbFromSectorHex(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function subscribeShelfTheme(onStoreChange: () => void) {
+  const el = document.documentElement;
+  const mo = new MutationObserver(onStoreChange);
+  mo.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
+  return () => mo.disconnect();
+}
+
+function getShelfThemeSnapshot() {
+  return document.documentElement.getAttribute("data-theme") ?? "night";
+}
+
+/** Reads `data-theme` so flow nodes update when switching day / SAP / night. */
+function useShelfDocumentTheme() {
+  return useSyncExternalStore(subscribeShelfTheme, getShelfThemeSnapshot, () => "night");
+}
+
+/**
+ * Sector styling: night = dark card + rim + wash; day = warm paper + strong sector-colored border & wash;
+ * SAP = very low-key background tint + subtle SAP-blue rim (sector reads as fill).
+ */
+function sectorNodeChromeStyleForTheme(colorKey: SectorColorKey, theme: string): React.CSSProperties {
+  const hex = SECTOR_HEX[colorKey];
+  const [r, g, b] = rgbFromSectorHex(hex);
+  const avg = (r + g + b) / 3;
+
+  if (theme === "day") {
+    const br = Math.round(r * 0.38 + 118 * 0.62);
+    const bgMix = Math.round(g * 0.38 + 112 * 0.62);
+    const bb = Math.round(b * 0.38 + 106 * 0.62);
+    const borderA = avg > 210 ? 0.58 : avg > 135 ? 0.52 : 0.48;
+    return {
+      border: `2px solid rgba(${br},${bgMix},${bb}, ${borderA})`,
+      backgroundColor: "rgba(255, 252, 247, 0.97)",
+      backgroundImage: `linear-gradient(
+        168deg,
+        rgba(${r},${g},${b}, 0.38) 0%,
+        rgba(${r},${g},${b}, 0.16) 42%,
+        rgba(255, 252, 247, 0.72) 100%
+      )`,
+      boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(28, 25, 23, 0.07)",
+    };
+  }
+
+  if (theme === "sap") {
+    // Light SAP canvas needs a paper base + visible (still soft) sector wash — flat rgba(r,g,b,0.08) was invisible.
+    const topA = avg > 200 ? 0.22 : avg > 115 ? 0.19 : avg > 55 ? 0.16 : 0.13;
+    const midA = topA * 0.55;
+    return {
+      border: "1px solid rgba(0, 112, 242, 0.2)",
+      backgroundColor: "rgb(244, 247, 252)",
+      backgroundImage: `linear-gradient(
+        165deg,
+        rgba(${r},${g},${b}, ${topA}) 0%,
+        rgba(${r},${g},${b}, ${midA}) 42%,
+        rgba(236, 242, 249, 0.97) 68%,
+        rgb(244, 247, 252) 100%
+      )`,
+      boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.75)",
+    };
+  }
+
+  const lineA = colorKey === "alice-blue" || colorKey === "bone" ? 0.4 : 0.34;
+  return {
+    border: `1px solid rgba(${r},${g},${b},${lineA})`,
+    backgroundImage: `linear-gradient(
+      165deg,
+      rgba(${r},${g},${b}, 0.13) 0%,
+      rgba(${r},${g},${b}, 0.04) 55%,
+      transparent 100%
+    )`,
+    backgroundColor: "rgba(0, 0, 0, 0.38)",
+    boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.04)",
+  };
+}
 
 export type VisualFlowPlane = "main" | "grazeland";
 
@@ -73,36 +159,20 @@ const EDIT_CARD_EXIT_MS = 400;
 /** Time for node exit animation before todo is removed from the map and list */
 const COMPLETE_EXIT_MS = 720;
 
-function EditCardWrapper({ children }: { children: React.ReactNode }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
-
-  useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      requestAnimationFrame(() => setIsExpanded(true));
-    });
-    return () => cancelAnimationFrame(id);
-  }, []);
-
-  const handleClosingStart = useCallback(() => {
-    setIsClosing(true);
-  }, []);
-
-  return (
-    <div
-      className={`shelf-flow-edit-card-wrapper ${isExpanded && !isClosing ? "shelf-flow-edit-card-wrapper--open" : ""} ${isClosing ? "shelf-flow-edit-card-wrapper--closing" : ""}`}
-    >
-      {React.isValidElement(children)
-        ? React.cloneElement(children, { onClosingStart: handleClosingStart } as Record<string, unknown>)
-        : children}
-    </div>
-  );
-}
-
 const BLOCK_STATUS_OPTIONS: { value: ShelfTodoBlockStatus; label: string }[] = [
   { value: "ready", label: "Ready" },
   { value: "blocked", label: "Blocked" },
   { value: "abeyed", label: "Abeyed" },
+];
+
+/** Handle layouts shown in the node menu dropdown (everything except hidden). */
+const HANDLE_MENU_LAYOUT_OPTIONS: { value: Exclude<ShelfTodoHandleConfig, "hidden">; label: string }[] = [
+  { value: "horizontal", label: "Horizontal" },
+  { value: "vertical", label: "Vertical" },
+  { value: "top", label: "Top only" },
+  { value: "bottom", label: "Bottom only" },
+  { value: "left", label: "Left only" },
+  { value: "right", label: "Right only" },
 ];
 
 function NodeEditCard({
@@ -110,6 +180,8 @@ function NodeEditCard({
   showTodoDates = false,
   editLabel = "Edit task",
   titlePlaceholder = "Task title",
+  existingSectorNames = [],
+  sectorColorMap,
   onSave,
   onClose,
   onClosingStart,
@@ -118,6 +190,9 @@ function NodeEditCard({
   showTodoDates?: boolean;
   editLabel?: string;
   titlePlaceholder?: string;
+  /** Distinct sector names already used on Visual Flow (for combobox hints). */
+  existingSectorNames?: string[];
+  sectorColorMap?: Record<string, SectorColorKey>;
   onSave: (updates: Partial<ShelfPillarTodoItem>) => void;
   onClose: () => void;
   onClosingStart?: () => void;
@@ -128,9 +203,15 @@ function NodeEditCard({
   const [subtitle, setSubtitle] = useState(todo.subtitle ?? "");
   const [blockStatus, setBlockStatus] = useState<ShelfTodoBlockStatus | "">(todo.blockStatus ?? "");
   const [date, setDate] = useState(todo.date ?? "");
+  const [sectorName, setSectorName] = useState(todo.sectorName ?? "");
+  const [sectorColor, setSectorColor] = useState<SectorColorKey | "">(
+    () => resolveVisualFlowSectorColor(todo, sectorColorMap) ?? ""
+  );
   const [isClosing, setIsClosing] = useState(false);
   const [escapePrompted, setEscapePrompted] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const sectorInputId = useId();
+  const sectorDatalistId = useId();
 
   const requestClose = useCallback(() => {
     if (isClosing) return;
@@ -147,9 +228,11 @@ function NodeEditCard({
       subtitle: subtitle || undefined,
       blockStatus: blockStatus || undefined,
       date: date.trim() || undefined,
+      sectorName: sectorName.trim() || undefined,
+      sectorColor: sectorColor === "" ? undefined : sectorColor,
     });
     requestClose();
-  }, [text, note, tag, subtitle, blockStatus, date, onSave, requestClose]);
+  }, [text, note, tag, subtitle, blockStatus, date, sectorName, sectorColor, onSave, requestClose]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -200,10 +283,15 @@ function NodeEditCard({
   return (
     <div
       ref={ref}
-      className={`shelf-flow-edit-card shelf-note-popover mx-auto mb-4 max-w-lg rounded-xl border border-emerald-400/20 bg-zinc-900 p-4 shadow-xl ${isClosing ? "shelf-flow-edit-card--exit" : ""}`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="shelf-flow-edit-dialog-title"
+      className={`shelf-flow-edit-card shelf-note-popover w-full max-w-lg rounded-xl border border-emerald-400/20 bg-zinc-900 p-4 shadow-2xl ${isClosing ? "shelf-flow-edit-card--exit" : ""}`}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-[10px] font-medium text-zinc-500">{editLabel}</span>
+        <span id="shelf-flow-edit-dialog-title" className="text-[10px] font-medium text-zinc-500">
+          {editLabel}
+        </span>
         {escapePrompted && (
           <span className="text-[10px] text-amber-400/90">Press Esc again to close</span>
         )}
@@ -250,6 +338,45 @@ function NodeEditCard({
           </div>
         )}
         <div className="flex flex-col gap-1">
+          <label htmlFor={sectorInputId} className="text-[10px] font-medium text-zinc-500">
+            Sector name (optional)
+          </label>
+          <input
+            id={sectorInputId}
+            type="text"
+            list={sectorDatalistId}
+            value={sectorName}
+            onChange={(e) => setSectorName(e.target.value)}
+            placeholder="Type or choose a suggestion"
+            autoComplete="off"
+            className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-400/35"
+          />
+          <datalist id={sectorDatalistId}>
+            {existingSectorNames.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+          <p className="text-[9px] leading-snug text-zinc-600">
+            Names already in use on Visual Flow show as you type; type anything else to use a new sector name.
+          </p>
+          <select
+            value={sectorColor}
+            onChange={(e) => setSectorColor((e.target.value || "") as SectorColorKey | "")}
+            className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 focus:outline-none"
+            aria-label="Sector border color"
+          >
+            <option value="">Default (no sector tint)</option>
+            {SECTOR_COLOR_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-[9px] leading-snug text-zinc-600">
+            On Visual Flow, this adds a thin colored outline and a light background wash on nodes in that sector.
+          </p>
+        </div>
+        <div className="flex flex-col gap-1">
           <label className="text-[10px] font-medium text-zinc-500">Status</label>
           <select
             value={blockStatus}
@@ -291,53 +418,145 @@ function nodeStatusClass(blockStatus?: ShelfTodoBlockStatus): string {
   return "shelf-flow-node--ready";
 }
 
-const HANDLE_CLASS =
+const HANDLE_CLASS_BASE =
   "shelf-flow-handle !z-10 !h-2.5 !w-2.5 !rounded-full !border-2 !border-emerald-400/60 !bg-emerald-500/80";
 
-function FlowHandles({ config }: { config: ShelfTodoHandleConfig }) {
+/** Size/position only — use with inline fill/border for day + sector (Tailwind `!` colors block overrides). */
+const HANDLE_CLASS_NEUTRAL = "shelf-flow-handle !z-10 !h-2.5 !w-2.5 !rounded-full !border-2";
+
+/** Connection dots match sector rim on day theme (global day rules retint emerald handles otherwise). */
+function sectorHandleStyleDay(colorKey: SectorColorKey): React.CSSProperties {
+  const [r, g, b] = rgbFromSectorHex(SECTOR_HEX[colorKey]);
+  const avg = (r + g + b) / 3;
+  const hr = avg > 210 ? Math.round(r * 0.5 + 95 * 0.5) : Math.round(r * 0.92 + 18);
+  const hg = avg > 210 ? Math.round(g * 0.5 + 90 * 0.5) : Math.round(g * 0.92 + 18);
+  const hb = avg > 210 ? Math.round(b * 0.5 + 85 * 0.5) : Math.round(b * 0.92 + 16);
+  return {
+    borderColor: `rgba(${hr}, ${hg}, ${hb}, 0.95)`,
+    backgroundColor: `rgba(${hr}, ${hg}, ${hb}, 0.92)`,
+    boxShadow: "0 0 0 1px rgba(255, 255, 255, 0.35)",
+  };
+}
+
+function FlowHandles({
+  config,
+  daySectorHandleStyle,
+}: {
+  config: ShelfTodoHandleConfig;
+  /** When set (day + sector), fills/border come from sector — not default emerald. */
+  daySectorHandleStyle?: React.CSSProperties;
+}) {
+  const handleClass = daySectorHandleStyle ? HANDLE_CLASS_NEUTRAL : HANDLE_CLASS_BASE;
+  const handleStyle = daySectorHandleStyle;
   if (config === "hidden") return null;
   if (config === "horizontal") {
     return (
       <>
-        <Handle type="target" id="target-left" position={Position.Left} className={`${HANDLE_CLASS} !left-2 !top-1/2 -translate-y-1/2`} />
-        <Handle type="source" id="source-right" position={Position.Right} className={`${HANDLE_CLASS} !right-2 !top-1/2 -translate-y-1/2`} />
+        <Handle
+          style={handleStyle}
+          type="target"
+          id="target-left"
+          position={Position.Left}
+          className={`${handleClass} !left-2 !top-1/2 -translate-y-1/2`}
+        />
+        <Handle
+          style={handleStyle}
+          type="source"
+          id="source-right"
+          position={Position.Right}
+          className={`${handleClass} !right-2 !top-1/2 -translate-y-1/2`}
+        />
       </>
     );
   }
   if (config === "vertical") {
     return (
       <>
-        <Handle type="target" id="target-top" position={Position.Top} className={`${HANDLE_CLASS} !left-1/2 !top-2 -translate-x-1/2`} />
-        <Handle type="source" id="source-bottom" position={Position.Bottom} className={`${HANDLE_CLASS} !left-1/2 !bottom-2 -translate-x-1/2`} />
+        <Handle
+          style={handleStyle}
+          type="target"
+          id="target-top"
+          position={Position.Top}
+          className={`${handleClass} !left-1/2 !top-2 -translate-x-1/2`}
+        />
+        <Handle
+          style={handleStyle}
+          type="source"
+          id="source-bottom"
+          position={Position.Bottom}
+          className={`${handleClass} !left-1/2 !bottom-2 -translate-x-1/2`}
+        />
       </>
     );
   }
   if (config === "top") {
     return (
-      <Handle type="target" id="target-top" position={Position.Top} className={`${HANDLE_CLASS} !left-1/2 !top-2 -translate-x-1/2`} />
+      <Handle
+        style={handleStyle}
+        type="target"
+        id="target-top"
+        position={Position.Top}
+        className={`${handleClass} !left-1/2 !top-2 -translate-x-1/2`}
+      />
     );
   }
   if (config === "bottom") {
     return (
       <>
-        <Handle type="target" id="target-bottom" position={Position.Bottom} className={`${HANDLE_CLASS} !left-[30%] !bottom-2 -translate-x-1/2`} />
-        <Handle type="source" id="source-bottom" position={Position.Bottom} className={`${HANDLE_CLASS} !left-[70%] !bottom-2 -translate-x-1/2`} />
+        <Handle
+          style={handleStyle}
+          type="target"
+          id="target-bottom"
+          position={Position.Bottom}
+          className={`${handleClass} !left-[30%] !bottom-2 -translate-x-1/2`}
+        />
+        <Handle
+          style={handleStyle}
+          type="source"
+          id="source-bottom"
+          position={Position.Bottom}
+          className={`${handleClass} !left-[70%] !bottom-2 -translate-x-1/2`}
+        />
       </>
     );
   }
   if (config === "left") {
     return (
       <>
-        <Handle type="target" id="target-left" position={Position.Left} className={`${HANDLE_CLASS} !left-2 !top-1/3 -translate-y-1/2`} />
-        <Handle type="source" id="source-left" position={Position.Left} className={`${HANDLE_CLASS} !left-2 !top-2/3 -translate-y-1/2`} />
+        <Handle
+          style={handleStyle}
+          type="target"
+          id="target-left"
+          position={Position.Left}
+          className={`${handleClass} !left-2 !top-1/3 -translate-y-1/2`}
+        />
+        <Handle
+          style={handleStyle}
+          type="source"
+          id="source-left"
+          position={Position.Left}
+          className={`${handleClass} !left-2 !top-2/3 -translate-y-1/2`}
+        />
       </>
     );
   }
   if (config === "right") {
     return (
       <>
-        <Handle type="target" id="target-right" position={Position.Right} className={`${HANDLE_CLASS} !right-2 !top-1/3 -translate-y-1/2`} />
-        <Handle type="source" id="source-right" position={Position.Right} className={`${HANDLE_CLASS} !right-2 !top-2/3 -translate-y-1/2`} />
+        <Handle
+          style={handleStyle}
+          type="target"
+          id="target-right"
+          position={Position.Right}
+          className={`${handleClass} !right-2 !top-1/3 -translate-y-1/2`}
+        />
+        <Handle
+          style={handleStyle}
+          type="source"
+          id="source-right"
+          position={Position.Right}
+          className={`${handleClass} !right-2 !top-2/3 -translate-y-1/2`}
+        />
       </>
     );
   }
@@ -345,17 +564,41 @@ function FlowHandles({ config }: { config: ShelfTodoHandleConfig }) {
 }
 
 function TodoFlowNode(props: NodeProps) {
-  const { text, note, tag, subtitle, blockStatus, date, showTodoDates, handleConfig, grazelandPlane } = (props.data ?? {}) as TodoFlowNodeData;
+  const {
+    text,
+    note,
+    tag,
+    subtitle,
+    blockStatus,
+    date,
+    showTodoDates,
+    handleConfig,
+    grazelandPlane,
+    sectorName,
+    sectorColor,
+  } = (props.data ?? {}) as TodoFlowNodeData;
+  const uiTheme = useShelfDocumentTheme();
   const statusClass = nodeStatusClass(blockStatus);
   const config = handleConfig ?? "horizontal";
   const isSelected = props.selected === true;
   const showDate = showTodoDates && date && blockStatus !== "blocked";
+  const sectorStyle = sectorColor ? sectorNodeChromeStyleForTheme(sectorColor, uiTheme) : undefined;
+  const baseBgClass = sectorColor ? "" : "bg-black/35";
+  const daySectorHandleStyle =
+    uiTheme === "day" && sectorColor ? sectorHandleStyleDay(sectorColor) : undefined;
   return (
     <div
-      className={`shelf-flow-node shelf-top6-card group flex w-full min-h-[4rem] flex-col gap-1.5 bg-black/35 px-1 py-2.5 shadow-sm ${statusClass} ${isSelected ? "shelf-flow-node--selected" : ""} ${grazelandPlane ? "shelf-flow-node--grazeland ring-1 ring-amber-200/25" : ""}`}
+      onContextMenu={(e) => e.preventDefault()}
+      className={`shelf-flow-node shelf-top6-card group flex w-full min-h-[4rem] flex-col gap-1.5 ${baseBgClass} px-1 py-2.5 shadow-sm ${statusClass} ${isSelected ? "shelf-flow-node--selected" : ""} ${grazelandPlane ? "shelf-flow-node--grazeland ring-1 ring-amber-200/25" : ""}`}
+      style={sectorStyle}
     >
-      <FlowHandles config={config} />
+      <FlowHandles config={config} daySectorHandleStyle={daySectorHandleStyle} />
       <div className="min-w-0 flex-1 overflow-visible px-2 pr-3 pl-3">
+        {sectorName && (
+          <div className="mb-0.5 text-[9px] font-medium uppercase tracking-wide text-zinc-500/90 truncate" title={sectorName}>
+            {sectorName}
+          </div>
+        )}
         <div className="font-semibold leading-snug text-white group-hover:text-emerald-100 break-words whitespace-pre-wrap">
           {subtitle ? `${text} · ${subtitle}` : text}
         </div>
@@ -399,11 +642,13 @@ function buildInitialNodes(
   storedPositions?: Record<string, { x: number; y: number }>,
   onEditTodo?: (id: string, updates: Partial<ShelfPillarTodoItem>) => void,
   showTodoDates?: boolean,
-  grazelandPlane?: boolean
+  grazelandPlane?: boolean,
+  sectorColorMap?: Record<string, SectorColorKey>
 ): Node[] {
   return todos.map((todo, i) => {
     const pos = storedPositions?.[todo.id];
     const width = computeNodeWidth(todo);
+    const resolvedSector = resolveVisualFlowSectorColor(todo, sectorColorMap);
     return {
       id: todo.id,
       type: "todoFlow",
@@ -418,6 +663,8 @@ function buildInitialNodes(
         showTodoDates: !!showTodoDates,
         handleConfig: todo.handleConfig ?? "horizontal",
         grazelandPlane: !!grazelandPlane,
+        sectorName: todo.sectorName,
+        sectorColor: resolvedSector,
         onNoteChange:
           onEditTodo && todo.note
             ? (newNote: string) => onEditTodo(todo.id, { note: newNote })
@@ -703,10 +950,11 @@ function VisualFlowPanelInner({
   onTodoLog?: (entry: string) => void;
   fullPage?: boolean;
 }) {
-  const { screenToFlowPosition } = useReactFlow();
-  const [nodeMenu, setNodeMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
+  const { screenToFlowPosition, getNodes } = useReactFlow();
+  const [nodeMenu, setNodeMenu] = useState<{ nodeIds: string[]; x: number; y: number } | null>(null);
   const [edgeMenu, setEdgeMenu] = useState<{ edgeId: string; x: number; y: number } | null>(null);
   const [paneMenu, setPaneMenu] = useState<{ x: number; y: number } | null>(null);
+  const [sectorManagerOpen, setSectorManagerOpen] = useState(false);
   const [editNodeId, setEditNodeId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerFrozen, setDrawerFrozen] = useState(false);
@@ -731,6 +979,28 @@ function VisualFlowPanelInner({
   });
 
   const canvasItems = plane === "main" ? todos : grazelandItems;
+  const allVisualFlowSectorNames = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of todos) {
+      const s = t.sectorName?.trim();
+      if (s) set.add(s);
+    }
+    for (const t of grazelandItems) {
+      const s = t.sectorName?.trim();
+      if (s) set.add(s);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [todos, grazelandItems]);
+  const sectorGroups = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const t of canvasItems) {
+      const s = t.sectorName?.trim();
+      if (!s) continue;
+      if (!map.has(s)) map.set(s, []);
+      map.get(s)!.push(t.id);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [canvasItems]);
   const storedNodePositions = plane === "main" ? visualFlow.nodePositions : visualFlow.grazelandNodePositions;
   const storedFlowEdges = plane === "main" ? visualFlow.edges : visualFlow.grazelandEdges;
 
@@ -792,6 +1062,15 @@ function VisualFlowPanelInner({
         if (updates.date !== undefined && String(updates.date || "") !== String(todo.date ?? "")) {
           lines.push(`Date: ${todo.date || "—"} → ${updates.date || "—"}`);
         }
+        if (updates.sectorName !== undefined && updates.sectorName !== (todo.sectorName ?? "")) {
+          lines.push(`Sector: ${todo.sectorName || "—"} → ${updates.sectorName || "—"}`);
+        }
+        if (
+          updates.sectorColor !== undefined &&
+          String(updates.sectorColor ?? "") !== String(todo.sectorColor ?? "")
+        ) {
+          lines.push(`Sector color: ${todo.sectorColor || "default"} → ${updates.sectorColor || "default"}`);
+        }
         if (lines.length) {
           const kind = plane === "grazeland" ? "item" : "task";
           onTodoLog(`${logLabel}: updated ${kind} "${todo.text}":\n${lines.join("\n")}`);
@@ -810,9 +1089,10 @@ function VisualFlowPanelInner({
         storedNodePositions,
         handleEditCanvasItemWithLog,
         showTodoDates,
-        plane === "grazeland"
+        plane === "grazeland",
+        visualFlow.sectorColors
       ),
-    [canvasItems, storedNodePositions, handleEditCanvasItemWithLog, showTodoDates, plane]
+    [canvasItems, storedNodePositions, handleEditCanvasItemWithLog, showTodoDates, plane, visualFlow.sectorColors]
   );
   const initialEdges = useMemo(
     () => buildInitialEdges(canvasItems, storedFlowEdges),
@@ -845,7 +1125,8 @@ function VisualFlowPanelInner({
         storedNodePositions,
         handleEditCanvasItemWithLog,
         showTodoDates,
-        plane === "grazeland"
+        plane === "grazeland",
+        visualFlow.sectorColors
       );
       return fresh.map((n) => {
         const existing = current.find((c) => c.id === n.id);
@@ -872,6 +1153,7 @@ function VisualFlowPanelInner({
     handleEditCanvasItemWithLog,
     showTodoDates,
     plane,
+    visualFlow.sectorColors,
     setNodes,
     setEdges,
   ]);
@@ -939,13 +1221,32 @@ function VisualFlowPanelInner({
   );
 
   const onNodeContextMenu = useCallback(
-    (e: React.MouseEvent, node: { id: string }) => {
+    (e: React.MouseEvent, node: Node) => {
       e.preventDefault();
       setEdgeMenu(null);
-      setNodeMenu({ nodeId: node.id, x: e.clientX, y: e.clientY });
+      setPaneMenu(null);
+      const clickedId = String(node.id);
+      // Read selection from the flow store so we always see the current multi-selection
+      // (avoids stale React state and matches React Flow’s selection at event time).
+      const selectedIds = getNodes()
+        .filter((n) => n.selected)
+        .map((n) => String(n.id));
+      const nodeIds =
+        selectedIds.length > 1 && selectedIds.includes(clickedId) ? selectedIds : [clickedId];
+      setNodeMenu({ nodeIds, x: e.clientX, y: e.clientY });
     },
-    []
+    [getNodes]
   );
+
+  /** Right-clicks on the multi-select rectangle hit this, not the node — without it the browser menu shows. */
+  const onSelectionContextMenu = useCallback((e: React.MouseEvent, selectedNodes: Node[]) => {
+    e.preventDefault();
+    setEdgeMenu(null);
+    setPaneMenu(null);
+    const ids = selectedNodes.map((n) => String(n.id));
+    if (ids.length === 0) return;
+    setNodeMenu({ nodeIds: ids, x: e.clientX, y: e.clientY });
+  }, []);
 
   const handleDeleteEdge = useCallback(
     (edgeId: string) => {
@@ -1028,6 +1329,15 @@ function VisualFlowPanelInner({
   }, [paneMenu]);
 
   useEffect(() => {
+    if (!sectorManagerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSectorManagerOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [sectorManagerOpen]);
+
+  useEffect(() => {
     if (!edgeMenu) return;
     const close = (e: MouseEvent) => {
       const target = e.target;
@@ -1041,6 +1351,18 @@ function VisualFlowPanelInner({
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
   }, [edgeMenu]);
+
+  useEffect(() => {
+    if (!nodeMenu && !paneMenu && !edgeMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setNodeMenu(null);
+      setPaneMenu(null);
+      setEdgeMenu(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [nodeMenu, paneMenu, edgeMenu]);
 
   useEffect(() => {
     if (!drawerMenu) return;
@@ -1061,11 +1383,23 @@ function VisualFlowPanelInner({
     (e: React.MouseEvent | MouseEvent) => {
       e.preventDefault();
       setEdgeMenu(null);
+      const selectedIds = getNodes()
+        .filter((n) => n.selected)
+        .map((n) => String(n.id));
+      // Right-click empty canvas while several nodes are selected: same bulk menu as on a node
+      if (selectedIds.length > 1) {
+        setPaneMenu(null);
+        setNodeMenu({ nodeIds: selectedIds, x: e.clientX, y: e.clientY });
+        return;
+      }
       const canAdd =
         (plane === "main" && onAddTodo) || (plane === "grazeland" && onAddGrazelandItem);
-      if (canAdd) setPaneMenu({ x: e.clientX, y: e.clientY });
+      if (canAdd) {
+        setNodeMenu(null);
+        setPaneMenu({ x: e.clientX, y: e.clientY });
+      }
     },
-    [onAddGrazelandItem, onAddTodo, plane]
+    [getNodes, onAddGrazelandItem, onAddTodo, plane]
   );
 
   const handleCreateTask = useCallback(() => {
@@ -1115,6 +1449,92 @@ function VisualFlowPanelInner({
     screenToFlowPosition,
     visualFlow,
   ]);
+
+  const handleOpenSectorManager = useCallback(() => {
+    setPaneMenu(null);
+    setSectorManagerOpen(true);
+  }, []);
+
+  const applySectorColorByName = useCallback(
+    (sectorName: string, color: SectorColorKey | undefined) => {
+      const trimmed = sectorName.trim();
+      if (!trimmed) return;
+      hasInteracted.current = true;
+      const nextMap = { ...(visualFlow.sectorColors ?? {}) };
+      if (color) nextMap[trimmed] = color;
+      else delete nextMap[trimmed];
+      onVisualFlowChange({ ...visualFlow, sectorColors: nextMap });
+      const patch = color ? { sectorColor: color } : { sectorColor: undefined };
+      for (const t of todos) {
+        if (t.sectorName?.trim() !== trimmed) continue;
+        onEditTodo?.(t.id, patch);
+      }
+      for (const t of grazelandItems) {
+        if (t.sectorName?.trim() !== trimmed) continue;
+        onEditGrazelandItem?.(t.id, patch);
+      }
+      onTodoLog?.(
+        color
+          ? `Visual Flow: sector "${trimmed}" frame color → ${color} (all matching tasks)`
+          : `Visual Flow: cleared sector "${trimmed}" frame color (all matching tasks)`
+      );
+    },
+    [grazelandItems, onEditGrazelandItem, onEditTodo, onTodoLog, onVisualFlowChange, todos, visualFlow]
+  );
+
+  const handleRenameSectorGroup = useCallback(
+    (oldName: string, ids: string[]) => {
+      const next = window.prompt(`Rename sector`, oldName);
+      if (next === null) return;
+      const trimmed = next.trim();
+      hasInteracted.current = true;
+      const nextSc = { ...(visualFlow.sectorColors ?? {}) };
+      if (nextSc[oldName] !== undefined) {
+        const c = nextSc[oldName];
+        delete nextSc[oldName];
+        if (trimmed) nextSc[trimmed] = c;
+      }
+      onVisualFlowChange({ ...visualFlow, sectorColors: nextSc });
+      ids.forEach((id) => {
+        if (plane === "main") onEditTodo?.(id, { sectorName: trimmed || undefined });
+        else onEditGrazelandItem?.(id, { sectorName: trimmed || undefined });
+      });
+      const label = plane === "main" ? "Visual Flow" : "Visual Flow Grazeland";
+      const n = ids.length;
+      const u =
+        plane === "grazeland" ? (n === 1 ? "item" : "items") : n === 1 ? "task" : "tasks";
+      onTodoLog?.(`${label}: renamed sector "${oldName}" → "${trimmed || "—"}" (${n} ${u})`);
+    },
+    [onEditGrazelandItem, onEditTodo, onTodoLog, onVisualFlowChange, plane, visualFlow]
+  );
+
+  const handleClearSectorGroup = useCallback(
+    (name: string, ids: string[]) => {
+      if (
+        !window.confirm(
+          `Remove sector "${name}" from ${ids.length} ${plane === "grazeland" ? "items" : "tasks"}?`
+        )
+      )
+        return;
+      hasInteracted.current = true;
+      ids.forEach((id) => {
+        if (plane === "main") onEditTodo?.(id, { sectorName: undefined, sectorColor: undefined });
+        else onEditGrazelandItem?.(id, { sectorName: undefined, sectorColor: undefined });
+      });
+      const willRemainElsewhere = [...todos, ...grazelandItems].some(
+        (t) => t.sectorName?.trim() === name && !ids.includes(t.id)
+      );
+      const nextSc = { ...(visualFlow.sectorColors ?? {}) };
+      if (!willRemainElsewhere) delete nextSc[name];
+      onVisualFlowChange({ ...visualFlow, sectorColors: nextSc });
+      const label = plane === "main" ? "Visual Flow" : "Visual Flow Grazeland";
+      onTodoLog?.(
+        `${label}: removed sector "${name}" from ${ids.length} ${plane === "grazeland" ? "items" : "tasks"}`
+      );
+      setSectorManagerOpen(false);
+    },
+    [grazelandItems, onEditGrazelandItem, onEditTodo, onTodoLog, onVisualFlowChange, plane, todos, visualFlow]
+  );
 
   const handleEdit = useCallback(
     (id: string) => {
@@ -1191,6 +1611,113 @@ function VisualFlowPanelInner({
       setEdges,
       setNodes,
     ]
+  );
+
+  const handleBulkMarkCompleted = useCallback(
+    (ids: string[]) => {
+      const canComplete = plane === "main" ? onDeleteTodo : onDeleteGrazelandItem;
+      if (!canComplete || ids.length === 0) return;
+      const valid = ids.filter((id) => {
+        const t = canvasItems.find((x) => x.id === id);
+        return t && !t.done && !completingIdsRef.current.has(id);
+      });
+      if (valid.length === 0) return;
+      valid.forEach((id) => completingIdsRef.current.add(id));
+      setNodeMenu(null);
+      setEditNodeId(null);
+      hasInteracted.current = true;
+      setNodes((ns) =>
+        ns.map((n) =>
+          valid.includes(n.id)
+            ? {
+                ...n,
+                className: "shelf-flow-node-exiting",
+                data: { ...(n.data as object), completing: true },
+              }
+            : n
+        )
+      );
+      window.setTimeout(() => {
+        valid.forEach((id) => completingIdsRef.current.delete(id));
+        valid.forEach((id) => {
+          if (plane === "main") onDeleteTodo?.(id);
+          else onDeleteGrazelandItem?.(id);
+        });
+        onTaskCompleted?.();
+        onTodoLog?.(
+          plane === "main"
+            ? `Visual Flow: completed ${valid.length} tasks (bulk)`
+            : `Visual Flow Grazeland: completed ${valid.length} items (bulk)`
+        );
+        setEdges((eds) =>
+          eds.filter((e) => !valid.includes(e.source) && !valid.includes(e.target))
+        );
+        setNodes((ns) => ns.filter((n) => !valid.includes(n.id)));
+      }, COMPLETE_EXIT_MS);
+    },
+    [
+      canvasItems,
+      onDeleteGrazelandItem,
+      onDeleteTodo,
+      onTaskCompleted,
+      onTodoLog,
+      plane,
+      setEdges,
+      setNodes,
+    ]
+  );
+
+  const handleBulkSetBlockStatus = useCallback(
+    (ids: string[], status: ShelfTodoBlockStatus) => {
+      const canEdit = plane === "main" ? onEditTodo : onEditGrazelandItem;
+      if (!canEdit || ids.length === 0) return;
+      setNodeMenu(null);
+      hasInteracted.current = true;
+      ids.forEach((id) => {
+        if (plane === "main") onEditTodo?.(id, { blockStatus: status });
+        else onEditGrazelandItem?.(id, { blockStatus: status });
+      });
+      const n = ids.length;
+      const unit =
+        plane === "grazeland"
+          ? n === 1
+            ? "item"
+            : "items"
+          : n === 1
+            ? "task"
+            : "tasks";
+      onTodoLog?.(
+        `${plane === "main" ? "Visual Flow" : "Visual Flow Grazeland"}: set status to ${status} for ${n} ${unit}`
+      );
+    },
+    [onEditGrazelandItem, onEditTodo, onTodoLog, plane]
+  );
+
+  const handleBulkSetSector = useCallback(
+    (ids: string[], sectorName: string | undefined) => {
+      const canEdit = plane === "main" ? onEditTodo : onEditGrazelandItem;
+      if (!canEdit || ids.length === 0) return;
+      setNodeMenu(null);
+      hasInteracted.current = true;
+      const trimmed = sectorName?.trim() ?? "";
+      const patch: Partial<ShelfPillarTodoItem> = trimmed
+        ? {
+            sectorName: trimmed,
+            sectorColor: visualFlow.sectorColors?.[trimmed],
+          }
+        : { sectorName: undefined, sectorColor: undefined };
+      ids.forEach((id) => {
+        if (plane === "main") onEditTodo?.(id, patch);
+        else onEditGrazelandItem?.(id, patch);
+      });
+      const n = ids.length;
+      const unit =
+        plane === "grazeland" ? (n === 1 ? "item" : "items") : n === 1 ? "task" : "tasks";
+      onTodoLog?.(
+        `${plane === "main" ? "Visual Flow" : "Visual Flow Grazeland"}: set sector to ${trimmed || "(none)"} for ${n} ${unit}`
+      );
+    },
+    [onEditGrazelandItem, onEditTodo, onTodoLog, plane, visualFlow.sectorColors]
   );
 
   const handleToggleFocus = useCallback(
@@ -1332,29 +1859,7 @@ function VisualFlowPanelInner({
       </div>
 
       <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
-        <div className="shrink-0 p-6 pb-0">
-          {editNodeId && (() => {
-            const t = canvasItems.find((x) => x.id === editNodeId);
-            const canEdit = plane === "main" ? onEditTodo : onEditGrazelandItem;
-            if (!t || !canEdit) return null;
-            return (
-              <EditCardWrapper key={editNodeId}>
-                <NodeEditCard
-                  todo={t}
-                  showTodoDates={showTodoDates}
-                  editLabel={plane === "grazeland" ? "Edit item" : "Edit task"}
-                  titlePlaceholder={plane === "grazeland" ? "Item title" : "Task title"}
-                  onSave={(updates) => {
-                    handleEditCanvasItemWithLog(editNodeId, updates);
-                    setEditNodeId(null);
-                  }}
-                  onClose={() => setEditNodeId(null)}
-                />
-              </EditCardWrapper>
-            );
-          })()}
-        </div>
-        <div className="flex-1 min-h-0 px-6 pb-6 overflow-x-hidden">
+        <div className="flex-1 min-h-0 px-6 pt-6 pb-6 overflow-x-hidden">
           <section
             className="h-full flex-1 min-w-0 shelf-flow-canvas-transition"
             style={{ marginRight: drawerOpen ? FOCUS_DRAWER_CARD_MARGIN : 0 }}
@@ -1387,6 +1892,7 @@ function VisualFlowPanelInner({
                 onConnect={onConnect}
                 onNodeDragStop={onNodeDragStop}
                 onNodeContextMenu={onNodeContextMenu}
+                onSelectionContextMenu={onSelectionContextMenu}
                 onPaneContextMenu={onPaneContextMenu}
                 onEdgeContextMenu={onEdgeContextMenuHandler}
                 onEdgeClick={() => {}}
@@ -1414,27 +1920,148 @@ function VisualFlowPanelInner({
                       : "Right-click on the canvas to add an item. Grazeland items stay on this plane only."}
                   </p>
                   <p className="text-xs text-zinc-500">
-                    Drag nodes to arrange. Ctrl+drag to draw selection rectangle. Selected nodes move in bulk.
+                    Drag nodes to arrange. Ctrl+drag to select several. Right-click a selected node or the canvas with
+                    multiple nodes selected for bulk status and actions.
                   </p>
                 </div>
               )}
             </div>
 
             {nodeMenu && (() => {
-              const todo = canvasItems.find((t) => t.id === nodeMenu.nodeId);
+              const ids = nodeMenu.nodeIds;
               const canEdit = plane === "main" ? onEditTodo : onEditGrazelandItem;
               const canDelete = plane === "main" ? onDeleteTodo : onDeleteGrazelandItem;
+              const noun = plane === "grazeland" ? "items" : "tasks";
+              const menuW = 200;
+              const left = Math.max(8, Math.min(nodeMenu.x, window.innerWidth - menuW));
+
+              if (ids.length > 1) {
+                const present = ids
+                  .map((id) => canvasItems.find((t) => t.id === id))
+                  .filter((t): t is ShelfPillarTodoItem => Boolean(t));
+                if (present.length === 0 || (!canEdit && !canDelete)) return null;
+                const anyUndone = present.some((t) => !t.done);
+                const menuH = 400;
+                const top = Math.max(8, Math.min(nodeMenu.y, window.innerHeight - menuH));
+                return (
+                  <div
+                    ref={menuRef}
+                    className="shelf-note-popover fixed z-[200] min-w-[180px] max-w-[220px] rounded-xl border border-emerald-400/20 bg-zinc-900 py-1 shadow-xl"
+                    style={{ left, top }}
+                  >
+                    <div className="px-3 py-1.5 text-[10px] font-medium text-zinc-500">
+                      {ids.length} {noun} selected
+                    </div>
+                    {canEdit && anyUndone && (
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm text-emerald-400 hover:bg-white/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleBulkMarkCompleted(ids);
+                        }}
+                      >
+                        Mark all completed ✓
+                      </button>
+                    )}
+                    {canEdit && (() => {
+                      const blockStatuses = present.map((t) => t.blockStatus ?? "ready");
+                      const uniform =
+                        blockStatuses.length > 0 &&
+                        blockStatuses.every((s) => s === blockStatuses[0]);
+                      const statusSelectValue = uniform ? blockStatuses[0]! : "";
+                      return (
+                        <>
+                          <div className="my-1 border-t border-white/10" />
+                          <div className="px-3 py-2">
+                            <label className="mb-1 block text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
+                              Set status for all
+                            </label>
+                            <select
+                              value={statusSelectValue}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                const v = e.target.value as ShelfTodoBlockStatus;
+                                if (!v) return;
+                                handleBulkSetBlockStatus(ids, v);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-zinc-200 focus:outline-none"
+                              aria-label="Set block status for all selected"
+                            >
+                              {!uniform && (
+                                <option value="" disabled>
+                                  Mixed — pick status
+                                </option>
+                              )}
+                              {BLOCK_STATUS_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </>
+                      );
+                    })()}
+                    {canEdit && (() => {
+                      const sectorLabels = present.map((t) => t.sectorName?.trim() ?? "");
+                      const uniformSector =
+                        sectorLabels.length > 0 && sectorLabels.every((s) => s === sectorLabels[0]);
+                      const sectorSelectValue = uniformSector ? sectorLabels[0]! : "__mixed__";
+                      const sectorOptions = Array.from(
+                        new Set([...allVisualFlowSectorNames, ...sectorLabels.filter(Boolean)])
+                      ).sort((a, b) => a.localeCompare(b));
+                      return (
+                        <>
+                          <div className="my-1 border-t border-white/10" />
+                          <div className="px-3 py-2">
+                            <label className="mb-1 block text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
+                              Set sector for all
+                            </label>
+                            <select
+                              value={sectorSelectValue}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                const v = e.target.value;
+                                if (v === "__mixed__") return;
+                                handleBulkSetSector(ids, v === "" ? undefined : v);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-zinc-200 focus:outline-none"
+                              aria-label="Set sector for all selected"
+                            >
+                              {!uniformSector && (
+                                <option value="__mixed__" disabled>
+                                  Mixed — pick sector
+                                </option>
+                              )}
+                              <option value="">No sector</option>
+                              {sectorOptions.map((name) => (
+                                <option key={name} value={name}>
+                                  {name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                );
+              }
+
+              const todo = canvasItems.find((t) => t.id === ids[0]);
               if (!todo || (!canEdit && !canDelete)) return null;
               const currentHandle = (todo.handleConfig ?? "horizontal") as ShelfTodoHandleConfig;
               const setHandle = (config: ShelfTodoHandleConfig) => {
-                if (plane === "main") onEditTodo?.(nodeMenu.nodeId, { handleConfig: config });
-                else onEditGrazelandItem?.(nodeMenu.nodeId, { handleConfig: config });
+                if (plane === "main") onEditTodo?.(ids[0], { handleConfig: config });
+                else onEditGrazelandItem?.(ids[0], { handleConfig: config });
                 setNodeMenu(null);
               };
-              const menuW = 180;
-              const menuH = 420;
-              const left = Math.max(8, Math.min(nodeMenu.x, window.innerWidth - menuW));
+              const menuH = 400;
               const top = Math.max(8, Math.min(nodeMenu.y, window.innerHeight - menuH));
+              const layoutSelectValue = currentHandle === "hidden" ? "" : currentHandle;
               return (
                 <div
                   ref={menuRef}
@@ -1447,23 +2074,49 @@ function VisualFlowPanelInner({
                       className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleEdit(nodeMenu.nodeId);
+                        handleEdit(ids[0]);
                       }}
                     >
                       {plane === "grazeland" ? "Edit item…" : "Edit task…"}
                     </button>
                   )}
-                  {canEdit && !todo.done && (
-                    <button
-                      type="button"
-                      className="w-full px-3 py-2 text-left text-sm text-emerald-400 hover:bg-white/10"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleMarkCompleted(nodeMenu.nodeId);
-                      }}
-                    >
-                      Mark completed ✓
-                    </button>
+                  {canEdit && (
+                    <>
+                      <div className="my-1 border-t border-white/10" />
+                      <div className="px-3 py-2">
+                        <label className="mb-1 block text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
+                          Status
+                        </label>
+                        <select
+                          value={todo.blockStatus ?? "ready"}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleBulkSetBlockStatus([ids[0]], e.target.value as ShelfTodoBlockStatus);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-zinc-200 focus:outline-none"
+                          aria-label="Task block status"
+                        >
+                          {BLOCK_STATUS_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        {!todo.done && (
+                          <button
+                            type="button"
+                            className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-sm font-medium text-emerald-400 hover:bg-white/10"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkCompleted(ids[0]);
+                            }}
+                          >
+                            Mark completed ✓
+                          </button>
+                        )}
+                      </div>
+                    </>
                   )}
                   {canEdit && plane === "main" && (
                     <button
@@ -1471,7 +2124,7 @@ function VisualFlowPanelInner({
                       className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleToggleFocus(nodeMenu.nodeId);
+                        handleToggleFocus(ids[0]);
                       }}
                     >
                       <span
@@ -1494,7 +2147,7 @@ function VisualFlowPanelInner({
                       className="w-full px-3 py-2 text-left text-sm text-red-400/90 hover:bg-white/10"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDelete(nodeMenu.nodeId);
+                        handleDelete(ids[0]);
                       }}
                     >
                       {plane === "grazeland" ? "Delete item" : "Delete task"}
@@ -1503,32 +2156,47 @@ function VisualFlowPanelInner({
                   {canEdit && (
                     <>
                       <div className="my-1 border-t border-white/10" />
-                      <div className="px-3 py-1.5 text-[10px] text-zinc-500 uppercase tracking-wider">
-                        Connection points
-                      </div>
-                      {(
-                        [
-                          ["hidden", "Hidden"],
-                          ["horizontal", "Horizontal"],
-                          ["vertical", "Vertical"],
-                          ["top", "Top only"],
-                          ["bottom", "Bottom only"],
-                          ["left", "Left only"],
-                          ["right", "Right only"],
-                        ] as const
-                      ).map(([value, label]) => (
+                      <div className="px-3 py-2">
+                        <label className="mb-1 block text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
+                          Connection points
+                        </label>
                         <button
-                          key={value}
                           type="button"
-                          className={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 ${currentHandle === value ? "text-emerald-400" : "text-zinc-200"}`}
+                          className={`w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/10 ${currentHandle === "hidden" ? "text-emerald-400" : "text-zinc-200"}`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            setHandle(value);
+                            setHandle("hidden");
                           }}
                         >
-                          {label}
+                          Hidden
                         </button>
-                      ))}
+                        <label className="mb-1 mt-2 block text-[10px] font-medium text-zinc-500">
+                          Sides &amp; direction
+                        </label>
+                        <select
+                          value={layoutSelectValue}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            const v = e.target.value as Exclude<ShelfTodoHandleConfig, "hidden">;
+                            if (!v) return;
+                            setHandle(v);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-zinc-200 focus:outline-none"
+                          aria-label="Connection layout when visible"
+                        >
+                          {currentHandle === "hidden" && (
+                            <option value="" disabled>
+                              Select layout…
+                            </option>
+                          )}
+                          {HANDLE_MENU_LAYOUT_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </>
                   )}
                 </div>
@@ -1595,14 +2263,14 @@ function VisualFlowPanelInner({
             })()}
 
             {paneMenu && ((plane === "main" && onAddTodo) || (plane === "grazeland" && onAddGrazelandItem)) && (() => {
-              const menuW = 160;
-              const menuH = 60;
+              const menuW = 200;
+              const menuH = 108;
               const left = Math.max(8, Math.min(paneMenu.x, window.innerWidth - menuW));
               const top = Math.max(8, Math.min(paneMenu.y, window.innerHeight - menuH));
               return (
               <div
                 ref={paneMenuRef}
-                className="shelf-note-popover fixed z-[200] min-w-[140px] rounded-xl border border-emerald-400/20 bg-zinc-900 py-1 shadow-xl"
+                className="shelf-note-popover fixed z-[200] min-w-[180px] rounded-xl border border-emerald-400/20 bg-zinc-900 py-1 shadow-xl"
                 style={{ left, top }}
               >
                 <button
@@ -1615,9 +2283,117 @@ function VisualFlowPanelInner({
                 >
                   {plane === "grazeland" ? "Create new item" : "Create new task"}
                 </button>
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenSectorManager();
+                  }}
+                >
+                  Manage sectors
+                </button>
               </div>
             );
             })()}
+
+            {sectorManagerOpen && (
+              <div
+                className="fixed inset-0 z-[250] flex items-center justify-center bg-black/55 p-4"
+                role="presentation"
+                onClick={() => setSectorManagerOpen(false)}
+              >
+                <div
+                  role="dialog"
+                  aria-labelledby="sector-manager-title"
+                  className="shelf-sector-manager-dialog max-h-[min(80vh,520px)] w-full max-w-md overflow-y-auto rounded-xl border border-emerald-400/20 p-4 shadow-xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h2 id="sector-manager-title" className="mb-3 text-sm font-semibold text-zinc-100">
+                    Manage sectors
+                  </h2>
+                  <p className="mb-3 text-[10px] leading-relaxed text-zinc-500">
+                    Pick a palette color for each sector (card outline and background wash). Connection points stay the default emerald.
+                  </p>
+                  {sectorGroups.length === 0 ? (
+                    <p className="text-xs leading-relaxed text-zinc-500">
+                      No sector names on this canvas yet. Open a task, choose Edit, and set{" "}
+                      <span className="text-zinc-400">Sector name (optional)</span>.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {sectorGroups.map(([name, ids]) => (
+                        <li
+                          key={name}
+                          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+                        >
+                          <div className="mb-2 flex items-start justify-between gap-2">
+                            <span className="min-w-0 truncate text-sm font-medium text-zinc-200" title={name}>
+                              {name}
+                            </span>
+                            <span className="shrink-0 text-[10px] text-zinc-500">
+                              {ids.length}{" "}
+                              {plane === "grazeland"
+                                ? ids.length === 1
+                                  ? "item"
+                                  : "items"
+                                : ids.length === 1
+                                  ? "task"
+                                  : "tasks"}
+                            </span>
+                          </div>
+                          <label className="mb-1 block text-[10px] font-medium text-zinc-500">
+                            Frame color
+                          </label>
+                          <select
+                            value={visualFlow.sectorColors?.[name] ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              applySectorColorByName(
+                                name,
+                                v === "" ? undefined : (v as SectorColorKey)
+                              );
+                            }}
+                            className="mb-2 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 focus:outline-none"
+                            aria-label={`Frame color for sector ${name}`}
+                          >
+                            <option value="">Default (emerald handles)</option>
+                            {SECTOR_COLOR_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-zinc-200 hover:bg-white/10"
+                              onClick={() => handleRenameSectorGroup(name, ids)}
+                            >
+                              Rename…
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-md px-2 py-1 text-[11px] text-red-400/90 hover:bg-white/10"
+                              onClick={() => handleClearSectorGroup(name, ids)}
+                            >
+                              Remove from all
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <button
+                    type="button"
+                    className="mt-4 w-full rounded-lg border border-white/10 bg-white/5 py-2 text-xs font-medium text-zinc-300 hover:bg-white/10"
+                    onClick={() => setSectorManagerOpen(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
 
           </section>
 
@@ -1786,6 +2562,42 @@ function VisualFlowPanelInner({
             </div>
           )}
         </div>
+
+        {editNodeId &&
+          (() => {
+            const t = canvasItems.find((x) => x.id === editNodeId);
+            const canEdit = plane === "main" ? onEditTodo : onEditGrazelandItem;
+            if (!t || !canEdit) return null;
+            return (
+              <div
+                key={editNodeId}
+                className="fixed inset-0 z-[242] flex items-center justify-center bg-black/60 p-4"
+                role="presentation"
+              >
+                <NodeEditCard
+                  todo={t}
+                  showTodoDates={showTodoDates}
+                  editLabel={plane === "grazeland" ? "Edit item" : "Edit task"}
+                  titlePlaceholder={plane === "grazeland" ? "Item title" : "Task title"}
+                  existingSectorNames={allVisualFlowSectorNames}
+                  sectorColorMap={visualFlow.sectorColors}
+                  onSave={(updates) => {
+                    handleEditCanvasItemWithLog(editNodeId, updates);
+                    const task = canvasItems.find((x) => x.id === editNodeId);
+                    const nm = (updates.sectorName ?? task?.sectorName)?.trim();
+                    if (nm) {
+                      const mapColor = visualFlow.sectorColors?.[nm];
+                      if (updates.sectorColor !== mapColor) {
+                        applySectorColorByName(nm, updates.sectorColor);
+                      }
+                    }
+                    setEditNodeId(null);
+                  }}
+                  onClose={() => setEditNodeId(null)}
+                />
+              </div>
+            );
+          })()}
       </div>
     </div>
   );

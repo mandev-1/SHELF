@@ -69,6 +69,32 @@ export type ShelfTodoHandleConfig =
   | "right"
   | "hidden";
 
+/** Epic / sector border tint on Visual Flow (subtle; optional) */
+export type SectorColorKey = "bone" | "jet-black" | "pacific-blue" | "alice-blue" | "fern";
+
+export const SECTOR_COLOR_OPTIONS: { value: SectorColorKey; label: string }[] = [
+  { value: "bone", label: "Bone" },
+  { value: "jet-black", label: "Jet black" },
+  { value: "pacific-blue", label: "Pacific blue" },
+  { value: "alice-blue", label: "Alice blue" },
+  { value: "fern", label: "Fern" },
+];
+
+/** Hex values for sector borders (see design tokens) */
+export const SECTOR_HEX: Record<SectorColorKey, string> = {
+  bone: "#e6d9c3",
+  "jet-black": "#1f2a2a",
+  "pacific-blue": "#5fb3c6",
+  "alice-blue": "#eaf4f7",
+  fern: "#3e7c4a",
+};
+
+const SECTOR_COLOR_SET = new Set<string>(Object.keys(SECTOR_HEX));
+
+export function isSectorColorKey(x: unknown): x is SectorColorKey {
+  return typeof x === "string" && SECTOR_COLOR_SET.has(x);
+}
+
 export interface ShelfPillarTodoItem {
   id: string;
   text: string;
@@ -85,6 +111,10 @@ export interface ShelfPillarTodoItem {
   date?: string;
   /** When true, the task appears in the visual flow focus drawer. */
   focused?: boolean;
+  /** Epic / sector name (optional); shown lightly on Visual Flow when set */
+  sectorName?: string;
+  /** When set, a subtle Visual Flow border uses this tint; omit for default node chrome */
+  sectorColor?: SectorColorKey;
 }
 
 export interface ObsidianLogConfig {
@@ -114,6 +144,20 @@ export interface VisualFlowData {
   /** Second canvas layer — same item shape as pillar todos, separate from main flow */
   grazelandNodePositions?: Record<string, { x: number; y: number }>;
   grazelandEdges?: VisualFlowEdge[];
+  /** Sector label → border color; applies to all tasks with that sector name on both planes */
+  sectorColors?: Record<string, SectorColorKey>;
+}
+
+/** Border/handle color for a node: managed sector map wins, then per-task `sectorColor`. */
+export function resolveVisualFlowSectorColor(
+  todo: ShelfPillarTodoItem,
+  sectorColors?: Record<string, SectorColorKey>
+): SectorColorKey | undefined {
+  const name = todo.sectorName?.trim();
+  if (name && sectorColors && isSectorColorKey(sectorColors[name])) {
+    return sectorColors[name];
+  }
+  return todo.sectorColor;
 }
 
 export interface ShelfBackupData {
