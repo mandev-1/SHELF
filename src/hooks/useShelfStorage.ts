@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  GRAZELAND_HANDLE_SLOTS,
+  createGrazelandHandleVisibility,
   isSectorColorKey,
   type BookmarkSize,
   type ObsidianLogConfig,
   type ShelfBackupData,
+  type ShelfGrazelandHandleVisibility,
   type ShelfTheme,
   type ShelfTodoBlockStatus,
   type ShelfTodoHandleConfig,
@@ -18,6 +21,7 @@ import {
   type ShelfSectionColors,
   type SectorColorKey,
   type VisualFlowData,
+  type VisualFlowNodeSize,
 } from "../types/grid";
 
 const LAYOUT_KEY = "shelf-layout";
@@ -107,6 +111,33 @@ function getStorage() {
   return null;
 }
 
+function isShelfTodoHandleConfig(value: unknown): value is ShelfTodoHandleConfig {
+  return (
+    value === "horizontal" ||
+    value === "vertical" ||
+    value === "top" ||
+    value === "bottom" ||
+    value === "left" ||
+    value === "right" ||
+    value === "omni" ||
+    value === "hidden"
+  );
+}
+
+function normalizeGrazelandHandleVisibility(value: unknown): ShelfGrazelandHandleVisibility | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const next = createGrazelandHandleVisibility();
+  let hasAny = false;
+  for (const slot of GRAZELAND_HANDLE_SLOTS) {
+    if (typeof raw[slot] === "boolean") {
+      next[slot] = raw[slot];
+      hasAny = true;
+    }
+  }
+  return hasAny ? next : undefined;
+}
+
 function normalizeGoals(input: unknown): ShelfGoalMap {
   if (!input || typeof input !== "object" || Array.isArray(input)) return {};
   const next: ShelfGoalMap = {};
@@ -130,6 +161,21 @@ function normalizeGoals(input: unknown): ShelfGoalMap {
     };
   }
   return next;
+}
+
+function normalizeNodeSizes(input: unknown): Record<string, VisualFlowNodeSize> | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const next: Record<string, VisualFlowNodeSize> = {};
+  for (const [id, raw] of Object.entries(input as Record<string, unknown>)) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const size: VisualFlowNodeSize = {};
+    const width = (raw as { width?: unknown }).width;
+    const height = (raw as { height?: unknown }).height;
+    if (typeof width === "number" && Number.isFinite(width)) size.width = width;
+    if (typeof height === "number" && Number.isFinite(height)) size.height = height;
+    if (size.width !== undefined || size.height !== undefined) next[id] = size;
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 export function useShelfStorage() {
@@ -281,16 +327,8 @@ export function useShelfStorage() {
                 ? (x.blockStatus as ShelfTodoBlockStatus)
                 : undefined,
             date: typeof x.date === "string" && x.date.trim() ? x.date.trim() : undefined,
-            handleConfig:
-              x.handleConfig === "horizontal" ||
-              x.handleConfig === "vertical" ||
-              x.handleConfig === "top" ||
-              x.handleConfig === "bottom" ||
-              x.handleConfig === "left" ||
-              x.handleConfig === "right" ||
-              x.handleConfig === "hidden"
-                ? (x.handleConfig as ShelfTodoHandleConfig)
-                : undefined,
+            handleConfig: isShelfTodoHandleConfig(x.handleConfig) ? x.handleConfig : undefined,
+            grazelandHandleVisibility: normalizeGrazelandHandleVisibility(x.grazelandHandleVisibility),
             focused: Boolean(x.focused),
             sectorName: typeof x.sectorName === "string" && x.sectorName.trim() ? x.sectorName.trim() : undefined,
             sectorColor: isSectorColorKey(x.sectorColor) ? x.sectorColor : undefined,
@@ -314,16 +352,8 @@ export function useShelfStorage() {
                 ? (x.blockStatus as ShelfTodoBlockStatus)
                 : undefined,
             date: typeof x.date === "string" && x.date.trim() ? x.date.trim() : undefined,
-            handleConfig:
-              x.handleConfig === "horizontal" ||
-              x.handleConfig === "vertical" ||
-              x.handleConfig === "top" ||
-              x.handleConfig === "bottom" ||
-              x.handleConfig === "left" ||
-              x.handleConfig === "right" ||
-              x.handleConfig === "hidden"
-                ? (x.handleConfig as ShelfTodoHandleConfig)
-                : undefined,
+            handleConfig: isShelfTodoHandleConfig(x.handleConfig) ? x.handleConfig : undefined,
+            grazelandHandleVisibility: normalizeGrazelandHandleVisibility(x.grazelandHandleVisibility),
             focused: Boolean(x.focused),
             sectorName: typeof x.sectorName === "string" && x.sectorName.trim() ? x.sectorName.trim() : undefined,
             sectorColor: isSectorColorKey(x.sectorColor) ? x.sectorColor : undefined,
@@ -395,6 +425,7 @@ export function useShelfStorage() {
           }
           if (Object.keys(next).length > 0) sectorColors = next;
         }
+        const grazelandNodeSizes = normalizeNodeSizes(raw.grazelandNodeSizes);
         setVisualFlowState({
           nodePositions: raw.nodePositions && typeof raw.nodePositions === "object" ? (raw.nodePositions as Record<string, { x: number; y: number }>) : undefined,
           edges: parseEdges(raw.edges),
@@ -403,6 +434,7 @@ export function useShelfStorage() {
               ? (raw.grazelandNodePositions as Record<string, { x: number; y: number }>)
               : undefined,
           grazelandEdges: parseEdges(raw.grazelandEdges),
+          ...(grazelandNodeSizes && { grazelandNodeSizes }),
           ...(sectorColors && { sectorColors }),
         });
       }
@@ -554,16 +586,8 @@ export function useShelfStorage() {
             ? t.blockStatus
             : undefined,
         date: typeof t.date === "string" && t.date.trim() ? t.date.trim() : undefined,
-        handleConfig:
-          t.handleConfig === "horizontal" ||
-          t.handleConfig === "vertical" ||
-          t.handleConfig === "top" ||
-          t.handleConfig === "bottom" ||
-          t.handleConfig === "left" ||
-          t.handleConfig === "right" ||
-          t.handleConfig === "hidden"
-            ? t.handleConfig
-            : undefined,
+        handleConfig: isShelfTodoHandleConfig(t.handleConfig) ? t.handleConfig : undefined,
+        grazelandHandleVisibility: normalizeGrazelandHandleVisibility(t.grazelandHandleVisibility),
         focused: Boolean(t.focused),
         sectorName: typeof t.sectorName === "string" && t.sectorName.trim() ? t.sectorName.trim() : undefined,
         sectorColor: isSectorColorKey(t.sectorColor) ? t.sectorColor : undefined,
@@ -589,16 +613,8 @@ export function useShelfStorage() {
             ? t.blockStatus
             : undefined,
         date: typeof t.date === "string" && t.date.trim() ? t.date.trim() : undefined,
-        handleConfig:
-          t.handleConfig === "horizontal" ||
-          t.handleConfig === "vertical" ||
-          t.handleConfig === "top" ||
-          t.handleConfig === "bottom" ||
-          t.handleConfig === "left" ||
-          t.handleConfig === "right" ||
-          t.handleConfig === "hidden"
-            ? t.handleConfig
-            : undefined,
+        handleConfig: isShelfTodoHandleConfig(t.handleConfig) ? t.handleConfig : undefined,
+        grazelandHandleVisibility: normalizeGrazelandHandleVisibility(t.grazelandHandleVisibility),
         focused: Boolean(t.focused),
         sectorName: typeof t.sectorName === "string" && t.sectorName.trim() ? t.sectorName.trim() : undefined,
         sectorColor: isSectorColorKey(t.sectorColor) ? t.sectorColor : undefined,

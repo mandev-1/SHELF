@@ -7,6 +7,8 @@ import {
   addEdge,
   useReactFlow,
   Handle,
+  NodeResizeControl,
+  ConnectionMode,
   Position,
   BaseEdge,
   getBezierPath,
@@ -22,17 +24,22 @@ import { Input } from "@heroui/react";
 import {
   SECTOR_COLOR_OPTIONS,
   SECTOR_HEX,
+  createGrazelandHandleVisibility,
   type SectorColorKey,
+  type ShelfGrazelandHandleSlot,
+  type ShelfGrazelandHandleVisibility,
   type ShelfPillarTodoItem,
   type ShelfTodoBlockStatus,
   type ShelfTodoHandleConfig,
   type VisualFlowData,
   type VisualFlowEdge,
+  type VisualFlowNodeSize,
   resolveVisualFlowSectorColor,
 } from "../types/grid";
 import { NoteContent, linkifyText } from "./NoteContent";
 
-const NODE_MIN_WIDTH = 260;
+const NODE_INITIAL_WIDTH = 260;
+const NODE_RESIZE_MIN_WIDTH = 5;
 const NODE_MAX_WIDTH = 360;
 const NODE_MIN_HEIGHT = 64;
 const SPACING = 24;
@@ -62,6 +69,7 @@ type TodoFlowNodeData = {
   date?: string;
   showTodoDates?: boolean;
   handleConfig?: ShelfTodoHandleConfig;
+  grazelandHandleVisibility?: ShelfGrazelandHandleVisibility;
   sectorName?: string;
   sectorColor?: SectorColorKey;
   onNoteChange?: (newNote: string) => void;
@@ -69,6 +77,7 @@ type TodoFlowNodeData = {
   completing?: boolean;
   /** Grazeland plane — subtle distinct styling */
   grazelandPlane?: boolean;
+  onResizeEnd?: (newSize: VisualFlowNodeSize) => void;
 };
 
 function rgbFromSectorHex(hex: string): [number, number, number] {
@@ -120,6 +129,21 @@ function sectorNodeChromeStyleForTheme(colorKey: SectorColorKey, theme: string):
   }
 
   if (theme === "sap") {
+    // Jet black sector: match token #1f2a2a — dark card, SAP-blue rim (not the default light “paper” chrome).
+    if (colorKey === "jet-black") {
+      const deep = `rgb(${Math.max(8, r - 14)}, ${Math.max(10, g - 10)}, ${Math.max(10, b - 10)})`;
+      return {
+        border: "1px solid rgba(0, 112, 242, 0.5)",
+        backgroundColor: deep,
+        backgroundImage: `linear-gradient(
+          165deg,
+          rgba(${Math.min(255, r + 28)}, ${Math.min(255, g + 32)}, ${Math.min(255, b + 34)}, 0.2) 0%,
+          rgba(${r}, ${g}, ${b}, 0.88) 42%,
+          ${deep} 100%
+        )`,
+        boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 2px 10px rgba(0, 0, 0, 0.4)",
+      };
+    }
     // Light SAP canvas needs a paper base + visible (still soft) sector wash — flat rgba(r,g,b,0.08) was invisible.
     const topA = avg > 200 ? 0.22 : avg > 115 ? 0.19 : avg > 55 ? 0.16 : 0.13;
     const midA = topA * 0.55;
@@ -167,12 +191,31 @@ const BLOCK_STATUS_OPTIONS: { value: ShelfTodoBlockStatus; label: string }[] = [
 
 /** Handle layouts shown in the node menu dropdown (everything except hidden). */
 const HANDLE_MENU_LAYOUT_OPTIONS: { value: Exclude<ShelfTodoHandleConfig, "hidden">; label: string }[] = [
+  { value: "omni", label: "Omni" },
   { value: "horizontal", label: "Horizontal" },
   { value: "vertical", label: "Vertical" },
   { value: "top", label: "Top only" },
   { value: "bottom", label: "Bottom only" },
   { value: "left", label: "Left only" },
   { value: "right", label: "Right only" },
+];
+
+const GRAZELAND_HANDLE_DEFINITIONS: {
+  key: ShelfGrazelandHandleSlot;
+  label: string;
+  handleId: string;
+  type: "target" | "source";
+  position: Position;
+  className: string;
+}[] = [
+  { key: "top1", label: "Top 1", handleId: "target-top", type: "target", position: Position.Top, className: "!left-[30%] !top-2 -translate-x-1/2" },
+  { key: "top2", label: "Top 2", handleId: "source-top", type: "source", position: Position.Top, className: "!left-[70%] !top-2 -translate-x-1/2" },
+  { key: "right1", label: "Right 1", handleId: "target-right", type: "target", position: Position.Right, className: "!right-2 !top-[30%] -translate-y-1/2" },
+  { key: "right2", label: "Right 2", handleId: "source-right", type: "source", position: Position.Right, className: "!right-2 !top-[70%] -translate-y-1/2" },
+  { key: "bottom1", label: "Bottom 1", handleId: "target-bottom", type: "target", position: Position.Bottom, className: "!left-[30%] !bottom-2 -translate-x-1/2" },
+  { key: "bottom2", label: "Bottom 2", handleId: "source-bottom", type: "source", position: Position.Bottom, className: "!left-[70%] !bottom-2 -translate-x-1/2" },
+  { key: "left1", label: "Left 1", handleId: "target-left", type: "target", position: Position.Left, className: "!left-2 !top-[30%] -translate-y-1/2" },
+  { key: "left2", label: "Left 2", handleId: "source-left", type: "source", position: Position.Left, className: "!left-2 !top-[70%] -translate-y-1/2" },
 ];
 
 function NodeEditCard({
@@ -363,7 +406,7 @@ function NodeEditCard({
             value={sectorColor}
             onChange={(e) => setSectorColor((e.target.value || "") as SectorColorKey | "")}
             className="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 focus:outline-none"
-            aria-label="Sector border color"
+            aria-label="Border or glow color"
           >
             <option value="">Default (no sector tint)</option>
             {SECTOR_COLOR_OPTIONS.map((opt) => (
@@ -373,7 +416,7 @@ function NodeEditCard({
             ))}
           </select>
           <p className="text-[9px] leading-snug text-zinc-600">
-            On Visual Flow, this adds a thin colored outline and a light background wash on nodes in that sector.
+            On the main canvas, this follows the sector frame. On Grazeland, this works as a per-node border / glow color.
           </p>
         </div>
         <div className="flex flex-col gap-1">
@@ -440,14 +483,34 @@ function sectorHandleStyleDay(colorKey: SectorColorKey): React.CSSProperties {
 
 function FlowHandles({
   config,
+  grazelandHandleVisibility,
   daySectorHandleStyle,
 }: {
   config: ShelfTodoHandleConfig;
+  grazelandHandleVisibility?: ShelfGrazelandHandleVisibility;
   /** When set (day + sector), fills/border come from sector — not default emerald. */
   daySectorHandleStyle?: React.CSSProperties;
 }) {
   const handleClass = daySectorHandleStyle ? HANDLE_CLASS_NEUTRAL : HANDLE_CLASS_BASE;
   const handleStyle = daySectorHandleStyle;
+  if (grazelandHandleVisibility) {
+    return (
+      <>
+        {GRAZELAND_HANDLE_DEFINITIONS.map((definition) =>
+          grazelandHandleVisibility[definition.key] ? (
+            <Handle
+              key={definition.key}
+              style={handleStyle}
+              type={definition.type}
+              id={definition.handleId}
+              position={definition.position}
+              className={`${handleClass} ${definition.className}`}
+            />
+          ) : null
+        )}
+      </>
+    );
+  }
   if (config === "hidden") return null;
   if (config === "horizontal") {
     return (
@@ -465,6 +528,68 @@ function FlowHandles({
           id="source-right"
           position={Position.Right}
           className={`${handleClass} !right-2 !top-1/2 -translate-y-1/2`}
+        />
+      </>
+    );
+  }
+  if (config === "omni") {
+    return (
+      <>
+        <Handle
+          style={handleStyle}
+          type="target"
+          id="target-top"
+          position={Position.Top}
+          className={`${handleClass} !left-[30%] !top-2 -translate-x-1/2`}
+        />
+        <Handle
+          style={handleStyle}
+          type="source"
+          id="source-top"
+          position={Position.Top}
+          className={`${handleClass} !left-[70%] !top-2 -translate-x-1/2`}
+        />
+        <Handle
+          style={handleStyle}
+          type="target"
+          id="target-bottom"
+          position={Position.Bottom}
+          className={`${handleClass} !left-[30%] !bottom-2 -translate-x-1/2`}
+        />
+        <Handle
+          style={handleStyle}
+          type="source"
+          id="source-bottom"
+          position={Position.Bottom}
+          className={`${handleClass} !left-[70%] !bottom-2 -translate-x-1/2`}
+        />
+        <Handle
+          style={handleStyle}
+          type="target"
+          id="target-left"
+          position={Position.Left}
+          className={`${handleClass} !left-2 !top-[30%] -translate-y-1/2`}
+        />
+        <Handle
+          style={handleStyle}
+          type="source"
+          id="source-left"
+          position={Position.Left}
+          className={`${handleClass} !left-2 !top-[70%] -translate-y-1/2`}
+        />
+        <Handle
+          style={handleStyle}
+          type="target"
+          id="target-right"
+          position={Position.Right}
+          className={`${handleClass} !right-2 !top-[30%] -translate-y-1/2`}
+        />
+        <Handle
+          style={handleStyle}
+          type="source"
+          id="source-right"
+          position={Position.Right}
+          className={`${handleClass} !right-2 !top-[70%] -translate-y-1/2`}
         />
       </>
     );
@@ -573,26 +698,50 @@ function TodoFlowNode(props: NodeProps) {
     date,
     showTodoDates,
     handleConfig,
+    grazelandHandleVisibility,
     grazelandPlane,
     sectorName,
     sectorColor,
+    onResizeEnd,
   } = (props.data ?? {}) as TodoFlowNodeData;
   const uiTheme = useShelfDocumentTheme();
   const statusClass = nodeStatusClass(blockStatus);
-  const config = handleConfig ?? "horizontal";
+  const config = handleConfig ?? (grazelandPlane ? "omni" : "horizontal");
+  const resolvedGrazelandHandleVisibility = grazelandPlane
+    ? grazelandHandleVisibility ?? createGrazelandHandleVisibility()
+    : undefined;
   const isSelected = props.selected === true;
   const showDate = showTodoDates && date && blockStatus !== "blocked";
   const sectorStyle = sectorColor ? sectorNodeChromeStyleForTheme(sectorColor, uiTheme) : undefined;
   const baseBgClass = sectorColor ? "" : "bg-black/35";
+  const sapJetBlackSector = uiTheme === "sap" && sectorColor === "jet-black";
   const daySectorHandleStyle =
     uiTheme === "day" && sectorColor ? sectorHandleStyleDay(sectorColor) : undefined;
   return (
     <div
       onContextMenu={(e) => e.preventDefault()}
-      className={`shelf-flow-node shelf-top6-card group flex w-full min-h-[4rem] flex-col gap-1.5 ${baseBgClass} px-1 py-2.5 shadow-sm ${statusClass} ${isSelected ? "shelf-flow-node--selected" : ""} ${grazelandPlane ? "shelf-flow-node--grazeland ring-1 ring-amber-200/25" : ""}`}
+      className={`shelf-flow-node shelf-top6-card group flex h-full w-full min-h-[4rem] flex-col gap-1.5 ${baseBgClass} px-1 py-2.5 shadow-sm ${statusClass} ${isSelected ? "shelf-flow-node--selected" : ""} ${grazelandPlane ? "shelf-flow-node--grazeland ring-1 ring-amber-200/25" : ""} ${sapJetBlackSector ? "shelf-flow-node--sector-jet-black-sap" : ""}`}
       style={sectorStyle}
     >
-      <FlowHandles config={config} daySectorHandleStyle={daySectorHandleStyle} />
+      {grazelandPlane && onResizeEnd && (
+        <NodeResizeControl
+          position="bottom-right"
+          minWidth={NODE_RESIZE_MIN_WIDTH}
+          minHeight={NODE_MIN_HEIGHT}
+          className="nodrag nopan z-20 h-3 w-3 cursor-se-resize rounded-sm border border-amber-200/80 bg-amber-300/90 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
+          onResizeEnd={(_, params) => {
+            onResizeEnd({
+              width: Math.max(NODE_RESIZE_MIN_WIDTH, Math.round(params.width)),
+              height: Math.max(NODE_MIN_HEIGHT, Math.round(params.height)),
+            });
+          }}
+        />
+      )}
+      <FlowHandles
+        config={config}
+        grazelandHandleVisibility={resolvedGrazelandHandleVisibility}
+        daySectorHandleStyle={daySectorHandleStyle}
+      />
       <div className="min-w-0 flex-1 overflow-visible px-2 pr-3 pl-3">
         {sectorName && (
           <div className="mb-0.5 text-[9px] font-medium uppercase tracking-wide text-zinc-500/90 truncate" title={sectorName}>
@@ -600,11 +749,16 @@ function TodoFlowNode(props: NodeProps) {
           </div>
         )}
         <div className="font-semibold leading-snug text-white group-hover:text-emerald-100 break-words whitespace-pre-wrap">
-          {subtitle ? `${text} · ${subtitle}` : text}
+          {(subtitle ? `${text} · ${subtitle}` : text).split("\n").map((line, i) => (
+            <React.Fragment key={i}>
+              {i > 0 ? <br /> : null}
+              {linkifyText(line)}
+            </React.Fragment>
+          ))}
         </div>
         {note && (
           <div className="shelf-flow-node-note mt-0.5 text-[11px] leading-relaxed">
-            <NoteContent content={note} onNoteChange={(props.data as TodoFlowNodeData).onNoteChange} />
+            <NoteContent content={note} onNoteChange={(props.data as TodoFlowNodeData).onNoteChange} linkify />
           </div>
         )}
         {tag && (
@@ -632,23 +786,55 @@ function computeNodeWidth(todo: ShelfPillarTodoItem): number {
   );
   /* Fit title + subtitle; note wraps within node width */
   return Math.max(
-    NODE_MIN_WIDTH,
+    NODE_INITIAL_WIDTH,
     Math.min(NODE_MAX_WIDTH, longestTitleLine * 9 + 100)
   );
+}
+
+function normalizeNodeSize(size?: VisualFlowNodeSize): VisualFlowNodeSize | undefined {
+  if (!size) return undefined;
+  const next: VisualFlowNodeSize = {};
+  if (typeof size.width === "number" && Number.isFinite(size.width)) {
+    next.width = Math.max(NODE_RESIZE_MIN_WIDTH, Math.round(size.width));
+  }
+  if (typeof size.height === "number" && Number.isFinite(size.height)) {
+    next.height = Math.max(NODE_MIN_HEIGHT, Math.round(size.height));
+  }
+  return next.width !== undefined || next.height !== undefined ? next : undefined;
+}
+
+function pruneNodeSizes(
+  nodeIds: Set<string>,
+  sizes?: Record<string, VisualFlowNodeSize>
+): Record<string, VisualFlowNodeSize> | undefined {
+  if (!sizes) return undefined;
+  const next: Record<string, VisualFlowNodeSize> = {};
+  for (const [id, size] of Object.entries(sizes)) {
+    if (!nodeIds.has(id)) continue;
+    const normalized = normalizeNodeSize(size);
+    if (normalized) next[id] = normalized;
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 function buildInitialNodes(
   todos: ShelfPillarTodoItem[],
   storedPositions?: Record<string, { x: number; y: number }>,
+  storedSizes?: Record<string, VisualFlowNodeSize>,
   onEditTodo?: (id: string, updates: Partial<ShelfPillarTodoItem>) => void,
+  onResizeEnd?: (id: string, newSize: VisualFlowNodeSize) => void,
   showTodoDates?: boolean,
   grazelandPlane?: boolean,
   sectorColorMap?: Record<string, SectorColorKey>
 ): Node[] {
   return todos.map((todo, i) => {
     const pos = storedPositions?.[todo.id];
-    const width = computeNodeWidth(todo);
-    const resolvedSector = resolveVisualFlowSectorColor(todo, sectorColorMap);
+    const storedSize = normalizeNodeSize(storedSizes?.[todo.id]);
+    const width = storedSize?.width ?? computeNodeWidth(todo);
+    const resolvedSector =
+      grazelandPlane && todo.sectorColor
+        ? todo.sectorColor
+        : resolveVisualFlowSectorColor(todo, sectorColorMap);
     return {
       id: todo.id,
       type: "todoFlow",
@@ -661,7 +847,9 @@ function buildInitialNodes(
         blockStatus: todo.blockStatus,
         date: todo.date,
         showTodoDates: !!showTodoDates,
-        handleConfig: todo.handleConfig ?? "horizontal",
+        handleConfig: todo.handleConfig ?? (grazelandPlane ? "omni" : "horizontal"),
+        grazelandHandleVisibility:
+          grazelandPlane ? todo.grazelandHandleVisibility ?? createGrazelandHandleVisibility() : undefined,
         grazelandPlane: !!grazelandPlane,
         sectorName: todo.sectorName,
         sectorColor: resolvedSector,
@@ -669,10 +857,15 @@ function buildInitialNodes(
           onEditTodo && todo.note
             ? (newNote: string) => onEditTodo(todo.id, { note: newNote })
             : undefined,
+        onResizeEnd:
+          grazelandPlane && onResizeEnd
+            ? (newSize: VisualFlowNodeSize) => onResizeEnd(todo.id, newSize)
+            : undefined,
       },
       style: {
         width,
         minHeight: NODE_MIN_HEIGHT,
+        ...(storedSize?.height !== undefined ? { height: storedSize.height } : {}),
         ["--node-width" as string]: `${width}px`,
       },
     };
@@ -1002,10 +1195,12 @@ function VisualFlowPanelInner({
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [canvasItems]);
   const storedNodePositions = plane === "main" ? visualFlow.nodePositions : visualFlow.grazelandNodePositions;
+  const storedNodeSizes = plane === "main" ? undefined : visualFlow.grazelandNodeSizes;
   const storedFlowEdges = plane === "main" ? visualFlow.edges : visualFlow.grazelandEdges;
 
   const flushCanvasToVisualFlow = useCallback(
     (targetPlane: VisualFlowPlane, nodeList: Node[], edgeList: Edge[]) => {
+      const nodeIds = new Set(nodeList.map((node) => String(node.id)));
       const positions = Object.fromEntries(
         nodeList.filter((n) => n.position).map((n) => [n.id, { x: n.position!.x, y: n.position!.y }])
       );
@@ -1026,10 +1221,16 @@ function VisualFlowPanelInner({
           edges: edgeData,
         });
       } else {
-        onVisualFlowChange({
+        const nextSizes = pruneNodeSizes(nodeIds, visualFlow.grazelandNodeSizes);
+        const nextFlow: VisualFlowData = {
           ...visualFlow,
           grazelandNodePositions: positions,
           grazelandEdges: edgeData,
+        };
+        if (nextSizes) nextFlow.grazelandNodeSizes = nextSizes;
+        else delete nextFlow.grazelandNodeSizes;
+        onVisualFlowChange({
+          ...nextFlow,
         });
       }
     },
@@ -1082,17 +1283,53 @@ function VisualFlowPanelInner({
     [canvasItems, onEditGrazelandItem, onEditTodo, onTodoLog, plane]
   );
 
+  const handleGrazelandNodeResizeEnd = useCallback(
+    (id: string, size: VisualFlowNodeSize) => {
+      if (plane !== "grazeland") return;
+      const nextSize = normalizeNodeSize(size);
+      if (!nextSize) return;
+      const prevSize = visualFlow.grazelandNodeSizes?.[id];
+      if (prevSize?.width === nextSize.width && prevSize?.height === nextSize.height) return;
+      hasInteracted.current = true;
+      onVisualFlowChange({
+        ...visualFlow,
+        grazelandNodeSizes: {
+          ...(visualFlow.grazelandNodeSizes ?? {}),
+          [id]: nextSize,
+        },
+      });
+      const item = canvasItems.find((t) => t.id === id);
+      if (item) {
+        onTodoLog?.(
+          `Visual Flow Grazeland: resized item "${item.text}" to ${nextSize.width ?? NODE_RESIZE_MIN_WIDTH}x${nextSize.height ?? NODE_MIN_HEIGHT}`
+        );
+      }
+    },
+    [canvasItems, onTodoLog, onVisualFlowChange, plane, visualFlow]
+  );
+
   const initialNodes = useMemo(
     () =>
       buildInitialNodes(
         canvasItems,
         storedNodePositions,
+        storedNodeSizes,
         handleEditCanvasItemWithLog,
+        plane === "grazeland" ? handleGrazelandNodeResizeEnd : undefined,
         showTodoDates,
         plane === "grazeland",
         visualFlow.sectorColors
       ),
-    [canvasItems, storedNodePositions, handleEditCanvasItemWithLog, showTodoDates, plane, visualFlow.sectorColors]
+    [
+      canvasItems,
+      storedNodePositions,
+      storedNodeSizes,
+      handleEditCanvasItemWithLog,
+      handleGrazelandNodeResizeEnd,
+      showTodoDates,
+      plane,
+      visualFlow.sectorColors,
+    ]
   );
   const initialEdges = useMemo(
     () => buildInitialEdges(canvasItems, storedFlowEdges),
@@ -1123,7 +1360,9 @@ function VisualFlowPanelInner({
       const fresh = buildInitialNodes(
         canvasItems,
         storedNodePositions,
+        storedNodeSizes,
         handleEditCanvasItemWithLog,
+        plane === "grazeland" ? handleGrazelandNodeResizeEnd : undefined,
         showTodoDates,
         plane === "grazeland",
         visualFlow.sectorColors
@@ -1149,8 +1388,10 @@ function VisualFlowPanelInner({
   }, [
     canvasItems,
     storedNodePositions,
+    storedNodeSizes,
     storedFlowEdges,
     handleEditCanvasItemWithLog,
+    handleGrazelandNodeResizeEnd,
     showTodoDates,
     plane,
     visualFlow.sectorColors,
@@ -1176,6 +1417,7 @@ function VisualFlowPanelInner({
   const persist = useCallback(
     (positionsOverride?: Record<string, { x: number; y: number }>) => {
       if (!hasInteracted.current) return;
+      const nodeIds = new Set(nodes.map((node) => String(node.id)));
       const positions =
         positionsOverride ??
         Object.fromEntries(nodes.filter((n) => n.position).map((n) => [n.id, { x: n.position!.x, y: n.position!.y }]));
@@ -1196,10 +1438,16 @@ function VisualFlowPanelInner({
           edges: edgeList,
         });
       } else {
-        onVisualFlowChange({
+        const nextSizes = pruneNodeSizes(nodeIds, visualFlow.grazelandNodeSizes);
+        const nextFlow: VisualFlowData = {
           ...visualFlow,
           grazelandNodePositions: positions,
           grazelandEdges: edgeList,
+        };
+        if (nextSizes) nextFlow.grazelandNodeSizes = nextSizes;
+        else delete nextFlow.grazelandNodeSizes;
+        onVisualFlowChange({
+          ...nextFlow,
         });
       }
     },
@@ -1405,7 +1653,7 @@ function VisualFlowPanelInner({
   const handleCreateTask = useCallback(() => {
     if (!paneMenu) return;
     const flowPos = screenToFlowPosition({ x: paneMenu.x, y: paneMenu.y });
-    const width = NODE_MIN_WIDTH;
+    const width = NODE_INITIAL_WIDTH;
     const height = NODE_MIN_HEIGHT;
     const pos = { x: flowPos.x - width / 2, y: flowPos.y - height / 2 };
     if (plane === "main") {
@@ -1430,6 +1678,7 @@ function VisualFlowPanelInner({
       id: crypto.randomUUID(),
       text: "New item",
       done: false,
+      grazelandHandleVisibility: createGrazelandHandleVisibility(false),
     };
     onAddGrazelandItem(newItem);
     onVisualFlowChange({
@@ -1875,6 +2124,7 @@ function VisualFlowPanelInner({
                 edges={edges}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
+                connectionMode={plane === "grazeland" ? ConnectionMode.Loose : ConnectionMode.Strict}
                 connectionLineStyle={{
                   stroke: "#0070f2",
                   strokeWidth: 3,
@@ -2053,11 +2303,26 @@ function VisualFlowPanelInner({
 
               const todo = canvasItems.find((t) => t.id === ids[0]);
               if (!todo || (!canEdit && !canDelete)) return null;
-              const currentHandle = (todo.handleConfig ?? "horizontal") as ShelfTodoHandleConfig;
+              const isGrazelandPlane = plane === "grazeland";
+              const currentHandle = (
+                todo.handleConfig ?? (isGrazelandPlane ? "omni" : "horizontal")
+              ) as ShelfTodoHandleConfig;
+              const currentGrazelandHandleVisibility = isGrazelandPlane
+                ? todo.grazelandHandleVisibility ?? createGrazelandHandleVisibility()
+                : undefined;
               const setHandle = (config: ShelfTodoHandleConfig) => {
                 if (plane === "main") onEditTodo?.(ids[0], { handleConfig: config });
                 else onEditGrazelandItem?.(ids[0], { handleConfig: config });
                 setNodeMenu(null);
+              };
+              const toggleGrazelandHandleVisibility = (key: ShelfGrazelandHandleSlot, checked: boolean) => {
+                if (!currentGrazelandHandleVisibility) return;
+                onEditGrazelandItem?.(ids[0], {
+                  grazelandHandleVisibility: {
+                    ...currentGrazelandHandleVisibility,
+                    [key]: checked,
+                  },
+                });
               };
               const menuH = 400;
               const top = Math.max(8, Math.min(nodeMenu.y, window.innerHeight - menuH));
@@ -2160,42 +2425,68 @@ function VisualFlowPanelInner({
                         <label className="mb-1 block text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
                           Connection points
                         </label>
-                        <button
-                          type="button"
-                          className={`w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/10 ${currentHandle === "hidden" ? "text-emerald-400" : "text-zinc-200"}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setHandle("hidden");
-                          }}
-                        >
-                          Hidden
-                        </button>
-                        <label className="mb-1 mt-2 block text-[10px] font-medium text-zinc-500">
-                          Sides &amp; direction
-                        </label>
-                        <select
-                          value={layoutSelectValue}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            const v = e.target.value as Exclude<ShelfTodoHandleConfig, "hidden">;
-                            if (!v) return;
-                            setHandle(v);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-zinc-200 focus:outline-none"
-                          aria-label="Connection layout when visible"
-                        >
-                          {currentHandle === "hidden" && (
-                            <option value="" disabled>
-                              Select layout…
-                            </option>
-                          )}
-                          {HANDLE_MENU_LAYOUT_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
+                        {isGrazelandPlane ? (
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {GRAZELAND_HANDLE_DEFINITIONS.map(({ key, label }) => (
+                              <label
+                                key={key}
+                                className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-zinc-200 hover:bg-white/10"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={currentGrazelandHandleVisibility?.[key] ?? true}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleGrazelandHandleVisibility(key, e.currentTarget.checked);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 text-emerald-400 focus:ring-0"
+                                />
+                                <span>{label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className={`w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/10 ${currentHandle === "hidden" ? "text-emerald-400" : "text-zinc-200"}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setHandle("hidden");
+                              }}
+                            >
+                              Hidden
+                            </button>
+                            <label className="mb-1 mt-2 block text-[10px] font-medium text-zinc-500">
+                              Sides &amp; direction
+                            </label>
+                            <select
+                              value={layoutSelectValue}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                const v = e.target.value as Exclude<ShelfTodoHandleConfig, "hidden">;
+                                if (!v) return;
+                                setHandle(v);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-zinc-200 focus:outline-none"
+                              aria-label="Connection layout when visible"
+                            >
+                              {currentHandle === "hidden" && (
+                                <option value="" disabled>
+                                  Select layout…
+                                </option>
+                              )}
+                              {HANDLE_MENU_LAYOUT_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          </>
+                        )}
                       </div>
                     </>
                   )}
@@ -2583,12 +2874,14 @@ function VisualFlowPanelInner({
                   sectorColorMap={visualFlow.sectorColors}
                   onSave={(updates) => {
                     handleEditCanvasItemWithLog(editNodeId, updates);
-                    const task = canvasItems.find((x) => x.id === editNodeId);
-                    const nm = (updates.sectorName ?? task?.sectorName)?.trim();
-                    if (nm) {
-                      const mapColor = visualFlow.sectorColors?.[nm];
-                      if (updates.sectorColor !== mapColor) {
-                        applySectorColorByName(nm, updates.sectorColor);
+                    if (plane === "main") {
+                      const task = canvasItems.find((x) => x.id === editNodeId);
+                      const nm = (updates.sectorName ?? task?.sectorName)?.trim();
+                      if (nm) {
+                        const mapColor = visualFlow.sectorColors?.[nm];
+                        if (updates.sectorColor !== mapColor) {
+                          applySectorColorByName(nm, updates.sectorColor);
+                        }
                       }
                     }
                     setEditNodeId(null);

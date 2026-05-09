@@ -67,7 +67,37 @@ export type ShelfTodoHandleConfig =
   | "bottom"
   | "left"
   | "right"
+  /** All four sides, with both source and target points on each side. */
+  | "omni"
   | "hidden";
+
+export const GRAZELAND_HANDLE_SLOTS = [
+  "top1",
+  "top2",
+  "right1",
+  "right2",
+  "bottom1",
+  "bottom2",
+  "left1",
+  "left2",
+] as const;
+
+export type ShelfGrazelandHandleSlot = (typeof GRAZELAND_HANDLE_SLOTS)[number];
+
+export type ShelfGrazelandHandleVisibility = Record<ShelfGrazelandHandleSlot, boolean>;
+
+export function createGrazelandHandleVisibility(allVisible = true): ShelfGrazelandHandleVisibility {
+  return {
+    top1: allVisible,
+    top2: allVisible,
+    right1: allVisible,
+    right2: allVisible,
+    bottom1: allVisible,
+    bottom2: allVisible,
+    left1: allVisible,
+    left2: allVisible,
+  };
+}
 
 /** Epic / sector border tint on Visual Flow (subtle; optional) */
 export type SectorColorKey = "bone" | "jet-black" | "pacific-blue" | "alice-blue" | "fern";
@@ -105,8 +135,10 @@ export interface ShelfPillarTodoItem {
   tag?: string;
   /** Task blocking status: blocked by another, ready to work on, or abeyed. Only in edit form, not shown in Pillar. */
   blockStatus?: ShelfTodoBlockStatus;
-  /** Per-node handle config: horizontal (L+R), vertical (T+B), or single side. Hidden = no connection points. */
+  /** Main-plane handle preset. Grazeland uses grazelandHandleVisibility for per-point toggles. */
   handleConfig?: ShelfTodoHandleConfig;
+  /** Grazeland visibility for the eight individual connection points (top1/top2/right1/right2/bottom1/bottom2/left1/left2). */
+  grazelandHandleVisibility?: ShelfGrazelandHandleVisibility;
   /** Optional date string (e.g. YYYY-MM-DD). Shown in Visual Flow when showTodoDates is on. */
   date?: string;
   /** When true, the task appears in the visual flow focus drawer. */
@@ -138,12 +170,19 @@ export type VisualFlowEdge = {
   muted?: boolean;
 };
 
+export type VisualFlowNodeSize = {
+  width?: number;
+  height?: number;
+};
+
 export interface VisualFlowData {
   nodePositions?: Record<string, { x: number; y: number }>;
   edges?: VisualFlowEdge[];
   /** Second canvas layer — same item shape as pillar todos, separate from main flow */
   grazelandNodePositions?: Record<string, { x: number; y: number }>;
   grazelandEdges?: VisualFlowEdge[];
+  /** Explicit size overrides for Grazeland nodes; omitted dimensions keep the computed default. */
+  grazelandNodeSizes?: Record<string, VisualFlowNodeSize>;
   /** Sector label → border color; applies to all tasks with that sector name on both planes */
   sectorColors?: Record<string, SectorColorKey>;
 }

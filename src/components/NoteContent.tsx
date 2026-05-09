@@ -13,25 +13,93 @@ export function toggleCheckboxInNote(content: string, lineIndex: number): string
 
 const URL_REGEX = /(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/g;
 
-/** Renders text with URLs as clickable links. Exported for use in drawer. */
+const MD_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
+
+const LINK_ANCHOR_CLASS =
+  "text-emerald-400 hover:underline nodrag nopan";
+
+function safeHttpHref(raw: string): string | null {
+  const href = raw.trim();
+  if (!href.startsWith("http://") && !href.startsWith("https://")) return null;
+  try {
+    const u = new URL(href);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
+function linkifyUrlsInSegment(segment: string, keyPrefix: string): React.ReactNode[] {
+  URL_REGEX.lastIndex = 0;
+  const parts = segment.split(URL_REGEX);
+  return parts.map((part, i) => {
+    if (part.startsWith("http://") || part.startsWith("https://")) {
+      return (
+        <a
+          key={`${keyPrefix}-${i}`}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={LINK_ANCHOR_CLASS}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
+/**
+ * Renders plain text with `[label](url)` markdown links and raw `https://` URLs as clickable links.
+ * Only `http:` / `https:` hrefs are turned into anchors (other schemes stay literal).
+ * Exported for use on the visual flow canvas and in the drawer.
+ */
 export function linkifyText(text: string): React.ReactNode {
-  const parts = text.split(URL_REGEX);
-  return parts.map((part, i) =>
-    part.startsWith("http://") || part.startsWith("https://") ? (
-      <a
-        key={i}
-        href={part}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-emerald-400 hover:underline"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {part}
-      </a>
-    ) : (
-      part
-    )
-  );
+  if (!text) return text;
+
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let mi = 0;
+  const re = new RegExp(MD_LINK_REGEX.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > lastIndex) {
+      nodes.push(...linkifyUrlsInSegment(text.slice(lastIndex, m.index), `u${mi}`));
+      mi++;
+    }
+    const label = m[1];
+    const href = safeHttpHref(m[2]);
+    if (href) {
+      nodes.push(
+        <a
+          key={`m${mi}`}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={LINK_ANCHOR_CLASS}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {label}
+        </a>
+      );
+    } else {
+      nodes.push(m[0]);
+    }
+    mi++;
+    lastIndex = m.index + m[0].length;
+  }
+  if (lastIndex < text.length) {
+    nodes.push(...linkifyUrlsInSegment(text.slice(lastIndex), `u${mi}`));
+  }
+  if (nodes.length === 0) {
+    return <>{linkifyUrlsInSegment(text, "u0")}</>;
+  }
+  return <>{nodes}</>;
 }
 
 export function NoteContent({
