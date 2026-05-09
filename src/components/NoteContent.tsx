@@ -15,6 +15,8 @@ const URL_REGEX = /(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/g;
 
 const MD_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
 
+const INLINE_EMPHASIS_REGEX = /~~([\s\S]+?)~~/g;
+
 const LINK_ANCHOR_CLASS =
   "text-emerald-400 hover:underline nodrag nopan";
 
@@ -53,22 +55,15 @@ function linkifyUrlsInSegment(segment: string, keyPrefix: string): React.ReactNo
   });
 }
 
-/**
- * Renders plain text with `[label](url)` markdown links and raw `https://` URLs as clickable links.
- * Only `http:` / `https:` hrefs are turned into anchors (other schemes stay literal).
- * Exported for use on the visual flow canvas and in the drawer.
- */
-export function linkifyText(text: string): React.ReactNode {
-  if (!text) return text;
-
+function linkifyMarkdownAndUrls(segment: string, keyPrefix: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   let lastIndex = 0;
   let mi = 0;
   const re = new RegExp(MD_LINK_REGEX.source, "g");
   let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
+  while ((m = re.exec(segment)) !== null) {
     if (m.index > lastIndex) {
-      nodes.push(...linkifyUrlsInSegment(text.slice(lastIndex, m.index), `u${mi}`));
+      nodes.push(...linkifyUrlsInSegment(segment.slice(lastIndex, m.index), `${keyPrefix}-u${mi}`));
       mi++;
     }
     const label = m[1];
@@ -76,7 +71,7 @@ export function linkifyText(text: string): React.ReactNode {
     if (href) {
       nodes.push(
         <a
-          key={`m${mi}`}
+          key={`${keyPrefix}-m${mi}`}
           href={href}
           target="_blank"
           rel="noopener noreferrer"
@@ -93,13 +88,54 @@ export function linkifyText(text: string): React.ReactNode {
     mi++;
     lastIndex = m.index + m[0].length;
   }
+  if (lastIndex < segment.length) {
+    nodes.push(...linkifyUrlsInSegment(segment.slice(lastIndex), `${keyPrefix}-u${mi}`));
+  }
+  return nodes;
+}
+
+function renderInlineText(text: string, keyPrefix: string, linkify = false): React.ReactNode[] {
+  if (!text) return [];
+
+  INLINE_EMPHASIS_REGEX.lastIndex = 0;
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let emphasisIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = INLINE_EMPHASIS_REGEX.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      const plainSegment = text.slice(lastIndex, match.index);
+      nodes.push(...(linkify ? linkifyMarkdownAndUrls(plainSegment, `${keyPrefix}-p${emphasisIndex}`) : [plainSegment]));
+    }
+
+    const emphasizedText = match[1];
+    nodes.push(
+      <span key={`${keyPrefix}-e${emphasisIndex}`} className="shelf-inline-emphasis">
+        {linkify ? linkifyMarkdownAndUrls(emphasizedText, `${keyPrefix}-e${emphasisIndex}`) : emphasizedText}
+      </span>
+    );
+
+    emphasisIndex++;
+    lastIndex = match.index + match[0].length;
+  }
+
   if (lastIndex < text.length) {
-    nodes.push(...linkifyUrlsInSegment(text.slice(lastIndex), `u${mi}`));
+    const trailingSegment = text.slice(lastIndex);
+    nodes.push(...(linkify ? linkifyMarkdownAndUrls(trailingSegment, `${keyPrefix}-p${emphasisIndex}`) : [trailingSegment]));
   }
-  if (nodes.length === 0) {
-    return <>{linkifyUrlsInSegment(text, "u0")}</>;
-  }
-  return <>{nodes}</>;
+
+  return nodes.length > 0 ? nodes : [text];
+}
+
+/**
+ * Renders plain text with `[label](url)` markdown links and raw `https://` URLs as clickable links.
+ * Only `http:` / `https:` hrefs are turned into anchors (other schemes stay literal).
+ * Exported for use on the visual flow canvas and in the drawer.
+ */
+export function linkifyText(text: string): React.ReactNode {
+  if (!text) return text;
+  return <>{renderInlineText(text, "t0", true)}</>;
 }
 
 export function NoteContent({
@@ -121,7 +157,7 @@ export function NoteContent({
           return (
             <div key={i} className="flex gap-1.5">
               <span className="shrink-0 font-medium text-zinc-500">{numberedMatch[1]}.</span>
-              <span className="whitespace-pre-wrap">{linkify ? linkifyText(numberedMatch[2]) : numberedMatch[2]}</span>
+              <span className="whitespace-pre-wrap">{renderInlineText(numberedMatch[2], `n${i}`, linkify)}</span>
             </div>
           );
         }
@@ -143,7 +179,7 @@ export function NoteContent({
                   </svg>
                 )}
               </button>
-              <span className={`whitespace-pre-wrap ${isChecked ? "line-through opacity-70" : ""}`}>{linkify ? linkifyText(rest) : rest}</span>
+              <span className={`whitespace-pre-wrap ${isChecked ? "line-through opacity-70" : ""}`}>{renderInlineText(rest, `c${i}`, linkify)}</span>
             </div>
           );
         }
@@ -159,13 +195,13 @@ export function NoteContent({
                   </svg>
                 )}
               </span>
-              <span className={`whitespace-pre-wrap ${isChecked ? "line-through opacity-70" : ""}`}>{linkify ? linkifyText(rest) : rest}</span>
+              <span className={`whitespace-pre-wrap ${isChecked ? "line-through opacity-70" : ""}`}>{renderInlineText(rest, `c${i}`, linkify)}</span>
             </div>
           );
         }
         return (
           <div key={i} className="whitespace-pre-wrap">
-            {linkify ? linkifyText(line) : line}
+            {renderInlineText(line, `l${i}`, linkify)}
           </div>
         );
       })}

@@ -7,7 +7,6 @@ import { SearchResults } from "./components/SearchResults";
 import { useShelfStorage } from "./hooks/useShelfStorage";
 import { PromptLibraryCard } from "./components/PromptLibraryCard";
 import { Pillar } from "./components/Pillar";
-import { ErrorDashboardPanel } from "./components/ErrorDashboardPanel";
 import { VisualFlowPanel } from "./components/VisualFlowPanel";
 import { pickCelebrationPhrase } from "./utils/celebration";
 import type { ShelfPillarTodoItem } from "./types/grid";
@@ -15,8 +14,8 @@ import type { ShelfPillarTodoItem } from "./types/grid";
 const DASHBOARD_OPEN_KEY = "shelf-dashboard-view";
 const DASHBOARD_LAST_TOOL_KEY = "shelf-dashboard-last-tool";
 
-type DashboardView = "shelf" | "error" | "visual-flow";
-type LastTool = "error" | "visual-flow" | "llm-console";
+type DashboardView = "shelf" | "visual-flow";
+type LastTool = "visual-flow" | "llm-console";
 
 function openLLMConsoleOverlay(url: string) {
   const resolved = (url || "https://example.org").trim();
@@ -36,7 +35,7 @@ export default function FullApp() {
   const [dashboardView, setDashboardView] = useState<DashboardView>(() => {
     try {
       const v = window.localStorage.getItem(DASHBOARD_OPEN_KEY);
-      return v === "error" || v === "visual-flow" ? v : "shelf";
+      return v === "visual-flow" ? v : "shelf";
     } catch {
       return "shelf";
     }
@@ -46,11 +45,9 @@ export default function FullApp() {
       const v = window.localStorage.getItem(DASHBOARD_LAST_TOOL_KEY);
       if (v === "visual-flow") return "visual-flow";
       if (v === "llm-console") return "llm-console";
-      if (v === "error") return "error";
-      const view = window.localStorage.getItem(DASHBOARD_OPEN_KEY);
-      return view === "visual-flow" ? "visual-flow" : "error";
+      return "visual-flow";
     } catch {
-      return "error";
+      return "visual-flow";
     }
   });
   const {
@@ -74,6 +71,7 @@ export default function FullApp() {
     focusDesynced,
     grazelandItems,
     setGrazelandItems,
+    setBinItems,
     setPillarTodos,
     obsidianLog,
     logToObsidian,
@@ -85,7 +83,6 @@ export default function FullApp() {
   const [pendingEditPromptId, setPendingEditPromptId] = useState<string | null>(null);
   const [celebration, setCelebration] = useState<string | null>(null);
   const celebrationTimerRef = useRef<number | null>(null);
-  const [addTaskToast, setAddTaskToast] = useState(false);
   const [pinnedLimitToast, setPinnedLimitToast] = useState(false);
   const [viewSlideDir, setViewSlideDir] = useState<"left" | "right" | null>(null);
 
@@ -125,6 +122,20 @@ export default function FullApp() {
       setGrazelandItems((prev) => prev.filter((t) => t.id !== id));
     },
     [setGrazelandItems]
+  );
+
+  const handleVisualFlowEditBin = useCallback(
+    (id: string, updates: Partial<ShelfPillarTodoItem>) => {
+      setBinItems((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+    },
+    [setBinItems]
+  );
+
+  const handleVisualFlowDeleteBin = useCallback(
+    (id: string) => {
+      setBinItems((prev) => prev.filter((t) => t.id !== id));
+    },
+    [setBinItems]
   );
   const { results: searchResults, loading: searchLoading } =
     useBookmarksSearch(searchQuery);
@@ -177,7 +188,7 @@ export default function FullApp() {
   useEffect(() => {
     try {
       window.localStorage.setItem(DASHBOARD_OPEN_KEY, dashboardView);
-      if (dashboardView === "error" || dashboardView === "visual-flow") {
+      if (dashboardView === "visual-flow") {
         window.localStorage.setItem(DASHBOARD_LAST_TOOL_KEY, dashboardView);
       }
     } catch {
@@ -222,7 +233,7 @@ export default function FullApp() {
           window.clearTimeout(swipeTimeoutRef.current);
           swipeTimeoutRef.current = null;
         }
-        if (dashboardView === "error" || dashboardView === "visual-flow") {
+        if (dashboardView === "visual-flow") {
           setViewSlideDir("right");
           setDashboardView("shelf");
         }
@@ -283,7 +294,7 @@ export default function FullApp() {
         return;
       }
       touchSwipeRef.current = null;
-      if (dx < 0 && (dashboardView === "error" || dashboardView === "visual-flow")) {
+      if (dx < 0 && dashboardView === "visual-flow") {
         setViewSlideDir("right");
         setDashboardView("shelf");
       } else if (dx > 0 && dashboardView === "shelf") {
@@ -341,11 +352,6 @@ export default function FullApp() {
             entry.includes("\n") ? `- ${time} - ${entry.split("\n")[0]}\n${entry.split("\n").slice(1).join("\n")}` : `- ${time} - ${entry}`;
           appendTaskLog(formatted);
           if (obsidianLog.enabled) logToObsidian(formatted);
-        }}
-        onOpenDashboard={() => {
-          setLastTool("error");
-          setViewSlideDir("left");
-          setDashboardView("error");
         }}
         onOpenVisualFlow={() => {
           setLastTool("visual-flow");
@@ -414,19 +420,6 @@ export default function FullApp() {
                       Back to Shelf
                     </button>
                   )}
-                  {dashboardView !== "error" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLastTool("error");
-                        setViewSlideDir("left");
-                        setDashboardView("error");
-                      }}
-                      className="rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20"
-                    >
-                      Go to Dashboard
-                    </button>
-                  )}
                   {dashboardView !== "visual-flow" && (
                     <button
                       type="button"
@@ -459,11 +452,9 @@ export default function FullApp() {
                 >
                   {dashboardView !== "shelf"
                     ? "Back to Shelf"
-                    : lastTool === "visual-flow"
-                      ? "Visual Flow of Action"
-                      : lastTool === "llm-console"
-                        ? "Open LLM Console"
-                        : "Open Dashboard"}
+                    : lastTool === "llm-console"
+                      ? "Open LLM Console"
+                      : "Visual Flow"}
                 </button>
               )}
             </div>
@@ -476,45 +467,7 @@ export default function FullApp() {
             className={`shelf-view-slide h-full px-6 py-6 overflow-auto ${viewSlideDir === "left" ? "shelf-view-slide--from-right" : viewSlideDir === "right" ? "shelf-view-slide--from-left" : ""}`}
             onAnimationEnd={() => setViewSlideDir(null)}
           >
-          {dashboardView === "error" ? (
-            <div className="max-w-[1640px] mx-auto">
-              <ErrorDashboardPanel
-                fullPage
-                onOpenLLMConsole={() => {
-                  setLastTool("llm-console");
-                  openLLMConsoleOverlay(llmConsoleUrl);
-                }}
-                onAddTask={(err) => {
-                  const note = [
-                    err.keyProblem,
-                    err.affectedFiles.length
-                      ? `Affected: ${err.affectedFiles.map((af) => (af.line && af.line !== "n/A" ? `${af.file}:${af.line}` : af.file)).join(", ")}`
-                      : "",
-                    err.affectedIds.length ? `IDs: ${err.affectedIds.join(", ")}` : "",
-                  ]
-                    .filter(Boolean)
-                    .join("\n\n");
-                  const d = new Date();
-                  const dd = String(d.getDate()).padStart(2, "0");
-                  const mm = String(d.getMonth() + 1).padStart(2, "0");
-                  setPillarTodos((prev) => [
-                    ...prev,
-                    {
-                      id: crypto.randomUUID(),
-                      text: err.error,
-                      done: false,
-                      subtitle: `Added ${dd}-${mm}`,
-                      note: note || undefined,
-                      tag: err.importance,
-                      blockStatus: "ready" as const,
-                    },
-                  ]);
-                  setAddTaskToast(true);
-                  window.setTimeout(() => setAddTaskToast(false), 1800);
-                }}
-              />
-            </div>
-          ) : dashboardView === "visual-flow" ? (
+          {dashboardView === "visual-flow" ? (
             <div className="max-w-[1640px] mx-auto">
               <VisualFlowPanel
                 todos={pillarTodos}
@@ -533,6 +486,11 @@ export default function FullApp() {
                 onDeleteGrazelandItem={handleVisualFlowDeleteGrazeland}
                 onAddGrazelandItem={(todo) =>
                   setGrazelandItems((prev) => [...prev, todo])
+                }
+                onEditBinItem={handleVisualFlowEditBin}
+                onDeleteBinItem={handleVisualFlowDeleteBin}
+                onAddBinItem={(todo) =>
+                  setBinItems((prev) => [...prev, todo])
                 }
                 onTaskCompleted={showTaskCelebration}
                 onTodoLog={(entry) => {
@@ -584,7 +542,7 @@ export default function FullApp() {
           )}
           </div>
 
-          {showSearch && (dashboardView === "error" || dashboardView === "visual-flow") && (
+          {showSearch && dashboardView === "visual-flow" && (
             <div
               data-search-overlay
               className="fixed inset-0 z-[150] flex items-start justify-center pt-24 px-6 pb-6"
@@ -619,17 +577,6 @@ export default function FullApp() {
         >
           <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/20 px-4 py-3 text-sm font-medium text-emerald-100 shadow-[0_0_24px_rgba(16,185,129,0.2)]">
             {celebration}
-          </div>
-        </div>
-      )}
-      {addTaskToast && (
-        <div
-          className="pointer-events-none fixed right-6 bottom-6 z-[300] animate-[toast-enter_180ms_ease-out]"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/15 px-4 py-3 text-sm font-medium text-emerald-100 shadow-[0_0_20px_rgba(16,185,129,0.15)]">
-            This task was added to your To-Do list.
           </div>
         </div>
       )}

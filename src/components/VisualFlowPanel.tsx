@@ -175,7 +175,42 @@ function sectorNodeChromeStyleForTheme(colorKey: SectorColorKey, theme: string):
   };
 }
 
-export type VisualFlowPlane = "main" | "grazeland";
+export type VisualFlowPlane = "main" | "grazeland" | "bin";
+
+type SpecialVisualFlowPlane = Exclude<VisualFlowPlane, "main">;
+
+const SPECIAL_VISUAL_FLOW_PLANES = ["grazeland", "bin"] as const;
+
+const SPECIAL_VISUAL_FLOW_PLANE_META: Record<SpecialVisualFlowPlane, {
+  tabLabel: string;
+  tabClass: string;
+  canvasClass: string;
+  emptyState: string;
+}> = {
+  grazeland: {
+    tabLabel: "Grazeland plane",
+    tabClass: "bg-amber-500/20 text-amber-100",
+    canvasClass: "border-amber-200/20 bg-amber-950/10",
+    emptyState: "Right-click on the canvas to add an item. Grazeland items stay on this plane only.",
+  },
+  bin: {
+    tabLabel: "Bin plane",
+    tabClass: "bg-sky-500/20 text-sky-100",
+    canvasClass: "border-sky-200/20 bg-sky-950/10",
+    emptyState: "Right-click on the canvas to add an item. Bin items stay on this plane only.",
+  },
+};
+
+function getVisualFlowPlaneLogLabel(plane: VisualFlowPlane): string {
+  if (plane === "grazeland") return "Visual Flow Grazeland";
+  if (plane === "bin") return "Visual Flow Bin";
+  return "Visual Flow";
+}
+
+function getVisualFlowPlaneCountLabel(plane: VisualFlowPlane, count: number): string {
+  if (plane === "main") return count === 1 ? "task" : "tasks";
+  return count === 1 ? "item" : "items";
+}
 
 const VISUAL_FLOW_PLANE_LS_KEY = "shelf-visual-flow-plane";
 
@@ -223,6 +258,7 @@ function NodeEditCard({
   showTodoDates = false,
   editLabel = "Edit task",
   titlePlaceholder = "Task title",
+  showBinInfoFields = false,
   existingSectorNames = [],
   sectorColorMap,
   onSave,
@@ -233,6 +269,7 @@ function NodeEditCard({
   showTodoDates?: boolean;
   editLabel?: string;
   titlePlaceholder?: string;
+  showBinInfoFields?: boolean;
   /** Distinct sector names already used on Visual Flow (for combobox hints). */
   existingSectorNames?: string[];
   sectorColorMap?: Record<string, SectorColorKey>;
@@ -242,6 +279,7 @@ function NodeEditCard({
 }) {
   const [text, setText] = useState(todo.text);
   const [note, setNote] = useState(todo.note ?? "");
+  const [potentialValue, setPotentialValue] = useState(todo.potentialValue ?? "");
   const [tag, setTag] = useState(todo.tag ?? "");
   const [subtitle, setSubtitle] = useState(todo.subtitle ?? "");
   const [blockStatus, setBlockStatus] = useState<ShelfTodoBlockStatus | "">(todo.blockStatus ?? "");
@@ -267,6 +305,7 @@ function NodeEditCard({
     onSave({
       text,
       note: note || undefined,
+      potentialValue: potentialValue || undefined,
       tag: tag || undefined,
       subtitle: subtitle || undefined,
       blockStatus: blockStatus || undefined,
@@ -275,7 +314,7 @@ function NodeEditCard({
       sectorColor: sectorColor === "" ? undefined : sectorColor,
     });
     requestClose();
-  }, [text, note, tag, subtitle, blockStatus, date, sectorName, sectorColor, onSave, requestClose]);
+  }, [text, note, potentialValue, tag, subtitle, blockStatus, date, sectorName, sectorColor, onSave, requestClose]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -362,13 +401,30 @@ function NodeEditCard({
           placeholder="Tag (optional)"
           className="text-xs"
         />
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Note (optional)"
-          className="shelf-note-popover-textarea min-h-[60px] max-h-64 w-full resize-y rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
-          rows={2}
-        />
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-medium text-zinc-500">
+            {showBinInfoFields ? "WHY" : "Note (optional)"}
+          </label>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={showBinInfoFields ? "Why does this belong in the bin?" : "Note (optional)"}
+            className="shelf-note-popover-textarea min-h-[60px] max-h-64 w-full resize-y rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
+            rows={2}
+          />
+        </div>
+        {showBinInfoFields && (
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-medium text-zinc-500">POTENTIAL VALUE (PV)</label>
+            <textarea
+              value={potentialValue}
+              onChange={(e) => setPotentialValue(e.target.value)}
+              placeholder="Potential upside or value"
+              className="shelf-note-popover-textarea min-h-[60px] max-h-64 w-full resize-y rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
+              rows={2}
+            />
+          </div>
+        )}
         {showTodoDates && (
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-medium text-zinc-500">Date</label>
@@ -1111,6 +1167,7 @@ const MAX_PILLAR_TODO_PINS = 6;
 function VisualFlowPanelInner({
   todos,
   grazelandItems = [],
+  binItems = [],
   showTodoDates = false,
   visualFlow,
   onVisualFlowChange,
@@ -1122,12 +1179,16 @@ function VisualFlowPanelInner({
   onEditGrazelandItem,
   onDeleteGrazelandItem,
   onAddGrazelandItem,
+  onEditBinItem,
+  onDeleteBinItem,
+  onAddBinItem,
   onTaskCompleted,
   onTodoLog,
   fullPage = false,
 }: {
   todos: ShelfPillarTodoItem[];
   grazelandItems?: ShelfPillarTodoItem[];
+  binItems?: ShelfPillarTodoItem[];
   showTodoDates?: boolean;
   visualFlow: VisualFlowData;
   onVisualFlowChange: (data: VisualFlowData) => void;
@@ -1139,6 +1200,9 @@ function VisualFlowPanelInner({
   onEditGrazelandItem?: (id: string, updates: Partial<ShelfPillarTodoItem>) => void;
   onDeleteGrazelandItem?: (id: string) => void;
   onAddGrazelandItem?: (todo: ShelfPillarTodoItem) => void;
+  onEditBinItem?: (id: string, updates: Partial<ShelfPillarTodoItem>) => void;
+  onDeleteBinItem?: (id: string) => void;
+  onAddBinItem?: (todo: ShelfPillarTodoItem) => void;
   onTaskCompleted?: () => void;
   onTodoLog?: (entry: string) => void;
   fullPage?: boolean;
@@ -1165,13 +1229,18 @@ function VisualFlowPanelInner({
   const [plane, setPlaneState] = useState<VisualFlowPlane>(() => {
     try {
       const v = window.localStorage.getItem(VISUAL_FLOW_PLANE_LS_KEY);
-      return v === "grazeland" ? "grazeland" : "main";
+      return v === "grazeland" || v === "bin" ? v : "main";
     } catch {
       return "main";
     }
   });
 
-  const canvasItems = plane === "main" ? todos : grazelandItems;
+  const planeMeta = plane === "main" ? null : SPECIAL_VISUAL_FLOW_PLANE_META[plane];
+  const currentPlaneEdit = plane === "main" ? onEditTodo : plane === "grazeland" ? onEditGrazelandItem : onEditBinItem;
+  const currentPlaneDelete = plane === "main" ? onDeleteTodo : plane === "grazeland" ? onDeleteGrazelandItem : onDeleteBinItem;
+  const currentPlaneAdd = plane === "main" ? onAddTodo : plane === "grazeland" ? onAddGrazelandItem : onAddBinItem;
+
+  const canvasItems = plane === "main" ? todos : plane === "grazeland" ? grazelandItems : binItems;
   const allVisualFlowSectorNames = useMemo(() => {
     const set = new Set<string>();
     for (const t of todos) {
@@ -1182,8 +1251,12 @@ function VisualFlowPanelInner({
       const s = t.sectorName?.trim();
       if (s) set.add(s);
     }
+    for (const t of binItems) {
+      const s = t.sectorName?.trim();
+      if (s) set.add(s);
+    }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [todos, grazelandItems]);
+  }, [todos, grazelandItems, binItems]);
   const sectorGroups = useMemo(() => {
     const map = new Map<string, string[]>();
     for (const t of canvasItems) {
@@ -1194,9 +1267,24 @@ function VisualFlowPanelInner({
     }
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [canvasItems]);
-  const storedNodePositions = plane === "main" ? visualFlow.nodePositions : visualFlow.grazelandNodePositions;
-  const storedNodeSizes = plane === "main" ? undefined : visualFlow.grazelandNodeSizes;
-  const storedFlowEdges = plane === "main" ? visualFlow.edges : visualFlow.grazelandEdges;
+  const storedNodePositions =
+    plane === "main"
+      ? visualFlow.nodePositions
+      : plane === "grazeland"
+        ? visualFlow.grazelandNodePositions
+        : visualFlow.binNodePositions;
+  const storedNodeSizes =
+    plane === "main"
+      ? undefined
+      : plane === "grazeland"
+        ? visualFlow.grazelandNodeSizes
+        : visualFlow.binNodeSizes;
+  const storedFlowEdges =
+    plane === "main"
+      ? visualFlow.edges
+      : plane === "grazeland"
+        ? visualFlow.grazelandEdges
+        : visualFlow.binEdges;
 
   const flushCanvasToVisualFlow = useCallback(
     (targetPlane: VisualFlowPlane, nodeList: Node[], edgeList: Edge[]) => {
@@ -1220,7 +1308,7 @@ function VisualFlowPanelInner({
           nodePositions: positions,
           edges: edgeData,
         });
-      } else {
+      } else if (targetPlane === "grazeland") {
         const nextSizes = pruneNodeSizes(nodeIds, visualFlow.grazelandNodeSizes);
         const nextFlow: VisualFlowData = {
           ...visualFlow,
@@ -1232,6 +1320,18 @@ function VisualFlowPanelInner({
         onVisualFlowChange({
           ...nextFlow,
         });
+      } else {
+        const nextSizes = pruneNodeSizes(nodeIds, visualFlow.binNodeSizes);
+        const nextFlow: VisualFlowData = {
+          ...visualFlow,
+          binNodePositions: positions,
+          binEdges: edgeData,
+        };
+        if (nextSizes) nextFlow.binNodeSizes = nextSizes;
+        else delete nextFlow.binNodeSizes;
+        onVisualFlowChange({
+          ...nextFlow,
+        });
       }
     },
     [onVisualFlowChange, visualFlow]
@@ -1240,7 +1340,7 @@ function VisualFlowPanelInner({
   const handleEditCanvasItemWithLog = useCallback(
     (id: string, updates: Partial<ShelfPillarTodoItem>) => {
       const todo = canvasItems.find((t) => t.id === id);
-      const logLabel = plane === "main" ? "Visual Flow" : "Visual Flow Grazeland";
+      const logLabel = getVisualFlowPlaneLogLabel(plane);
       if (todo && onTodoLog && !(updates.done === true && Object.keys(updates).length === 1)) {
         const lines: string[] = [];
         if (updates.text !== undefined && updates.text !== todo.text) {
@@ -1249,7 +1349,12 @@ function VisualFlowPanelInner({
         if (updates.note !== undefined && updates.note !== (todo.note ?? "")) {
           const oldNote = todo.note ?? "";
           const newNote = updates.note ?? "";
-          lines.push(`Description: ${oldNote || "(empty)"} → ${newNote || "(empty)"}`);
+          lines.push(`${plane === "bin" ? "WHY" : "Description"}: ${oldNote || "(empty)"} → ${newNote || "(empty)"}`);
+        }
+        if (updates.potentialValue !== undefined && updates.potentialValue !== (todo.potentialValue ?? "")) {
+          const oldPv = todo.potentialValue ?? "";
+          const newPv = updates.potentialValue ?? "";
+          lines.push(`Potential value (PV): ${oldPv || "(empty)"} → ${newPv || "(empty)"}`);
         }
         if (updates.subtitle !== undefined && updates.subtitle !== (todo.subtitle ?? "")) {
           lines.push(`Subtitle: ${todo.subtitle || "(empty)"} → ${updates.subtitle || "(empty)"}`);
@@ -1273,35 +1378,45 @@ function VisualFlowPanelInner({
           lines.push(`Sector color: ${todo.sectorColor || "default"} → ${updates.sectorColor || "default"}`);
         }
         if (lines.length) {
-          const kind = plane === "grazeland" ? "item" : "task";
+          const kind = plane === "main" ? "task" : "item";
           onTodoLog(`${logLabel}: updated ${kind} "${todo.text}":\n${lines.join("\n")}`);
         }
       }
-      if (plane === "main") onEditTodo?.(id, updates);
-      else onEditGrazelandItem?.(id, updates);
+      currentPlaneEdit?.(id, updates);
     },
-    [canvasItems, onEditGrazelandItem, onEditTodo, onTodoLog, plane]
+    [canvasItems, currentPlaneEdit, onTodoLog, plane]
   );
 
-  const handleGrazelandNodeResizeEnd = useCallback(
+  const handleSpecialPlaneNodeResizeEnd = useCallback(
     (id: string, size: VisualFlowNodeSize) => {
-      if (plane !== "grazeland") return;
+      if (plane === "main") return;
       const nextSize = normalizeNodeSize(size);
       if (!nextSize) return;
-      const prevSize = visualFlow.grazelandNodeSizes?.[id];
+      const prevSize = plane === "grazeland" ? visualFlow.grazelandNodeSizes?.[id] : visualFlow.binNodeSizes?.[id];
       if (prevSize?.width === nextSize.width && prevSize?.height === nextSize.height) return;
       hasInteracted.current = true;
-      onVisualFlowChange({
-        ...visualFlow,
-        grazelandNodeSizes: {
-          ...(visualFlow.grazelandNodeSizes ?? {}),
-          [id]: nextSize,
-        },
-      });
+      if (plane === "grazeland") {
+        onVisualFlowChange({
+          ...visualFlow,
+          grazelandNodeSizes: {
+            ...(visualFlow.grazelandNodeSizes ?? {}),
+            [id]: nextSize,
+          },
+        });
+      } else {
+        onVisualFlowChange({
+          ...visualFlow,
+          binNodeSizes: {
+            ...(visualFlow.binNodeSizes ?? {}),
+            [id]: nextSize,
+          },
+        });
+      }
       const item = canvasItems.find((t) => t.id === id);
       if (item) {
+        const logLabel = getVisualFlowPlaneLogLabel(plane);
         onTodoLog?.(
-          `Visual Flow Grazeland: resized item "${item.text}" to ${nextSize.width ?? NODE_RESIZE_MIN_WIDTH}x${nextSize.height ?? NODE_MIN_HEIGHT}`
+          `${logLabel}: resized item "${item.text}" to ${nextSize.width ?? NODE_RESIZE_MIN_WIDTH}x${nextSize.height ?? NODE_MIN_HEIGHT}`
         );
       }
     },
@@ -1315,9 +1430,9 @@ function VisualFlowPanelInner({
         storedNodePositions,
         storedNodeSizes,
         handleEditCanvasItemWithLog,
-        plane === "grazeland" ? handleGrazelandNodeResizeEnd : undefined,
+        plane === "main" ? undefined : handleSpecialPlaneNodeResizeEnd,
         showTodoDates,
-        plane === "grazeland",
+        plane !== "main",
         visualFlow.sectorColors
       ),
     [
@@ -1325,7 +1440,7 @@ function VisualFlowPanelInner({
       storedNodePositions,
       storedNodeSizes,
       handleEditCanvasItemWithLog,
-      handleGrazelandNodeResizeEnd,
+      handleSpecialPlaneNodeResizeEnd,
       showTodoDates,
       plane,
       visualFlow.sectorColors,
@@ -1362,9 +1477,9 @@ function VisualFlowPanelInner({
         storedNodePositions,
         storedNodeSizes,
         handleEditCanvasItemWithLog,
-        plane === "grazeland" ? handleGrazelandNodeResizeEnd : undefined,
+        plane === "main" ? undefined : handleSpecialPlaneNodeResizeEnd,
         showTodoDates,
-        plane === "grazeland",
+        plane !== "main",
         visualFlow.sectorColors
       );
       return fresh.map((n) => {
@@ -1391,7 +1506,7 @@ function VisualFlowPanelInner({
     storedNodeSizes,
     storedFlowEdges,
     handleEditCanvasItemWithLog,
-    handleGrazelandNodeResizeEnd,
+    handleSpecialPlaneNodeResizeEnd,
     showTodoDates,
     plane,
     visualFlow.sectorColors,
@@ -1640,14 +1755,13 @@ function VisualFlowPanelInner({
         setNodeMenu({ nodeIds: selectedIds, x: e.clientX, y: e.clientY });
         return;
       }
-      const canAdd =
-        (plane === "main" && onAddTodo) || (plane === "grazeland" && onAddGrazelandItem);
+      const canAdd = currentPlaneAdd;
       if (canAdd) {
         setNodeMenu(null);
         setPaneMenu({ x: e.clientX, y: e.clientY });
       }
     },
-    [getNodes, onAddGrazelandItem, onAddTodo, plane]
+    [currentPlaneAdd, getNodes, plane]
   );
 
   const handleCreateTask = useCallback(() => {
@@ -1657,13 +1771,13 @@ function VisualFlowPanelInner({
     const height = NODE_MIN_HEIGHT;
     const pos = { x: flowPos.x - width / 2, y: flowPos.y - height / 2 };
     if (plane === "main") {
-      if (!onAddTodo) return;
+      if (!currentPlaneAdd) return;
       const newTodo: ShelfPillarTodoItem = {
         id: crypto.randomUUID(),
         text: "New task",
         done: false,
       };
-      onAddTodo(newTodo);
+      currentPlaneAdd(newTodo);
       onVisualFlowChange({
         ...visualFlow,
         nodePositions: { ...(visualFlow.nodePositions ?? {}), [newTodo.id]: pos },
@@ -1673,24 +1787,30 @@ function VisualFlowPanelInner({
       onTodoLog?.(`Visual Flow: added new task "${newTodo.text}"`);
       return;
     }
-    if (!onAddGrazelandItem) return;
+    if (!currentPlaneAdd) return;
     const newItem: ShelfPillarTodoItem = {
       id: crypto.randomUUID(),
       text: "New item",
       done: false,
       grazelandHandleVisibility: createGrazelandHandleVisibility(false),
     };
-    onAddGrazelandItem(newItem);
-    onVisualFlowChange({
-      ...visualFlow,
-      grazelandNodePositions: { ...(visualFlow.grazelandNodePositions ?? {}), [newItem.id]: pos },
-    });
+    currentPlaneAdd(newItem);
+    if (plane === "grazeland") {
+      onVisualFlowChange({
+        ...visualFlow,
+        grazelandNodePositions: { ...(visualFlow.grazelandNodePositions ?? {}), [newItem.id]: pos },
+      });
+    } else {
+      onVisualFlowChange({
+        ...visualFlow,
+        binNodePositions: { ...(visualFlow.binNodePositions ?? {}), [newItem.id]: pos },
+      });
+    }
     setPaneMenu(null);
     setEditNodeId(newItem.id);
-    onTodoLog?.(`Visual Flow Grazeland: added new item "${newItem.text}"`);
+    onTodoLog?.(`${getVisualFlowPlaneLogLabel(plane)}: added new item "${newItem.text}"`);
   }, [
-    onAddGrazelandItem,
-    onAddTodo,
+    currentPlaneAdd,
     onTodoLog,
     onVisualFlowChange,
     paneMenu,
@@ -1722,13 +1842,17 @@ function VisualFlowPanelInner({
         if (t.sectorName?.trim() !== trimmed) continue;
         onEditGrazelandItem?.(t.id, patch);
       }
+      for (const t of binItems) {
+        if (t.sectorName?.trim() !== trimmed) continue;
+        onEditBinItem?.(t.id, patch);
+      }
       onTodoLog?.(
         color
-          ? `Visual Flow: sector "${trimmed}" frame color → ${color} (all matching tasks)`
-          : `Visual Flow: cleared sector "${trimmed}" frame color (all matching tasks)`
+          ? `Visual Flow: sector "${trimmed}" frame color → ${color} (all matching canvas entries)`
+          : `Visual Flow: cleared sector "${trimmed}" frame color (all matching canvas entries)`
       );
     },
-    [grazelandItems, onEditGrazelandItem, onEditTodo, onTodoLog, onVisualFlowChange, todos, visualFlow]
+    [binItems, grazelandItems, onEditBinItem, onEditGrazelandItem, onEditTodo, onTodoLog, onVisualFlowChange, todos, visualFlow]
   );
 
   const handleRenameSectorGroup = useCallback(
@@ -1745,44 +1869,39 @@ function VisualFlowPanelInner({
       }
       onVisualFlowChange({ ...visualFlow, sectorColors: nextSc });
       ids.forEach((id) => {
-        if (plane === "main") onEditTodo?.(id, { sectorName: trimmed || undefined });
-        else onEditGrazelandItem?.(id, { sectorName: trimmed || undefined });
+        currentPlaneEdit?.(id, { sectorName: trimmed || undefined });
       });
-      const label = plane === "main" ? "Visual Flow" : "Visual Flow Grazeland";
+      const label = getVisualFlowPlaneLogLabel(plane);
       const n = ids.length;
-      const u =
-        plane === "grazeland" ? (n === 1 ? "item" : "items") : n === 1 ? "task" : "tasks";
+      const u = getVisualFlowPlaneCountLabel(plane, n);
       onTodoLog?.(`${label}: renamed sector "${oldName}" → "${trimmed || "—"}" (${n} ${u})`);
     },
-    [onEditGrazelandItem, onEditTodo, onTodoLog, onVisualFlowChange, plane, visualFlow]
+    [currentPlaneEdit, onTodoLog, onVisualFlowChange, plane, visualFlow]
   );
 
   const handleClearSectorGroup = useCallback(
     (name: string, ids: string[]) => {
       if (
         !window.confirm(
-          `Remove sector "${name}" from ${ids.length} ${plane === "grazeland" ? "items" : "tasks"}?`
+          `Remove sector "${name}" from ${ids.length} ${plane === "main" ? "tasks" : "items"}?`
         )
       )
         return;
       hasInteracted.current = true;
       ids.forEach((id) => {
-        if (plane === "main") onEditTodo?.(id, { sectorName: undefined, sectorColor: undefined });
-        else onEditGrazelandItem?.(id, { sectorName: undefined, sectorColor: undefined });
+        currentPlaneEdit?.(id, { sectorName: undefined, sectorColor: undefined });
       });
-      const willRemainElsewhere = [...todos, ...grazelandItems].some(
+      const willRemainElsewhere = [...todos, ...grazelandItems, ...binItems].some(
         (t) => t.sectorName?.trim() === name && !ids.includes(t.id)
       );
       const nextSc = { ...(visualFlow.sectorColors ?? {}) };
       if (!willRemainElsewhere) delete nextSc[name];
       onVisualFlowChange({ ...visualFlow, sectorColors: nextSc });
-      const label = plane === "main" ? "Visual Flow" : "Visual Flow Grazeland";
-      onTodoLog?.(
-        `${label}: removed sector "${name}" from ${ids.length} ${plane === "grazeland" ? "items" : "tasks"}`
-      );
+      const label = getVisualFlowPlaneLogLabel(plane);
+      onTodoLog?.(`${label}: removed sector "${name}" from ${ids.length} ${getVisualFlowPlaneCountLabel(plane, ids.length)}`);
       setSectorManagerOpen(false);
     },
-    [grazelandItems, onEditGrazelandItem, onEditTodo, onTodoLog, onVisualFlowChange, plane, todos, visualFlow]
+    [binItems, currentPlaneEdit, grazelandItems, onTodoLog, onVisualFlowChange, plane, todos, visualFlow]
   );
 
   const handleEdit = useCallback(
@@ -1796,31 +1915,26 @@ function VisualFlowPanelInner({
   const handleDelete = useCallback(
     (id: string) => {
       const todo = canvasItems.find((t) => t.id === id);
-      const noun = plane === "grazeland" ? "item" : "task";
+      const noun = plane === "main" ? "task" : "item";
       const label = todo?.text ? `"${todo.text}"` : `this ${noun}`;
       if (!window.confirm(`Remove ${label}? This will clear it from your list.`)) return;
       if (!window.confirm(`Are you sure? This cannot be undone.`)) return;
       setNodeMenu(null);
       setEditNodeId(null);
-      if (plane === "main") onDeleteTodo?.(id);
-      else onDeleteGrazelandItem?.(id);
+      currentPlaneDelete?.(id);
       if (todo) {
-        onTodoLog?.(
-          plane === "main"
-            ? `Visual Flow: removed task "${todo.text}"`
-            : `Visual Flow Grazeland: removed item "${todo.text}"`
-        );
+        onTodoLog?.(`${getVisualFlowPlaneLogLabel(plane)}: removed ${noun} "${todo.text}"`);
       }
       hasInteracted.current = true;
       setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
       setNodes((ns) => ns.filter((n) => n.id !== id));
     },
-    [canvasItems, onDeleteGrazelandItem, onDeleteTodo, onTodoLog, plane, setEdges, setNodes]
+    [canvasItems, currentPlaneDelete, onTodoLog, plane, setEdges, setNodes]
   );
 
   const handleMarkCompleted = useCallback(
     (id: string) => {
-      const canComplete = plane === "main" ? onDeleteTodo : onDeleteGrazelandItem;
+      const canComplete = currentPlaneDelete;
       if (!canComplete || completingIdsRef.current.has(id)) return;
       const todo = canvasItems.find((t) => t.id === id);
       if (!todo) return;
@@ -1841,19 +1955,15 @@ function VisualFlowPanelInner({
       );
       window.setTimeout(() => {
         completingIdsRef.current.delete(id);
-        if (plane === "main") onDeleteTodo?.(id);
-        else onDeleteGrazelandItem?.(id);
+        currentPlaneDelete?.(id);
         onTaskCompleted?.();
-        onTodoLog?.(
-          plane === "main" ? `completed task ${todo.text}` : `completed item ${todo.text} (Grazeland)`
-        );
+        onTodoLog?.(`${getVisualFlowPlaneLogLabel(plane)}: completed ${getVisualFlowPlaneCountLabel(plane, 1)} ${todo.text}`);
         setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
       }, COMPLETE_EXIT_MS);
     },
     [
       canvasItems,
-      onDeleteGrazelandItem,
-      onDeleteTodo,
+      currentPlaneDelete,
       onTaskCompleted,
       onTodoLog,
       plane,
@@ -1864,7 +1974,7 @@ function VisualFlowPanelInner({
 
   const handleBulkMarkCompleted = useCallback(
     (ids: string[]) => {
-      const canComplete = plane === "main" ? onDeleteTodo : onDeleteGrazelandItem;
+      const canComplete = currentPlaneDelete;
       if (!canComplete || ids.length === 0) return;
       const valid = ids.filter((id) => {
         const t = canvasItems.find((x) => x.id === id);
@@ -1889,15 +1999,10 @@ function VisualFlowPanelInner({
       window.setTimeout(() => {
         valid.forEach((id) => completingIdsRef.current.delete(id));
         valid.forEach((id) => {
-          if (plane === "main") onDeleteTodo?.(id);
-          else onDeleteGrazelandItem?.(id);
+          currentPlaneDelete?.(id);
         });
         onTaskCompleted?.();
-        onTodoLog?.(
-          plane === "main"
-            ? `Visual Flow: completed ${valid.length} tasks (bulk)`
-            : `Visual Flow Grazeland: completed ${valid.length} items (bulk)`
-        );
+        onTodoLog?.(`${getVisualFlowPlaneLogLabel(plane)}: completed ${valid.length} ${getVisualFlowPlaneCountLabel(plane, valid.length)} (bulk)`);
         setEdges((eds) =>
           eds.filter((e) => !valid.includes(e.source) && !valid.includes(e.target))
         );
@@ -1906,8 +2011,7 @@ function VisualFlowPanelInner({
     },
     [
       canvasItems,
-      onDeleteGrazelandItem,
-      onDeleteTodo,
+      currentPlaneDelete,
       onTaskCompleted,
       onTodoLog,
       plane,
@@ -1918,33 +2022,23 @@ function VisualFlowPanelInner({
 
   const handleBulkSetBlockStatus = useCallback(
     (ids: string[], status: ShelfTodoBlockStatus) => {
-      const canEdit = plane === "main" ? onEditTodo : onEditGrazelandItem;
+      const canEdit = currentPlaneEdit;
       if (!canEdit || ids.length === 0) return;
       setNodeMenu(null);
       hasInteracted.current = true;
       ids.forEach((id) => {
-        if (plane === "main") onEditTodo?.(id, { blockStatus: status });
-        else onEditGrazelandItem?.(id, { blockStatus: status });
+        currentPlaneEdit?.(id, { blockStatus: status });
       });
       const n = ids.length;
-      const unit =
-        plane === "grazeland"
-          ? n === 1
-            ? "item"
-            : "items"
-          : n === 1
-            ? "task"
-            : "tasks";
-      onTodoLog?.(
-        `${plane === "main" ? "Visual Flow" : "Visual Flow Grazeland"}: set status to ${status} for ${n} ${unit}`
-      );
+      const unit = getVisualFlowPlaneCountLabel(plane, n);
+      onTodoLog?.(`${getVisualFlowPlaneLogLabel(plane)}: set status to ${status} for ${n} ${unit}`);
     },
-    [onEditGrazelandItem, onEditTodo, onTodoLog, plane]
+    [currentPlaneEdit, onTodoLog, plane]
   );
 
   const handleBulkSetSector = useCallback(
     (ids: string[], sectorName: string | undefined) => {
-      const canEdit = plane === "main" ? onEditTodo : onEditGrazelandItem;
+      const canEdit = currentPlaneEdit;
       if (!canEdit || ids.length === 0) return;
       setNodeMenu(null);
       hasInteracted.current = true;
@@ -1956,17 +2050,13 @@ function VisualFlowPanelInner({
           }
         : { sectorName: undefined, sectorColor: undefined };
       ids.forEach((id) => {
-        if (plane === "main") onEditTodo?.(id, patch);
-        else onEditGrazelandItem?.(id, patch);
+        currentPlaneEdit?.(id, patch);
       });
       const n = ids.length;
-      const unit =
-        plane === "grazeland" ? (n === 1 ? "item" : "items") : n === 1 ? "task" : "tasks";
-      onTodoLog?.(
-        `${plane === "main" ? "Visual Flow" : "Visual Flow Grazeland"}: set sector to ${trimmed || "(none)"} for ${n} ${unit}`
-      );
+      const unit = getVisualFlowPlaneCountLabel(plane, n);
+      onTodoLog?.(`${getVisualFlowPlaneLogLabel(plane)}: set sector to ${trimmed || "(none)"} for ${n} ${unit}`);
     },
-    [onEditGrazelandItem, onEditTodo, onTodoLog, plane, visualFlow.sectorColors]
+    [currentPlaneEdit, onTodoLog, plane, visualFlow.sectorColors]
   );
 
   const handleToggleFocus = useCallback(
@@ -2093,17 +2183,20 @@ function VisualFlowPanelInner({
           >
             Main canvas
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={plane === "grazeland"}
-            className={`rounded-md px-3 py-1.5 transition-colors ${
-              plane === "grazeland" ? "bg-amber-500/20 text-amber-100" : "text-zinc-400 hover:text-zinc-200"
-            }`}
-            onClick={() => switchPlane("grazeland")}
-          >
-            Grazeland plane
-          </button>
+          {SPECIAL_VISUAL_FLOW_PLANES.map((specialPlane) => (
+            <button
+              key={specialPlane}
+              type="button"
+              role="tab"
+              aria-selected={plane === specialPlane}
+              className={`rounded-md px-3 py-1.5 transition-colors ${
+                plane === specialPlane ? SPECIAL_VISUAL_FLOW_PLANE_META[specialPlane].tabClass : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              onClick={() => switchPlane(specialPlane)}
+            >
+              {SPECIAL_VISUAL_FLOW_PLANE_META[specialPlane].tabLabel}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -2115,7 +2208,7 @@ function VisualFlowPanelInner({
           >
             <div
               className={`relative h-full min-h-[280px] rounded-xl border visual-flow-canvas shelf-flow-canvas-transition ${
-                plane === "grazeland" ? "border-amber-200/20 bg-amber-950/10" : "border-white/10"
+                plane === "main" ? "border-white/10" : planeMeta?.canvasClass ?? "border-white/10"
               }`}
               style={{ transform: drawerOpen ? `translateX(${FOCUS_DRAWER_CANVAS_TRANSLATE})` : "translateX(0)" }}
             >
@@ -2124,7 +2217,7 @@ function VisualFlowPanelInner({
                 edges={edges}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
-                connectionMode={plane === "grazeland" ? ConnectionMode.Loose : ConnectionMode.Strict}
+                connectionMode={plane === "main" ? ConnectionMode.Strict : ConnectionMode.Loose}
                 connectionLineStyle={{
                   stroke: "#0070f2",
                   strokeWidth: 3,
@@ -2167,7 +2260,7 @@ function VisualFlowPanelInner({
                   <p className="text-sm text-zinc-400">
                     {plane === "main"
                       ? "Right-click on the canvas to create a task, or add todos in the Pillar."
-                      : "Right-click on the canvas to add an item. Grazeland items stay on this plane only."}
+                      : planeMeta?.emptyState}
                   </p>
                   <p className="text-xs text-zinc-500">
                     Drag nodes to arrange. Ctrl+drag to select several. Right-click a selected node or the canvas with
@@ -2179,9 +2272,9 @@ function VisualFlowPanelInner({
 
             {nodeMenu && (() => {
               const ids = nodeMenu.nodeIds;
-              const canEdit = plane === "main" ? onEditTodo : onEditGrazelandItem;
-              const canDelete = plane === "main" ? onDeleteTodo : onDeleteGrazelandItem;
-              const noun = plane === "grazeland" ? "items" : "tasks";
+              const canEdit = currentPlaneEdit;
+              const canDelete = currentPlaneDelete;
+              const noun = plane === "main" ? "tasks" : "items";
               const menuW = 200;
               const left = Math.max(8, Math.min(nodeMenu.x, window.innerWidth - menuW));
 
@@ -2303,7 +2396,7 @@ function VisualFlowPanelInner({
 
               const todo = canvasItems.find((t) => t.id === ids[0]);
               if (!todo || (!canEdit && !canDelete)) return null;
-              const isGrazelandPlane = plane === "grazeland";
+              const isGrazelandPlane = plane !== "main";
               const currentHandle = (
                 todo.handleConfig ?? (isGrazelandPlane ? "omni" : "horizontal")
               ) as ShelfTodoHandleConfig;
@@ -2311,13 +2404,12 @@ function VisualFlowPanelInner({
                 ? todo.grazelandHandleVisibility ?? createGrazelandHandleVisibility()
                 : undefined;
               const setHandle = (config: ShelfTodoHandleConfig) => {
-                if (plane === "main") onEditTodo?.(ids[0], { handleConfig: config });
-                else onEditGrazelandItem?.(ids[0], { handleConfig: config });
+                currentPlaneEdit?.(ids[0], { handleConfig: config });
                 setNodeMenu(null);
               };
               const toggleGrazelandHandleVisibility = (key: ShelfGrazelandHandleSlot, checked: boolean) => {
                 if (!currentGrazelandHandleVisibility) return;
-                onEditGrazelandItem?.(ids[0], {
+                currentPlaneEdit?.(ids[0], {
                   grazelandHandleVisibility: {
                     ...currentGrazelandHandleVisibility,
                     [key]: checked,
@@ -2342,7 +2434,7 @@ function VisualFlowPanelInner({
                         handleEdit(ids[0]);
                       }}
                     >
-                      {plane === "grazeland" ? "Edit item…" : "Edit task…"}
+                      {plane === "main" ? "Edit task…" : "Edit item…"}
                     </button>
                   )}
                   {canEdit && (
@@ -2415,7 +2507,7 @@ function VisualFlowPanelInner({
                         handleDelete(ids[0]);
                       }}
                     >
-                      {plane === "grazeland" ? "Delete item" : "Delete task"}
+                      {plane === "main" ? "Delete task" : "Delete item"}
                     </button>
                   )}
                   {canEdit && (
@@ -2553,7 +2645,7 @@ function VisualFlowPanelInner({
               );
             })()}
 
-            {paneMenu && ((plane === "main" && onAddTodo) || (plane === "grazeland" && onAddGrazelandItem)) && (() => {
+            {paneMenu && currentPlaneAdd && (() => {
               const menuW = 200;
               const menuH = 108;
               const left = Math.max(8, Math.min(paneMenu.x, window.innerWidth - menuW));
@@ -2572,7 +2664,7 @@ function VisualFlowPanelInner({
                     handleCreateTask();
                   }}
                 >
-                  {plane === "grazeland" ? "Create new item" : "Create new task"}
+                  {plane === "main" ? "Create new task" : "Create new item"}
                 </button>
                 <button
                   type="button"
@@ -2623,14 +2715,14 @@ function VisualFlowPanelInner({
                               {name}
                             </span>
                             <span className="shrink-0 text-[10px] text-zinc-500">
-                              {ids.length}{" "}
-                              {plane === "grazeland"
+                              {ids.length} {" "}
+                              {plane === "main"
                                 ? ids.length === 1
-                                  ? "item"
-                                  : "items"
-                                : ids.length === 1
                                   ? "task"
-                                  : "tasks"}
+                                  : "tasks"
+                                : ids.length === 1
+                                  ? "item"
+                                  : "items"}
                             </span>
                           </div>
                           <label className="mb-1 block text-[10px] font-medium text-zinc-500">
@@ -2857,7 +2949,7 @@ function VisualFlowPanelInner({
         {editNodeId &&
           (() => {
             const t = canvasItems.find((x) => x.id === editNodeId);
-            const canEdit = plane === "main" ? onEditTodo : onEditGrazelandItem;
+            const canEdit = currentPlaneEdit;
             if (!t || !canEdit) return null;
             return (
               <div
@@ -2868,8 +2960,9 @@ function VisualFlowPanelInner({
                 <NodeEditCard
                   todo={t}
                   showTodoDates={showTodoDates}
-                  editLabel={plane === "grazeland" ? "Edit item" : "Edit task"}
-                  titlePlaceholder={plane === "grazeland" ? "Item title" : "Task title"}
+                  editLabel={plane === "main" ? "Edit task" : "Edit item"}
+                  titlePlaceholder={plane === "main" ? "Task title" : "Item title"}
+                  showBinInfoFields={plane === "bin"}
                   existingSectorNames={allVisualFlowSectorNames}
                   sectorColorMap={visualFlow.sectorColors}
                   onSave={(updates) => {

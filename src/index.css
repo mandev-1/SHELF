@@ -22,6 +22,22 @@
   transition: opacity 0.7s ease-in-out;
 }
 
+.shelf-inline-emphasis {
+  display: inline-block;
+  margin: 0 0.05em;
+  padding: 0 0.24em;
+  border-radius: 0.45em;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-style: italic;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--shelf-accent);
+  background: color-mix(in srgb, var(--shelf-accent) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--shelf-accent) 18%, transparent);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 :root {
   --font-sans: "DM Sans", system-ui, sans-serif;
   --shelf-bg: linear-gradient(to bottom right, #09090b, #18181b, #09090b);

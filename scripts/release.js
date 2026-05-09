@@ -9,6 +9,15 @@ const RELEASES_DIR = join(ROOT, "releases");
 const RELEASE_VERSION_FILE = join(ROOT, ".release-version");
 const MODE = process.argv[2] === "update" ? "update" : "release";
 
+function normalizeVersion(version) {
+  const trimmed = version.trim().replace(/^v/i, "");
+  return /^\d+\.\d+\.\d+$/.test(trimmed) ? trimmed : null;
+}
+
+function getRequestedVersion() {
+  return normalizeVersion(process.env.RELEASE_VERSION ?? "");
+}
+
 function getCurrentVersion() {
   if (existsSync(RELEASE_VERSION_FILE)) {
     return readFileSync(RELEASE_VERSION_FILE, "utf8").trim();
@@ -66,7 +75,8 @@ function createArchives(releaseDir, version) {
 
 function main() {
   const currentVersion = getCurrentVersion();
-  const version = MODE === "release" ? bumpPatch(currentVersion) : currentVersion;
+  const requestedVersion = getRequestedVersion();
+  const version = requestedVersion ?? (MODE === "release" ? bumpPatch(currentVersion) : currentVersion);
   updateVersionInFiles(version);
   execSync("npm run build", { cwd: ROOT, stdio: "inherit" });
   const releaseDir = buildReleaseDir(version);
