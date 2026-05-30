@@ -6,7 +6,7 @@ Download the latest release from `releases/<version>/` and load that folder unpa
 
 ```bash
 npm run release
-npm run updaterelease         ### <---- This will update the release in same folder
+npm run release:rebuild
 ```
 
 
@@ -38,13 +38,6 @@ A minimal, serverless Chrome/Brave extension that turns your new tab into a book
 - **Saved prompts** — Store prompts with titles and versions.
 - **Prompt editor** — Edit, version, and preview prompts in a modal.
 - **Click to copy** — One-click copy from the grid or the LLM Console pillar.
-
-### Error Dashboard
-
-- **JSON analytics** — Paste or load JSON to visualize error counts and details.
-- **Named dashboards** — Multiple tabs (e.g. by environment or source).
-- **Collapsible panels** — Hide JSON input, coverage, and importance for more list space.
-- **Keyboard** — Press Esc to collapse panels and maximize the error list.
 
 ### Visual Flow
 
@@ -106,6 +99,12 @@ A minimal, serverless Chrome/Brave extension that turns your new tab into a book
 - Watch and rebuild on change: `npm run build:watch`
 
 Then load the extension from `dist` or from `releases/<version>/` and refresh the new-tab page after each rebuild.
+
+## Releases
+
+- Push a tag that starts with `v` to trigger the GitHub Actions release workflow.
+- The workflow builds the extension, packages `releases/<version>/`, and attaches the `.zip` and `.tar.gz` archives to the GitHub Release.
+- Local versioned release builds still work with `npm run release`.
 
 ## Tech stack
 

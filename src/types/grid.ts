@@ -67,7 +67,63 @@ export type ShelfTodoHandleConfig =
   | "bottom"
   | "left"
   | "right"
+  /** All four sides, with both source and target points on each side. */
+  | "omni"
   | "hidden";
+
+export const GRAZELAND_HANDLE_SLOTS = [
+  "top1",
+  "top2",
+  "right1",
+  "right2",
+  "bottom1",
+  "bottom2",
+  "left1",
+  "left2",
+] as const;
+
+export type ShelfGrazelandHandleSlot = (typeof GRAZELAND_HANDLE_SLOTS)[number];
+
+export type ShelfGrazelandHandleVisibility = Record<ShelfGrazelandHandleSlot, boolean>;
+
+export function createGrazelandHandleVisibility(allVisible = true): ShelfGrazelandHandleVisibility {
+  return {
+    top1: allVisible,
+    top2: allVisible,
+    right1: allVisible,
+    right2: allVisible,
+    bottom1: allVisible,
+    bottom2: allVisible,
+    left1: allVisible,
+    left2: allVisible,
+  };
+}
+
+/** Epic / sector border tint on Visual Flow (subtle; optional) */
+export type SectorColorKey = "bone" | "jet-black" | "pacific-blue" | "alice-blue" | "fern";
+
+export const SECTOR_COLOR_OPTIONS: { value: SectorColorKey; label: string }[] = [
+  { value: "bone", label: "Bone" },
+  { value: "jet-black", label: "Jet black" },
+  { value: "pacific-blue", label: "Pacific blue" },
+  { value: "alice-blue", label: "Alice blue" },
+  { value: "fern", label: "Fern" },
+];
+
+/** Hex values for sector borders (see design tokens) */
+export const SECTOR_HEX: Record<SectorColorKey, string> = {
+  bone: "#e6d9c3",
+  "jet-black": "#1f2a2a",
+  "pacific-blue": "#5fb3c6",
+  "alice-blue": "#eaf4f7",
+  fern: "#3e7c4a",
+};
+
+const SECTOR_COLOR_SET = new Set<string>(Object.keys(SECTOR_HEX));
+
+export function isSectorColorKey(x: unknown): x is SectorColorKey {
+  return typeof x === "string" && SECTOR_COLOR_SET.has(x);
+}
 
 export interface ShelfPillarTodoItem {
   id: string;
@@ -79,12 +135,20 @@ export interface ShelfPillarTodoItem {
   tag?: string;
   /** Task blocking status: blocked by another, ready to work on, or abeyed. Only in edit form, not shown in Pillar. */
   blockStatus?: ShelfTodoBlockStatus;
-  /** Per-node handle config: horizontal (L+R), vertical (T+B), or single side. Hidden = no connection points. */
+  /** Main-plane handle preset. Special planes use grazelandHandleVisibility for per-point toggles. */
   handleConfig?: ShelfTodoHandleConfig;
+  /** Visibility for the eight individual connection points on the special planes (top1/top2/right1/right2/bottom1/bottom2/left1/left2). */
+  grazelandHandleVisibility?: ShelfGrazelandHandleVisibility;
   /** Optional date string (e.g. YYYY-MM-DD). Shown in Visual Flow when showTodoDates is on. */
   date?: string;
   /** When true, the task appears in the visual flow focus drawer. */
   focused?: boolean;
+  /** Epic / sector name (optional); shown lightly on Visual Flow when set */
+  sectorName?: string;
+  /** When set, a subtle Visual Flow border uses this tint; omit for default node chrome */
+  sectorColor?: SectorColorKey;
+  /** Bin-specific potential value text shown as PV in the bin editor. */
+  potentialValue?: string;
 }
 
 export interface ObsidianLogConfig {
@@ -108,12 +172,49 @@ export type VisualFlowEdge = {
   muted?: boolean;
 };
 
+export type VisualFlowNodeSize = {
+  width?: number;
+  height?: number;
+};
+
 export interface VisualFlowData {
   nodePositions?: Record<string, { x: number; y: number }>;
   edges?: VisualFlowEdge[];
   /** Second canvas layer — same item shape as pillar todos, separate from main flow */
   grazelandNodePositions?: Record<string, { x: number; y: number }>;
   grazelandEdges?: VisualFlowEdge[];
+  /** Explicit size overrides for Grazeland nodes; omitted dimensions keep the computed default. */
+  grazelandNodeSizes?: Record<string, VisualFlowNodeSize>;
+  /** Third canvas layer — same item shape as pillar todos, separate from the other special plane. */
+  binNodePositions?: Record<string, { x: number; y: number }>;
+  binEdges?: VisualFlowEdge[];
+  /** Explicit size overrides for Bin nodes; omitted dimensions keep the computed default. */
+  binNodeSizes?: Record<string, VisualFlowNodeSize>;
+  /** Sector label → border color; applies to all tasks with that sector name on both planes */
+  sectorColors?: Record<string, SectorColorKey>;
+}
+
+/** Border/handle color for a node: managed sector map wins, then per-task `sectorColor`. */
+export function resolveVisualFlowSectorColor(
+  todo: ShelfPillarTodoItem,
+  sectorColors?: Record<string, SectorColorKey>
+): SectorColorKey | undefined {
+  const name = todo.sectorName?.trim();
+  if (name && sectorColors && isSectorColorKey(sectorColors[name])) {
+    return sectorColors[name];
+  }
+  return todo.sectorColor;
+}
+
+/** Builist (TEMP working name) — buylist hopper item. Stack is FIFO:
+ *  newest item is at index 0 (visually top), oldest is the last index
+ *  (the "bottom slot" — the only one eligible to be bought). */
+export interface BuylistItem {
+  id: string;
+  title: string;
+  url?: string;
+  note?: string;
+  addedAt: string;
 }
 
 export interface ShelfBackupData {
@@ -139,11 +240,15 @@ export interface ShelfBackupData {
   visualFlow?: VisualFlowData;
   /** Items for the Grazeland plane only (same fields as pillar todos; not shown on main canvas or Pillar) */
   grazelandItems?: ShelfPillarTodoItem[];
+  /** Items for the Bin plane only (same fields as pillar todos; not shown on main canvas or Pillar) */
+  binItems?: ShelfPillarTodoItem[];
   llmConsoleUrl?: string;
   showBothNavButtons?: boolean;
   pillarTodoPins?: string[];
   focusDesynced?: boolean;
   lowPerformanceMode?: boolean;
+  /** Builist (TEMP) — buylist hopper stack */
+  buylist?: BuylistItem[];
 }
 
 export const ACCENT_COLORS = [
