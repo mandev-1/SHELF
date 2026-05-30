@@ -8,13 +8,14 @@ import { useShelfStorage } from "./hooks/useShelfStorage";
 import { PromptLibraryCard } from "./components/PromptLibraryCard";
 import { Pillar } from "./components/Pillar";
 import { VisualFlowPanel } from "./components/VisualFlowPanel";
+import { BuylistPanel } from "./components/BuylistPanel";
 import { pickCelebrationPhrase } from "./utils/celebration";
 import type { ShelfPillarTodoItem } from "./types/grid";
 
 const DASHBOARD_OPEN_KEY = "shelf-dashboard-view";
 const DASHBOARD_LAST_TOOL_KEY = "shelf-dashboard-last-tool";
 
-type DashboardView = "shelf" | "visual-flow";
+type DashboardView = "shelf" | "visual-flow" | "buylist";
 type LastTool = "visual-flow" | "llm-console";
 
 function openLLMConsoleOverlay(url: string) {
@@ -35,7 +36,8 @@ export default function FullApp() {
   const [dashboardView, setDashboardView] = useState<DashboardView>(() => {
     try {
       const v = window.localStorage.getItem(DASHBOARD_OPEN_KEY);
-      return v === "visual-flow" ? v : "shelf";
+      if (v === "visual-flow" || v === "buylist") return v;
+      return "shelf";
     } catch {
       return "shelf";
     }
@@ -78,6 +80,10 @@ export default function FullApp() {
     appendTaskLog,
     llmConsoleUrl,
     showBothNavButtons,
+    buylist,
+    buylistAdd,
+    buylistDiscard,
+    buylistBuyBottom,
   } = useShelfStorage();
   const [editingName, setEditingName] = useState(false);
   const [pendingEditPromptId, setPendingEditPromptId] = useState<string | null>(null);
@@ -406,6 +412,25 @@ export default function FullApp() {
               </SearchField>
             </Surface>
             <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (dashboardView === "buylist") {
+                    setViewSlideDir("right");
+                    setDashboardView("shelf");
+                  } else {
+                    setViewSlideDir("left");
+                    setDashboardView("buylist");
+                  }
+                }}
+                className={
+                  dashboardView === "buylist"
+                    ? "rounded-xl border border-emerald-300/40 bg-emerald-400/20 px-3 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-400/30"
+                    : "rounded-xl border border-emerald-300/30 bg-emerald-400/10 px-3 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-400/20"
+                }
+              >
+                {dashboardView === "buylist" ? "Back to Shelf" : "Hopper"}
+              </button>
               {showBothNavButtons ? (
                 <>
                   {dashboardView !== "shelf" && (
@@ -467,7 +492,14 @@ export default function FullApp() {
             className={`shelf-view-slide h-full px-6 py-6 overflow-auto ${viewSlideDir === "left" ? "shelf-view-slide--from-right" : viewSlideDir === "right" ? "shelf-view-slide--from-left" : ""}`}
             onAnimationEnd={() => setViewSlideDir(null)}
           >
-          {dashboardView === "visual-flow" ? (
+          {dashboardView === "buylist" ? (
+            <BuylistPanel
+              items={buylist}
+              onAdd={buylistAdd}
+              onDiscard={buylistDiscard}
+              onBuyBottom={buylistBuyBottom}
+            />
+          ) : dashboardView === "visual-flow" ? (
             <div className="max-w-[1640px] mx-auto">
               <VisualFlowPanel
                 todos={pillarTodos}

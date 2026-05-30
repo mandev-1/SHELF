@@ -206,6 +206,17 @@ export function resolveVisualFlowSectorColor(
   return todo.sectorColor;
 }
 
+/** Builist (TEMP working name) — buylist hopper item. Stack is FIFO:
+ *  newest item is at index 0 (visually top), oldest is the last index
+ *  (the "bottom slot" — the only one eligible to be bought). */
+export interface BuylistItem {
+  id: string;
+  title: string;
+  url?: string;
+  note?: string;
+  addedAt: string;
+}
+
 export interface ShelfBackupData {
   version: number;
   layout: ShelfLayoutItem[];
@@ -236,6 +247,8 @@ export interface ShelfBackupData {
   pillarTodoPins?: string[];
   focusDesynced?: boolean;
   lowPerformanceMode?: boolean;
+  /** Builist (TEMP) — buylist hopper stack */
+  buylist?: BuylistItem[];
 }
 
 export const ACCENT_COLORS = [

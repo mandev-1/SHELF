@@ -1453,24 +1453,38 @@ function VisualFlowPanelInner({
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const lastSyncedCanvasKeyRef = useRef<string | null>(null);
+  const canvasSyncKey = useMemo(
+    () =>
+      JSON.stringify({
+        plane,
+        items: canvasItems,
+        positions: storedNodePositions ?? null,
+        sizes: storedNodeSizes ?? null,
+        edges: storedFlowEdges ?? null,
+        showTodoDates,
+        sectorColors: visualFlow.sectorColors ?? null,
+      }),
+    [canvasItems, plane, showTodoDates, storedFlowEdges, storedNodePositions, storedNodeSizes, visualFlow.sectorColors]
+  );
 
   const switchPlane = useCallback(
     (next: VisualFlowPlane) => {
-      setPlaneState((prev) => {
-        if (next === prev) return prev;
-        flushCanvasToVisualFlow(prev, nodes, edges);
-        try {
-          window.localStorage.setItem(VISUAL_FLOW_PLANE_LS_KEY, next);
-        } catch {
-          /* ignore */
-        }
-        return next;
-      });
+      if (next === plane) return;
+      flushCanvasToVisualFlow(plane, nodes, edges);
+      try {
+        window.localStorage.setItem(VISUAL_FLOW_PLANE_LS_KEY, next);
+      } catch {
+        /* ignore */
+      }
+      setPlaneState(next);
     },
-    [flushCanvasToVisualFlow, nodes, edges]
+    [flushCanvasToVisualFlow, nodes, edges, plane]
   );
 
   useEffect(() => {
+    if (lastSyncedCanvasKeyRef.current === canvasSyncKey) return;
+    lastSyncedCanvasKeyRef.current = canvasSyncKey;
     setNodes((current) => {
       const fresh = buildInitialNodes(
         canvasItems,
@@ -1510,6 +1524,7 @@ function VisualFlowPanelInner({
     showTodoDates,
     plane,
     visualFlow.sectorColors,
+    canvasSyncKey,
     setNodes,
     setEdges,
   ]);

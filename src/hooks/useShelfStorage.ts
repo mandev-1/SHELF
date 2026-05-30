@@ -22,6 +22,7 @@ import {
   type SectorColorKey,
   type VisualFlowData,
   type VisualFlowNodeSize,
+  type BuylistItem,
 } from "../types/grid";
 
 const LAYOUT_KEY = "shelf-layout";
@@ -52,6 +53,25 @@ const SHOW_BOTH_NAV_BUTTONS_KEY = "shelf-show-both-nav-buttons";
 const PILLAR_TODO_PINS_KEY = "shelf-pillar-todo-pins";
 const FOCUS_DESYNCED_KEY = "shelf-focus-desynced";
 export const LOW_PERFORMANCE_MODE_KEY = "shelf-low-performance-mode";
+const BUYLIST_KEY = "shelf-buylist";
+
+function normalizeBuylist(raw: unknown): BuylistItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: BuylistItem[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    if (typeof o.title !== "string" || !o.title.trim()) continue;
+    out.push({
+      id: typeof o.id === "string" && o.id ? o.id : crypto.randomUUID(),
+      title: o.title,
+      url: typeof o.url === "string" ? o.url : undefined,
+      note: typeof o.note === "string" ? o.note : undefined,
+      addedAt: typeof o.addedAt === "string" ? o.addedAt : new Date().toISOString(),
+    });
+  }
+  return out;
+}
 
 const DEFAULT_PROMPTS: ShelfPromptMap = {
   hacker: {
@@ -244,6 +264,7 @@ export function useShelfStorage() {
   const [pillarTodoPins, setPillarTodoPinsState] = useState<string[]>([]);
   const [focusDesynced, setFocusDesyncedState] = useState(false);
   const [lowPerformanceMode, setLowPerformanceModeState] = useState(false);
+  const [buylist, setBuylistState] = useState<BuylistItem[]>([]);
   const [ready, setReady] = useState(false);
 
   const load = useCallback(() => {
@@ -282,6 +303,7 @@ export function useShelfStorage() {
         PILLAR_TODO_PINS_KEY,
         FOCUS_DESYNCED_KEY,
         LOW_PERFORMANCE_MODE_KEY,
+        BUYLIST_KEY,
       ],
       (result: { [key: string]: unknown }) => {
       setLayout(Array.isArray(result[LAYOUT_KEY]) ? (result[LAYOUT_KEY] as ShelfLayoutItem[]) : []);
@@ -381,6 +403,7 @@ export function useShelfStorage() {
       );
       setFocusDesyncedState(result[FOCUS_DESYNCED_KEY] === true);
       setLowPerformanceModeState(result[LOW_PERFORMANCE_MODE_KEY] === true);
+      setBuylistState(normalizeBuylist(result[BUYLIST_KEY]));
       const vf = result[VISUAL_FLOW_KEY];
       if (vf && typeof vf === "object" && !Array.isArray(vf)) {
         const raw = vf as Record<string, unknown>;
@@ -585,6 +608,42 @@ export function useShelfStorage() {
       return normalized;
     });
   }, []);
+
+  const setBuylist = useCallback((next: BuylistItem[] | ((prev: BuylistItem[]) => BuylistItem[])) => {
+    setBuylistState((prev) => {
+      const list = typeof next === "function" ? next(prev) : next;
+      const normalized = normalizeBuylist(list);
+      getStorage()?.set({ [BUYLIST_KEY]: normalized });
+      return normalized;
+    });
+  }, []);
+
+  const buylistAdd = useCallback(
+    (input: { title: string; url?: string; note?: string }) => {
+      const title = input.title.trim();
+      if (!title) return;
+      const item: BuylistItem = {
+        id: crypto.randomUUID(),
+        title,
+        url: input.url?.trim() || undefined,
+        note: input.note?.trim() || undefined,
+        addedAt: new Date().toISOString(),
+      };
+      setBuylist((prev) => [item, ...prev]);
+    },
+    [setBuylist]
+  );
+
+  const buylistDiscard = useCallback(
+    (id: string) => {
+      setBuylist((prev) => prev.filter((x) => x.id !== id));
+    },
+    [setBuylist]
+  );
+
+  const buylistBuyBottom = useCallback(() => {
+    setBuylist((prev) => (prev.length === 0 ? prev : prev.slice(0, -1)));
+  }, [setBuylist]);
 
   const saveGoals = useCallback((next: ShelfGoalMap) => {
     setGoals(next);
@@ -791,8 +850,9 @@ export function useShelfStorage() {
       pillarTodoPins,
       focusDesynced,
       lowPerformanceMode,
+      buylist,
     };
-  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems]);
+  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -840,6 +900,7 @@ export function useShelfStorage() {
     }
     if (typeof backup.focusDesynced === "boolean") setFocusDesyncedState(backup.focusDesynced);
     if (typeof backup.lowPerformanceMode === "boolean") setLowPerformanceModeState(backup.lowPerformanceMode);
+    if (Array.isArray(backup.buylist)) setBuylist(backup.buylist as BuylistItem[]);
 
     getStorage()?.set({
       [LAYOUT_KEY]: backup.layout ?? layout,
@@ -873,8 +934,9 @@ export function useShelfStorage() {
       [PILLAR_TODO_PINS_KEY]: Array.isArray(backup.pillarTodoPins) ? backup.pillarTodoPins.slice(0, 6) : pillarTodoPins,
       [FOCUS_DESYNCED_KEY]: typeof backup.focusDesynced === "boolean" ? backup.focusDesynced : focusDesynced,
       [LOW_PERFORMANCE_MODE_KEY]: typeof backup.lowPerformanceMode === "boolean" ? backup.lowPerformanceMode : lowPerformanceMode,
+      [BUYLIST_KEY]: Array.isArray(backup.buylist) ? backup.buylist : buylist,
     });
-  }, [bookmarkOverrides, binItems, bookmarkSize, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setGrazelandItems]);
+  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setGrazelandItems]);
 
   return {
     layout,
@@ -937,6 +999,11 @@ export function useShelfStorage() {
     setGrazelandItems,
     binItems,
     setBinItems,
+    buylist,
+    setBuylist,
+    buylistAdd,
+    buylistDiscard,
+    buylistBuyBottom,
     llmConsoleUrl,
     setLlmConsoleUrl,
     showBothNavButtons,
