@@ -1,7 +1,8 @@
-import { Input, Link, Surface } from "@heroui/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "@heroui/react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { BookmarkTreeNode } from "../types/bookmarks";
 import type { ShelfPillarTodoItem } from "../types/grid";
+import { monogramDataUri } from "../utils/monogram";
 import { NoteContent } from "./NoteContent";
 
 function faviconUrl(url: string) {
@@ -16,23 +17,6 @@ function truncateSubtitle(text: string, maxLen = 25) {
   return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
 }
 
-const TAG_PALETTES: { bg: string; palette: string }[] = [
-  { bg: "bg-violet-700/18", palette: "shelf-todo-tag--violet" },
-  { bg: "bg-fuchsia-700/18", palette: "shelf-todo-tag--fuchsia" },
-  { bg: "bg-purple-700/18", palette: "shelf-todo-tag--purple" },
-  { bg: "bg-indigo-700/18", palette: "shelf-todo-tag--indigo" },
-  { bg: "bg-slate-800/25", palette: "shelf-todo-tag--navy" },
-  { bg: "bg-blue-600/22", palette: "shelf-todo-tag--royal-blue" },
-  { bg: "bg-emerald-700/22", palette: "shelf-todo-tag--royal-green" },
-  { bg: "bg-violet-800/16", palette: "shelf-todo-tag--violet" },
-  { bg: "bg-fuchsia-800/16", palette: "shelf-todo-tag--fuchsia" },
-];
-
-function tagColorClasses(tag: string) {
-  const hash = tag.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  const { bg, palette } = TAG_PALETTES[hash % TAG_PALETTES.length];
-  return `shelf-todo-tag ${bg} ${palette}`;
-}
 
 function collectBookmarks(tree: BookmarkTreeNode[] | null): Map<string, BookmarkTreeNode> {
   const map = new Map<string, BookmarkTreeNode>();
@@ -109,6 +93,7 @@ export function Pillar({
 }) {
   const byId = useMemo(() => collectBookmarks(tree), [tree]);
   const [overZone, setOverZone] = useState<"top" | null>(null);
+  void overZone; // currently visual-only; keep setter for future drop-zone hover state
   const [todoDraft, setTodoDraft] = useState("");
   const [todoSubtitleDraft, setTodoSubtitleDraft] = useState("");
   const [notePopover, setNotePopover] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -118,6 +103,8 @@ export function Pillar({
     setNoteEditMode(false);
   }, [notePopover?.id]);
   const [pinMenu, setPinMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [draggingPinId, setDraggingPinId] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<{ id: string; pos: "before" | "after" } | null>(null);
   const notePopoverRef = useRef<HTMLDivElement | null>(null);
   const pinMenuRef = useRef<HTMLDivElement | null>(null);
   const todosRef = useRef(todos);
@@ -126,6 +113,7 @@ export function Pillar({
   const topNodes = pinnedTop.map((id) => byId.get(id)).filter(Boolean) as BookmarkTreeNode[];
 
   const removePin = (id: string) => {
+    capturePinPositions();
     onSetPinned({ top: pinnedTop.filter((x) => x !== id) });
   };
 
@@ -133,7 +121,72 @@ export function Pillar({
     const nextTop = pinnedTop.filter((x) => x !== id);
     nextTop.unshift(id);
     if (nextTop.length > 6) nextTop.pop();
+    capturePinPositions();
     onSetPinned({ top: nextTop });
+  };
+
+  // ── FLIP animation for pin reorder ─────────────────────────────────────
+  // Per design spec: snapshot rects before reorder, then in useLayoutEffect
+  // apply the inverse transform with `transition:none`, then rAF back to
+  // identity over 0.3s cubic-bezier(.2,.9,.3,1). Displaced pins glide.
+  const pinNodeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const pinRectsRef = useRef<Map<string, DOMRect>>(new Map());
+
+  const capturePinPositions = () => {
+    const snap = new Map<string, DOMRect>();
+    pinNodeRefs.current.forEach((node, id) => {
+      snap.set(id, node.getBoundingClientRect());
+    });
+    pinRectsRef.current = snap;
+  };
+
+  useLayoutEffect(() => {
+    const prev = pinRectsRef.current;
+    if (prev.size === 0) return;
+    pinNodeRefs.current.forEach((node, id) => {
+      const oldRect = prev.get(id);
+      if (!oldRect) return;
+      const newRect = node.getBoundingClientRect();
+      const dx = oldRect.left - newRect.left;
+      const dy = oldRect.top - newRect.top;
+      if (dx === 0 && dy === 0) return;
+      node.style.transition = "none";
+      node.style.transform = `translate(${dx}px, ${dy}px)`;
+      // Force reflow so the inverse transform commits before we animate back
+      void node.getBoundingClientRect();
+      requestAnimationFrame(() => {
+        node.style.transition = "transform 0.3s cubic-bezier(.2,.9,.3,1)";
+        node.style.transform = "";
+        const clear = () => {
+          node.style.transition = "";
+          node.style.transform = "";
+          node.removeEventListener("transitionend", clear);
+        };
+        node.addEventListener("transitionend", clear);
+      });
+    });
+    pinRectsRef.current = new Map();
+  }, [pinnedTop]);
+
+  // Drag-to-reorder Top-6 pins (HTML5 DnD; persists via onSetPinned).
+  // Position-aware: "before" inserts above target, "after" inserts below.
+  const reorderPin = (sourceId: string, targetId: string, pos: "before" | "after") => {
+    if (sourceId === targetId) return;
+    const next = pinnedTop.filter((id) => id !== sourceId);
+    let targetIdx = next.indexOf(targetId);
+    if (targetIdx < 0) return;
+    if (pos === "after") targetIdx += 1;
+    next.splice(targetIdx, 0, sourceId);
+    if (JSON.stringify(next) === JSON.stringify(pinnedTop)) return;
+    capturePinPositions();
+    onSetPinned({ top: next });
+  };
+
+  // Deterministic tag color per spec (only violet or blue available)
+  const tagClass = (tag: string) => {
+    let h = 0;
+    for (const ch of tag) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
+    return h % 2 === 0 ? "tag--violet" : "tag--blue";
   };
 
   const addTodo = () => {
@@ -278,90 +331,149 @@ export function Pillar({
   }, [pinMenu]);
 
   return (
-    <aside className="shelf-pillar relative flex h-full min-h-0 w-[280px] shrink-0 flex-col border-r border-white/10 bg-zinc-900/80">
-      <div className="shrink-0 p-4">
-        <div className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/70">Pillar</div>
-        <div className="mt-1 truncate text-lg font-semibold text-white">{shelfName}</div>
+    <aside className="pillar">
+      <div className="pillar-head">
+        <div className="eyebrow">Pillar</div>
+        <div className="pillar-name">{shelfName}</div>
       </div>
-      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 pt-0">
-      <Surface variant="secondary" className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className="pillar-body">
 
-        <div
-          className={`shelf-top6-zone min-w-0 rounded-2xl border p-3 transition ${
-            overZone === "top"
-              ? "shelf-top6-zone--drag border-emerald-300/50 bg-emerald-400/10"
-              : "border-white/10 bg-black/20"
-          }`}
-          onDragOver={(e) => {
-            e.preventDefault();
-            const payload = readDragPayload(e.dataTransfer);
-            if (!payload || payload.kind !== "bookmark") return;
-            setOverZone("top");
-            e.dataTransfer.dropEffect = "move";
-          }}
-          onDragLeave={() => setOverZone(null)}
-          onDrop={(e) => {
-            e.preventDefault();
-            const payload = readDragPayload(e.dataTransfer);
-            setOverZone(null);
-            if (!payload || payload.kind !== "bookmark") return;
-            pinIntoTop(payload.id);
-          }}
-        >
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-xs font-semibold text-emerald-200">Top 6</div>
-            <div className="text-[10px] text-zinc-500">Drop bookmarks here</div>
+        <div className="zone">
+          <div className="zone-head">
+            <div className="zone-title">Top 6</div>
+            <div className="zone-hint">Drop bookmarks here</div>
           </div>
-          <div className="grid min-w-0 gap-2">
+          <div
+            className="pin-stack"
+            onDragOver={(e) => {
+              e.preventDefault();
+              const payload = readDragPayload(e.dataTransfer);
+              if (!payload || payload.kind !== "bookmark") return;
+              setOverZone("top");
+              e.dataTransfer.dropEffect = "move";
+            }}
+            onDragLeave={() => setOverZone(null)}
+            onDrop={(e) => {
+              e.preventDefault();
+              const payload = readDragPayload(e.dataTransfer);
+              setOverZone(null);
+              if (!payload || payload.kind !== "bookmark") return;
+              pinIntoTop(payload.id);
+            }}
+          >
             {topNodes.length === 0 ? (
-              <div className="text-xs text-zinc-500">Empty</div>
+              <div className="text-xs text-[var(--faint)]">Empty</div>
             ) : (
               topNodes.map((b) => {
                 const override = pinOverrides?.[b.id];
                 const displayTitle = override?.title ?? b.title ?? b.url ?? "";
                 const imageSrc = override?.imageUrl?.trim() ? override.imageUrl! : faviconUrl(b.url!);
+                const isDragging = draggingPinId === b.id;
                 return (
                   <div
                     key={b.id}
-                    className="shelf-top6-card group min-w-0 overflow-hidden rounded-2xl border border-emerald-400/15 bg-black/35 p-3"
+                    ref={(el) => {
+                      if (el) pinNodeRefs.current.set(b.id, el);
+                      else pinNodeRefs.current.delete(b.id);
+                    }}
+                    className={`pin${isDragging ? " is-dragging" : ""}${
+                      dropHint?.id === b.id ? ` pin--drop-${dropHint.pos}` : ""
+                    }`}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("application/x-shelf-pin-reorder", b.id);
+                      setDraggingPinId(b.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggingPinId(null);
+                      setDropHint(null);
+                    }}
+                    onDragOver={(e) => {
+                      if (!e.dataTransfer.types.includes("application/x-shelf-pin-reorder")) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.dataTransfer.dropEffect = "move";
+                      if (draggingPinId === b.id) {
+                        if (dropHint) setDropHint(null);
+                        return;
+                      }
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const pos: "before" | "after" =
+                        e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+                      if (dropHint?.id !== b.id || dropHint.pos !== pos) {
+                        setDropHint({ id: b.id, pos });
+                      }
+                    }}
+                    onDragLeave={(e) => {
+                      // Only clear when leaving the pin entirely (not entering a child)
+                      const related = e.relatedTarget as Node | null;
+                      if (related && (e.currentTarget as Node).contains(related)) return;
+                      if (dropHint?.id === b.id) setDropHint(null);
+                    }}
+                    onDrop={(e) => {
+                      const sourceId = e.dataTransfer.getData("application/x-shelf-pin-reorder");
+                      if (!sourceId) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const pos: "before" | "after" =
+                        e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+                      reorderPin(sourceId, b.id, pos);
+                      setDraggingPinId(null);
+                      setDropHint(null);
+                    }}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       setPinMenu({ id: b.id, x: e.clientX, y: e.clientY });
                     }}
                   >
-                    <Link
+                    <div className="pin-grip" aria-hidden="true">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                    <a
                       href={b.url!}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex min-w-0 min-h-0 items-center gap-3 no-underline overflow-hidden"
+                      className="pin-ico"
+                      draggable={false}
                     >
                       <img
                         src={imageSrc}
                         alt=""
-                        className="h-11 w-11 shrink-0 rounded-xl object-cover bg-white/5"
+                        draggable={false}
                         onError={(e) => {
-                          (e.target as HTMLImageElement).src = faviconUrl(b.url!);
+                          const img = e.target as HTMLImageElement;
+                          if (img.dataset.fallback === "monogram") return;
+                          img.dataset.fallback = "monogram";
+                          img.src = monogramDataUri(b.url!);
                         }}
                       />
-                      <div className="min-w-0 flex-1 overflow-hidden">
-                        <div className="truncate text-sm font-semibold text-white group-hover:text-emerald-100">
-                          {displayTitle}
-                        </div>
-                        <div
-                          className="shelf-pin-url mt-0.5 block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-zinc-400"
-                          title={b.url}
-                        >
-                          {b.url && b.url.length > 18 ? `${b.url.slice(0, 18)}...` : b.url}
-                        </div>
+                    </a>
+                    <div className="pin-meta">
+                      <a
+                        href={b.url!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="pin-title"
+                        draggable={false}
+                      >
+                        {displayTitle}
+                      </a>
+                      <div className="pin-url" title={b.url}>
+                        {b.url}
                       </div>
-                    </Link>
+                    </div>
                     <button
                       type="button"
                       onClick={() => removePin(b.id)}
-                      className="mt-2 text-[11px] text-zinc-400 hover:text-white"
+                      className="pin-remove"
+                      aria-label="Remove pin"
                     >
-                      Remove
+                      ×
                     </button>
                   </div>
                 );
@@ -370,35 +482,35 @@ export function Pillar({
           </div>
         </div>
 
-        <div className="shelf-todo-zone mt-3 min-w-0 rounded-2xl border border-white/10 bg-black/20 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-xs font-semibold text-emerald-200">Todo</div>
+        <div className="zone">
+          <div className="zone-head">
+            <div className="zone-title">Todo</div>
           </div>
-          <div className="mb-2 space-y-1.5">
-            <Input
-              variant="secondary"
+          <div className="todo-add">
+            <input
+              type="text"
+              className="fld"
               placeholder="Add a task…"
               value={todoDraft}
               onChange={(e) => setTodoDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") addTodo();
               }}
-              className="[--input-bg:theme(colors.white/0.05)] [--input-border:theme(colors.white/0.1)] text-sm"
             />
-            <Input
-              variant="secondary"
+            <input
+              type="text"
+              className="fld fld--sub"
               placeholder="Subtitle (optional)"
               value={todoSubtitleDraft}
               onChange={(e) => setTodoSubtitleDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") addTodo();
               }}
-              className="[--input-bg:theme(colors.white/0.05)] [--input-border:theme(colors.white/0.1)] text-xs"
             />
           </div>
-          <div className="min-w-0 space-y-1">
+          <div className="todo-list">
             {sortedTodos.length === 0 ? (
-              <div className="text-xs text-zinc-500">No tasks yet</div>
+              <div className="text-xs text-[var(--faint)]">No tasks yet</div>
             ) : (
               sortedTodos.map((t) => {
                 const isFocused = focusDesynced ? pillarTodoPins.includes(t.id) : !!t.focused;
@@ -406,75 +518,73 @@ export function Pillar({
                 return (
                 <div
                   key={t.id}
-                  className={`shelf-todo-item group relative min-w-0 rounded-xl px-2 py-1.5 hover:bg-white/5 ${t.blockStatus === "blocked" ? "shelf-todo-item--blocked italic opacity-60" : ""} ${isFocused ? "shelf-todo-item--focused" : ""}`}
+                  className={`todo ${isFocused ? "todo--focus" : ""} ${t.done ? "todo--done" : ""} ${t.blockStatus === "blocked" ? "italic" : ""}`}
                   data-focus-rank={focusRank}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     setNotePopover({ id: t.id, x: e.clientX, y: e.clientY });
                   }}
                 >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => toggleTodo(t.id)}
-                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-white/20 bg-white/5 text-emerald-400 hover:border-emerald-400/50 hover:bg-emerald-400/10"
-                      aria-label={t.done ? "Mark incomplete" : "Mark done"}
-                    >
-                      {t.done ? <span className="text-[10px]">✓</span> : null}
-                    </button>
-                    {t.url ? (
-                      <Link
-                        href={t.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`min-w-0 flex-1 truncate text-left text-xs no-underline hover:underline underline-offset-1 ${
-                          t.done ? "text-zinc-500 line-through" : "text-zinc-300 hover:text-emerald-200"
-                        }`}
-                      >
-                        {t.text}
-                      </Link>
-                    ) : (
-                      <span
-                        className={`min-w-0 flex-1 truncate text-left text-xs ${t.done ? "text-zinc-500 line-through" : "text-zinc-300"}`}
-                      >
-                        {t.text}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = window.prompt("Link URL", t.url ?? "");
-                        if (next !== null) setTodoUrl(t.id, next || undefined);
-                      }}
-                      className="shrink-0 text-[11px] text-zinc-500 hover:text-emerald-300"
-                      aria-label={t.url ? "Edit link" : "Add link"}
-                      title={t.url ? "Edit link" : "Add link"}
-                    >
-                      🔗
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeTodo(t.id)}
-                      className="ml-0.5 shrink-0 text-[11px] text-zinc-500 hover:text-white"
-                      aria-label="Remove task"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  {(t.tag || t.subtitle) && (
-                    <div className="mt-1 ml-6 flex min-w-0 items-center gap-2">
-                      {t.tag && (
-                        <span className={`shrink-0 rounded-sm px-2 py-0.5 text-[9px] font-medium ${tagColorClasses(t.tag)}`}>
-                          {t.tag}
+                  <button
+                    type="button"
+                    onClick={() => toggleTodo(t.id)}
+                    className={`cbox ${t.done ? "cbox--on" : ""}`}
+                    aria-label={t.done ? "Mark incomplete" : "Mark done"}
+                  >
+                    {t.done ? (
+                      <svg viewBox="0 0 12 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M1 5l3 3 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : null}
+                  </button>
+                  <div className="todo-main">
+                    <div className="todo-row">
+                      {t.url ? (
+                        <Link
+                          href={t.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="todo-link todo-title"
+                        >
+                          {t.text}
+                        </Link>
+                      ) : (
+                        <span className="todo-title">
+                          {t.text}
                         </span>
                       )}
-                      {t.subtitle && (
-                        <span className={`min-w-0 truncate text-[11px] ${t.done ? "text-zinc-500 line-through" : "text-zinc-400"}`}>
-                          {truncateSubtitle(t.subtitle, 25)}
-                        </span>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = window.prompt("Link URL", t.url ?? "");
+                          if (next !== null) setTodoUrl(t.id, next || undefined);
+                        }}
+                        className="text-[12px] text-[var(--dim)] hover:text-[var(--accent-bright)]"
+                        aria-label={t.url ? "Edit link" : "Add link"}
+                        title={t.url ? "Edit link" : "Add link"}
+                      >
+                        🔗
+                      </button>
                     </div>
-                  )}
+                    {t.subtitle && (
+                      <div className="todo-sub">
+                        {truncateSubtitle(t.subtitle, 25)}
+                      </div>
+                    )}
+                    {t.tag && (
+                      <div className={`todo-tag ${tagClass(t.tag)}`}>
+                        {t.tag}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeTodo(t.id)}
+                    className="todo-x"
+                    aria-label="Remove task"
+                  >
+                    ×
+                  </button>
                 </div>
               );
               })
@@ -482,20 +592,20 @@ export function Pillar({
           </div>
         </div>
 
-        <div className="shelf-error-dashboard-pillar mt-3 min-w-0 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-3">
-          <div className="mb-2 text-xs font-semibold text-cyan-100">Visualization</div>
-          <div className="shelf-error-dashboard-pillar-subtitle text-[11px] text-cyan-100/80">
-            Visualize flow of your goals
+        <div className="zone">
+          <div className="zone-head">
+            <div className="zone-title">Visualization</div>
           </div>
+          <div className="zone-hint">Visualize flow of your goals</div>
           <button
             type="button"
             onClick={() => onOpenVisualFlow?.()}
-            className="mt-2 w-full rounded-lg border border-cyan-300/35 bg-cyan-400/10 px-2.5 py-1.5 text-[11px] font-medium text-cyan-50 hover:bg-cyan-400/20"
+            className="ghost-btn ghost-btn--full"
+            style={{ marginTop: 4 }}
           >
             Visual Flow of Action
           </button>
         </div>
-      </Surface>
       </div>
       {pinMenu && (() => {
         const b = byId.get(pinMenu.id);
@@ -504,7 +614,7 @@ export function Pillar({
         return (
           <div
             ref={pinMenuRef}
-            className="fixed z-[100] min-w-44 rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16)]"
+            className="popover"
             style={{
               left: Math.max(8, Math.min(pinMenu.x, window.innerWidth - 180)),
               top: Math.max(8, Math.min(pinMenu.y, window.innerHeight - 180)),
@@ -514,7 +624,7 @@ export function Pillar({
           >
             <button
               type="button"
-              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10"
+              className="popover-item"
               onClick={() => {
                 const current = override?.title ?? b.title ?? "";
                 const newTitle = window.prompt("Display name for this pin", current);
@@ -528,7 +638,7 @@ export function Pillar({
             </button>
             <button
               type="button"
-              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10"
+              className="popover-item"
               onClick={() => {
                 const current = override?.imageUrl ?? "";
                 const url = window.prompt("Image URL for this pin", current);
@@ -543,7 +653,7 @@ export function Pillar({
             {override?.imageUrl && (
               <button
                 type="button"
-                className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-white/5"
+                className="popover-item popover-item--muted"
                 onClick={() => {
                   onSetPinOverride(b.id, { ...override, imageUrl: "" });
                   setPinMenu(null);
@@ -554,7 +664,7 @@ export function Pillar({
             )}
             <button
               type="button"
-              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-white/5"
+              className="popover-item popover-item--muted"
               onClick={() => setPinMenu(null)}
             >
               Cancel
@@ -568,45 +678,46 @@ export function Pillar({
         return (
           <div
             ref={notePopoverRef}
-            className={`shelf-note-popover fixed z-[100] w-64 rounded-xl border border-emerald-400/20 bg-zinc-900 shadow-lg ${t.blockStatus === "blocked" ? "italic" : ""}`}
+            className={`note-popover${t.blockStatus === "blocked" ? " italic" : ""}`}
             style={{
               left: Math.max(8, Math.min(notePopover.x, window.innerWidth - 272)),
               top: Math.max(8, Math.min(notePopover.y, window.innerHeight - 180)),
             }}
           >
-            <div className="shelf-note-popover-header flex items-center justify-between gap-2 border-b border-white/10 px-2 py-1.5 text-[10px] text-zinc-500">
-              <span className="min-w-0 truncate">Note: {t.text}</span>
+            <div className="note-popover-header">
+              <span>Note: {t.text}</span>
               {onSetPillarTodoPins && (
                 <label className="flex shrink-0 items-center gap-1.5 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={focusDesynced ? pillarTodoPins.includes(t.id) : !!t.focused}
                     onChange={() => toggleTodoFocus(t.id)}
-                    className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 text-emerald-500 focus:ring-emerald-400/50"
+                    className="h-3.5 w-3.5 rounded"
+                    style={{ accentColor: "var(--accent)" }}
                     aria-label="Focus task"
                   />
-                  <span className="text-[9px] text-zinc-500">Focus</span>
+                  <span style={{ fontSize: 10, color: "var(--muted)" }}>Focus</span>
                 </label>
               )}
             </div>
-            <div className="shelf-note-popover-body space-y-2 px-2 py-2">
-              <Input
-                variant="secondary"
+            <div className="note-popover-body">
+              <input
+                type="text"
+                className="fld fld--sub"
                 value={t.tag ?? ""}
-                onChange={(e) => setTodoTag(t.id, e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTodoTag(t.id, e.target.value)}
                 placeholder="Tag (optional)"
-                className="text-xs"
               />
-              <Input
-                variant="secondary"
+              <input
+                type="text"
+                className="fld fld--sub"
                 value={t.subtitle ?? ""}
-                onChange={(e) => setTodoSubtitle(t.id, e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTodoSubtitle(t.id, e.target.value)}
                 placeholder="Subtitle (optional)"
-                className="text-xs"
               />
               {t.note?.trim() && !noteEditMode ? (
-                <div className="space-y-1">
-                  <div className="shelf-flow-node-note text-[11px] leading-relaxed">
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "var(--fg-2)" }}>
                     <NoteContent
                       content={t.note}
                       onNoteChange={(newNote) => setTodoNote(t.id, newNote)}
@@ -615,7 +726,15 @@ export function Pillar({
                   <button
                     type="button"
                     onClick={() => setNoteEditMode(true)}
-                    className="text-[10px] text-zinc-500 hover:text-emerald-400"
+                    style={{
+                      alignSelf: "flex-start",
+                      background: "none",
+                      border: 0,
+                      cursor: "pointer",
+                      fontSize: 11,
+                      color: "var(--dim)",
+                      padding: 0,
+                    }}
                   >
                     Edit note…
                   </button>
@@ -636,7 +755,7 @@ export function Pillar({
                   }}
                   onBlur={() => setNoteEditMode(false)}
                   placeholder="Add a note…"
-                  className="shelf-note-popover-textarea min-h-[80px] w-full resize-y rounded-b-xl border-0 bg-transparent px-3 py-2 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-0"
+                  className="note-popover-textarea"
                   rows={3}
                   autoFocus={noteEditMode || !t.note?.trim()}
                 />

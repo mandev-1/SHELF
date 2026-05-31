@@ -37,6 +37,7 @@ import {
   resolveVisualFlowSectorColor,
 } from "../types/grid";
 import { NoteContent, linkifyText } from "./NoteContent";
+import { exportFlowAsMarkdown } from "../utils/exportFlow";
 
 const NODE_INITIAL_WIDTH = 260;
 const NODE_RESIZE_MIN_WIDTH = 5;
@@ -1217,6 +1218,42 @@ function VisualFlowPanelInner({
   const [drawerFrozen, setDrawerFrozen] = useState(false);
   const [drawerPinned, setDrawerPinned] = useState(false);
   const [drawerMenu, setDrawerMenu] = useState<{ x: number; y: number } | null>(null);
+  const [exportToast, setExportToast] = useState<string | null>(null);
+  const exportToastTimerRef = useRef<number | null>(null);
+
+  const handleExportForAI = useCallback(async () => {
+    const md = exportFlowAsMarkdown({
+      pillarTodos: todos,
+      grazelandItems: grazelandItems ?? [],
+      binItems: binItems ?? [],
+      visualFlow,
+    });
+    try {
+      await navigator.clipboard.writeText(md);
+      setExportToast("Copied to clipboard");
+    } catch {
+      // Fallback: trigger a download so the user still gets the data
+      const blob = new Blob([md], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `shelf-flow-${new Date().toISOString().slice(0, 10)}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setExportToast("Downloaded (clipboard unavailable)");
+    }
+    if (exportToastTimerRef.current !== null) window.clearTimeout(exportToastTimerRef.current);
+    exportToastTimerRef.current = window.setTimeout(() => {
+      setExportToast(null);
+      exportToastTimerRef.current = null;
+    }, 1900);
+  }, [todos, grazelandItems, binItems, visualFlow]);
+
+  useEffect(() => {
+    return () => {
+      if (exportToastTimerRef.current !== null) window.clearTimeout(exportToastTimerRef.current);
+    };
+  }, []);
   const drawerCloseTimeoutRef = useRef<number | null>(null);
   const stickOutUntilRef = useRef<number | null>(null);
   const drawerMenuRef = useRef<HTMLDivElement>(null);
@@ -2179,9 +2216,26 @@ function VisualFlowPanelInner({
   return (
     <div className={`shelf-error-dashboard ${containerClass}`}>
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-black/20 px-4 py-3">
-        <h1 className="text-base font-semibold tracking-tight text-zinc-100">
-          Visual Flow of Action
-        </h1>
+        <div className="flex items-center gap-3 min-w-0">
+          <h1 className="text-base font-semibold tracking-tight text-zinc-100">
+            Visual Flow of Action
+          </h1>
+          <button
+            type="button"
+            onClick={handleExportForAI}
+            title="Copy a structured markdown of all todos + relationships to the clipboard, ready to paste into an AI for consolidation"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] bg-[var(--surface)] px-2.5 py-1.5 text-[11.5px] font-medium text-[var(--fg-2)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)] transition-colors"
+          >
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="9" y="9" width="13" height="13" rx="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            Copy for AI
+            {exportToast && (
+              <span className="ml-1 text-[10.5px] text-[var(--accent-bright)]">· {exportToast}</span>
+            )}
+          </button>
+        </div>
         <div
           className="flex rounded-lg border border-white/10 bg-black/30 p-0.5 text-xs font-medium"
           role="tablist"

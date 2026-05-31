@@ -44,6 +44,7 @@ const PROMPTS_KEY = "shelf-prompts";
 const GRID_LOCKED_KEY = "grid-locked";
 const PROMPT_ROWS_KEY = "prompt-rows";
 const THEME_KEY = "shelf-theme";
+const ACCENT_KEY = "shelf-accent";
 const BOOKMARK_SIZE_KEY = "bookmark-size";
 const VISUAL_FLOW_KEY = "shelf-visual-flow";
 const GRAZELAND_ITEMS_KEY = "shelf-grazeland-items";
@@ -254,6 +255,7 @@ export function useShelfStorage() {
   const [gridLocked, setGridLocked] = useState(false);
   const [promptRows, setPromptRows] = useState<1 | 2>(1);
   const [theme, setThemeState] = useState<ShelfTheme>("auto");
+  const [accent, setAccentState] = useState("#16b981");
   const [timeTick, setTimeTick] = useState(() => Date.now());
   const [bookmarkSize, setBookmarkSizeState] = useState<BookmarkSize>("normal");
   const [visualFlow, setVisualFlowState] = useState<VisualFlowData>({});
@@ -294,6 +296,7 @@ export function useShelfStorage() {
         GRID_LOCKED_KEY,
         PROMPT_ROWS_KEY,
         THEME_KEY,
+        ACCENT_KEY,
         BOOKMARK_SIZE_KEY,
         VISUAL_FLOW_KEY,
         GRAZELAND_ITEMS_KEY,
@@ -388,6 +391,8 @@ export function useShelfStorage() {
       setPromptRows(result[PROMPT_ROWS_KEY] === 2 ? 2 : 1);
       const t = result[THEME_KEY];
       setThemeState(t === "dark" || t === "day" || t === "sap" || t === "auto" ? t : "auto");
+      const a = result[ACCENT_KEY];
+      setAccentState(typeof a === "string" && a.startsWith("#") ? a : "#16b981");
       const bs = result[BOOKMARK_SIZE_KEY];
       setBookmarkSizeState(bs === "senior" ? "senior" : "normal");
       const rawUrl = result[LLM_CONSOLE_URL_KEY];
@@ -457,6 +462,34 @@ export function useShelfStorage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /* Cross-hook-instance sync: when one component writes a setting to
+     chrome.storage.local, other components calling useShelfStorage() in
+     the same tab should pick it up live. Listen to onChanged for the keys
+     that cross instance boundaries (theme/accent/shelf name). */
+  useEffect(() => {
+    if (typeof chrome === "undefined" || !chrome.storage?.onChanged) return;
+    const listener = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string
+    ) => {
+      if (areaName !== "local") return;
+      if (changes[THEME_KEY]) {
+        const v = changes[THEME_KEY].newValue;
+        if (v === "dark" || v === "day" || v === "sap" || v === "auto") setThemeState(v);
+      }
+      if (changes[ACCENT_KEY]) {
+        const v = changes[ACCENT_KEY].newValue;
+        if (typeof v === "string" && v.startsWith("#")) setAccentState(v);
+      }
+      if (changes[SHELF_NAME_KEY]) {
+        const v = changes[SHELF_NAME_KEY].newValue;
+        if (typeof v === "string") setShelfNameState(v);
+      }
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, []);
 
   /* Update every minute so "auto" theme switches at 08:00 and 21:40 */
   useEffect(() => {
@@ -688,6 +721,12 @@ export function useShelfStorage() {
   const setBookmarkSize = useCallback((next: BookmarkSize) => {
     setBookmarkSizeState(next);
     getStorage()?.set({ [BOOKMARK_SIZE_KEY]: next });
+  }, []);
+
+  const setAccent = useCallback((next: string) => {
+    const normalized = next.startsWith("#") ? next : "#16b981";
+    setAccentState(normalized);
+    getStorage()?.set({ [ACCENT_KEY]: normalized });
   }, []);
 
   const setVisualFlow = useCallback((next: VisualFlowData) => {
@@ -991,6 +1030,8 @@ export function useShelfStorage() {
     theme,
     resolvedTheme,
     setTheme,
+    accent,
+    setAccent,
     bookmarkSize,
     setBookmarkSize,
     visualFlow,

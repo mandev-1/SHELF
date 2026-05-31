@@ -1,4 +1,3 @@
-import { Button, Surface } from "@heroui/react";
 import { useEffect, useState } from "react";
 import type { ShelfPrompt, ShelfPromptMap, ShelfPromptVersion } from "../types/grid";
 
@@ -216,10 +215,11 @@ export function PromptLibraryCard({
   return (
     <>
       {copyToast && (
-        <div className="pointer-events-none fixed right-5 top-5 z-[80] animate-[toast-enter_180ms_ease-out]">
-          <div className="results-glow rounded-2xl border border-emerald-400/20 bg-black/90 px-4 py-3 text-sm text-emerald-100 shadow-[0_0_20px_rgba(74,222,128,0.18)]">
-            {copyToast}
-          </div>
+        <div className="toast" role="status" aria-live="polite">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          {copyToast}
         </div>
       )}
       {menu && prompts[menu.id] && (
@@ -259,35 +259,37 @@ export function PromptLibraryCard({
           </div>
         </div>
       )}
-      <Surface variant="secondary" className="results-glow rounded-2xl border border-emerald-400/20 bg-black/45 p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="prompt-card">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <p className="shelf-prompt-label text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200">Prompt Library</p>
-            <h2 className="text-lg font-semibold text-white">Prompt library</h2>
+            <p className="prompt-eyebrow">Prompt Library</p>
+            <h2 className="prompt-title">Prompt library</h2>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-1">
-              <span className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Visible Prompt Rows</span>
+          <div className="prompt-tools">
+            <div className="prompt-rows-sel">
+              <span>Visible rows</span>
               <select
                 value={promptRows}
                 onChange={(e) => onPromptRowsChange(Number(e.target.value) as 1 | 2)}
-                className="bg-transparent text-sm text-emerald-100 outline-none"
+                className="pill"
                 aria-label="Visible prompt rows"
               >
                 <option value={1}>One Row</option>
                 <option value={2}>Two Rows</option>
               </select>
             </div>
-            <span className="text-xs text-zinc-500">{Object.keys(prompts).length} saved</span>
-            <Button size="sm" variant="ghost" className="text-emerald-200" onPress={addPrompt}>
+            <span className="prompt-count">{Object.keys(prompts).length} saved</span>
+            <button type="button" onClick={addPrompt} className="prompt-add">
               + Prompt
-            </Button>
+            </button>
           </div>
         </div>
         <div
-          className="grid gap-2 md:grid-cols-2 xl:grid-cols-3 overflow-y-auto pr-1"
+          className="prompt-grid"
           style={{
             maxHeight: promptRows === 1 ? "5rem" : "12rem",
+            overflowY: "auto",
+            paddingRight: "4px",
           }}
         >
           {Object.values(prompts).map((prompt) => (
@@ -305,21 +307,27 @@ export function PromptLibraryCard({
                   y: e.clientY,
                 });
               }}
-              className="w-full rounded-xl border border-emerald-400/10 bg-black/30 px-3 py-2 text-left transition-all hover:border-emerald-400/35 hover:bg-black/45 hover:shadow-[0_0_28px_rgba(74,222,128,0.12),0_0_60px_rgba(59,130,246,0.08),0_0_90px_rgba(236,72,153,0.06)]"
+              className="prompt"
             >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <p className="truncate text-sm font-medium text-emerald-200">{prompt.title}</p>
-                </div>
-                <span className="shelf-prompt-copy text-xs font-medium uppercase tracking-[0.15em] text-emerald-200">
+              <div className="prompt-h">
+                <span className="prompt-name">{prompt.title}</span>
+                <span className="prompt-copy">
                   {copiedId === prompt.id ? "Copied" : "Click to copy"}
                 </span>
               </div>
-              <p className="shelf-prompt-body mt-1 line-clamp-2 text-xs font-mono">{prompt.body}</p>
+              <div className="prompt-body">
+                {prompt.body.split(/(\[[A-Z][A-Z0-9_-]*\])/g).map((part, i) =>
+                  /^\[[A-Z][A-Z0-9_-]*\]$/.test(part) ? (
+                    <span key={i} className="tok-sys">{part}</span>
+                  ) : (
+                    <span key={i}>{part}</span>
+                  )
+                )}
+              </div>
             </button>
           ))}
         </div>
-      </Surface>
+      </div>
 
       {activePrompt && (
         <div className="fixed inset-0 z-[60] overflow-hidden">
@@ -330,9 +338,7 @@ export function PromptLibraryCard({
             aria-label="Close prompt editor"
           />
           <div className="relative z-[61] flex h-full w-full items-stretch justify-stretch p-3 sm:p-5">
-            <Surface
-              variant="secondary"
-              className="shelf-prompt-editor results-glow flex h-full w-full flex-col overflow-hidden rounded-[28px] border border-emerald-400/20 bg-black/94 shadow-[0_0_70px_rgba(16,185,129,0.12),0_0_120px_rgba(59,130,246,0.10),0_0_180px_rgba(236,72,153,0.08)] transition-all duration-300 ease-out animate-[prompt-enter_220ms_ease-out]"
+            <div className="shelf-prompt-editor flex h-full w-full flex-col overflow-hidden rounded-[28px] border border-emerald-400/20 bg-black/94 shadow-[0_0_70px_rgba(16,185,129,0.12),0_0_120px_rgba(59,130,246,0.10),0_0_180px_rgba(236,72,153,0.08)] transition-all duration-300 ease-out animate-[prompt-enter_220ms_ease-out]"
             >
               <div className="shelf-prompt-editor-header flex items-center justify-between border-b border-emerald-400/10 bg-white/5 px-6 py-4">
                 <div className="min-w-0 flex-1">
@@ -437,7 +443,7 @@ export function PromptLibraryCard({
                   </button>
                 </div>
               </div>
-            </Surface>
+            </div>
           </div>
         </div>
       )}

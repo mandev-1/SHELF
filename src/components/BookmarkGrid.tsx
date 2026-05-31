@@ -13,6 +13,7 @@ import { useShelfStorage } from "../hooks/useShelfStorage";
 import type { BookmarkTreeNode } from "../types/bookmarks";
 import type { ShelfFolderSeparator, ShelfGoal, ShelfLayoutItem } from "../types/grid";
 import { ACCENT_COLORS } from "../types/grid";
+import { monogramDataUri } from "../utils/monogram";
 
 const COLUMNS = 12;
 const DEFAULT_W = 4;
@@ -264,11 +265,10 @@ function FolderCard({
   return (
     <div
       ref={folderRef}
-      className={`group grid-stack-item-content h-full flex flex-row rounded-xl border overflow-hidden min-h-0 transition-all duration-150 ${
-        isDropTarget
-          ? "border-emerald-400/50 bg-emerald-500/15 shadow-[0_0_0_2px_rgba(16,185,129,0.25)]"
-          : "border-white/10 bg-white/5"
+      className={`group grid-stack-item-content h-full flex flex-col folder overflow-hidden min-h-0${
+        isDropTarget ? " is-drop-target" : ""
       }`}
+      style={accentColor ? ({ "--hue": accentColor } as React.CSSProperties) : undefined}
       onDragOver={(e) => {
         e.preventDefault();
         if (isBookmarkDrag(e.dataTransfer)) e.dataTransfer.dropEffect = "move";
@@ -302,7 +302,6 @@ function FolderCard({
         setDropHint(null);
       }}
     >
-      <div className="shrink-0 w-1 min-w-[4px] self-stretch rounded-l-xl" style={{ backgroundColor: accentColor || "transparent" }} aria-hidden />
       <div
         className="flex-1 flex flex-col min-w-0"
         onContextMenu={(e) => {
@@ -446,7 +445,7 @@ function FolderCard({
             </button>
           </div>
         )}
-        <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1 border-b border-white/10 shrink-0">
+        <div className="folder-head">
           {editingLabel ? (
             <input
               autoFocus
@@ -523,9 +522,9 @@ function FolderCard({
             </button>
           )}
         </div>
-        <div className="flex-1 overflow-auto p-2 space-y-1">
+        <div className="folder-body">
           {items.length === 0 ? (
-            <p className="text-zinc-500 text-xs">Empty folder</p>
+            <p className="folder-empty">Empty folder</p>
           ) : (
             items.map((item) =>
               item.type === "separator" ? (
@@ -678,11 +677,11 @@ function FolderCard({
                     href={item.node.url!}
                     target="_blank"
                     rel="noopener noreferrer"
-                  className={
+                  className={`bm ${
                     bookmarkViews[item.node.id]?.expanded || hoverExpandedId === item.node.id || bookmarkSize === "senior"
                       ? "flex items-center gap-3 text-zinc-200 hover:text-white no-underline hover:underline underline-offset-2 w-full"
                       : "flex items-center gap-2 text-zinc-300 hover:text-white text-xs truncate no-underline hover:underline underline-offset-1 w-full"
-                  }
+                  }`}
                   >
                     <img
                       src={(bookmarkOverrides?.[item.node.id]?.imageUrl?.trim() || faviconUrl(item.node.url!))}
@@ -695,7 +694,11 @@ function FolderCard({
                             : "h-4 w-4 shrink-0 rounded object-cover"
                       }
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = faviconUrl(item.node.url!);
+                        const img = e.target as HTMLImageElement;
+                        // Avoid an infinite loop if the monogram itself errors
+                        if (img.dataset.fallback === "monogram") return;
+                        img.dataset.fallback = "monogram";
+                        img.src = monogramDataUri(item.node.url!);
                       }}
                     />
                     <div
@@ -918,6 +921,10 @@ export function BookmarkGrid() {
     setBookmarkSize,
     theme,
     setTheme,
+    accent,
+    setAccent,
+    shelfName,
+    setShelfName,
     exportBackup,
     importBackup,
     obsidianLog,
@@ -1125,7 +1132,14 @@ export function BookmarkGrid() {
                   <button
                     key={t}
                     type="button"
-                    onClick={() => setTheme(t)}
+                    onClick={() => {
+                      setTheme(t);
+                      // Match the theme's canonical accent (no-op for 'auto')
+                      const themeAccent: Record<string, string> = {
+                        dark: "#16b981", day: "#d97706", sap: "#0070f2",
+                      };
+                      if (themeAccent[t]) setAccent(themeAccent[t]);
+                    }}
                     className={`rounded-lg px-2 py-1.5 text-[11px] font-medium capitalize transition ${
                       theme === t
                         ? "bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40"
@@ -1136,6 +1150,37 @@ export function BookmarkGrid() {
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
+              <div className="mb-1.5 text-xs font-medium text-emerald-200">Accent</div>
+              <div className="grid grid-cols-6 gap-1.5">
+                {["#16b981", "#5b9cff", "#c98bff", "#e0905a", "#d97706", "#0070f2"].map((hex) => (
+                  <button
+                    key={hex}
+                    type="button"
+                    onClick={() => setAccent(hex)}
+                    className={`h-7 rounded-md transition ${
+                      accent === hex
+                        ? "ring-2 ring-white/80 ring-offset-1 ring-offset-black/60"
+                        : "ring-1 ring-white/10 hover:ring-white/30"
+                    }`}
+                    style={{ backgroundColor: hex }}
+                    title={hex}
+                    aria-label={`Accent ${hex}`}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
+              <div className="mb-1.5 text-xs font-medium text-emerald-200">Greeting</div>
+              <input
+                type="text"
+                value={shelfName}
+                onChange={(e) => setShelfName(e.target.value)}
+                placeholder="Your shelf name"
+                className="w-full rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-[12px] text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-emerald-400/40"
+              />
+              <div className="mt-1 text-[10px] text-zinc-500">Tip: include the word "smile" to tint it in your accent.</div>
             </div>
             <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
               <div className="mb-1.5 text-xs font-medium text-emerald-200">Bookmark size</div>
