@@ -17,7 +17,7 @@ import type { ShelfPillarTodoItem } from "./types/grid";
 const DASHBOARD_OPEN_KEY = "shelf-dashboard-view";
 const DASHBOARD_LAST_TOOL_KEY = "shelf-dashboard-last-tool";
 
-type DashboardView = "shelf" | "visual-flow" | "buylist";
+type DashboardView = "shelf" | "visual-flow" | "buylist" | "strategie";
 type LastTool = "visual-flow" | "llm-console";
 
 /** Render a greeting, styling the word "smile" (case-insensitive) in --accent-bright. */
@@ -51,7 +51,7 @@ export default function FullApp() {
   const [dashboardView, setDashboardView] = useState<DashboardView>(() => {
     try {
       const v = window.localStorage.getItem(DASHBOARD_OPEN_KEY);
-      if (v === "visual-flow" || v === "buylist") return v;
+      if (v === "visual-flow" || v === "buylist" || v === "strategie") return v;
       return "shelf";
     } catch {
       return "shelf";
@@ -95,7 +95,6 @@ export default function FullApp() {
     logToObsidian,
     appendTaskLog,
     llmConsoleUrl,
-    showBothNavButtons,
     buylist,
     buylistAdd,
     buylistDiscard,
@@ -481,75 +480,34 @@ export default function FullApp() {
               )}
             </div>
             <nav className="nav">
-              <button
-                type="button"
-                onClick={() => {
-                  if (dashboardView === "buylist") {
-                    setViewSlideDir("right");
-                    setDashboardView("shelf");
-                  } else {
-                    setViewSlideDir("left");
-                    setDashboardView("buylist");
-                  }
-                }}
-                className={`nav-btn${dashboardView === "buylist" ? " nav-btn--on" : ""}`}
-              >
-                {dashboardView === "buylist" ? "Back to Shelf" : "Hopper"}
-              </button>
-              {showBothNavButtons ? (
-                <>
-                  {/* "Back to Shelf" is only rendered here when on visual-flow.
-                      On buylist (Hopper), the first button above already toggles
-                      to "Back to Shelf" — so we'd otherwise show it twice. */}
-                  {dashboardView === "visual-flow" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setViewSlideDir("right");
-                        setDashboardView("shelf");
-                      }}
-                      className="nav-btn"
-                    >
-                      Back to Shelf
-                    </button>
-                  )}
-                  {dashboardView !== "visual-flow" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLastTool("visual-flow");
-                        setViewSlideDir("left");
-                        setDashboardView("visual-flow");
-                      }}
-                      className="nav-btn"
-                    >
-                      Visual Flow
-                    </button>
-                  )}
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (dashboardView !== "shelf") {
-                      setViewSlideDir("right");
-                      setDashboardView("shelf");
-                    } else if (lastTool === "llm-console") {
-                      openLLMConsoleOverlay(llmConsoleUrl);
-                    } else {
-                      setViewSlideDir("left");
-                      setDashboardView(lastTool);
-                    }
-                  }}
-                  className={`nav-btn${dashboardView === "visual-flow" ? " nav-btn--on" : ""}`}
-                >
-                  {dashboardView !== "shelf"
-                    ? "Back to Shelf"
-                    : lastTool === "llm-console"
-                      ? "Open LLM Console"
-                      : "Visual Flow"}
-                </button>
-              )}
+              {([
+                { id: "shelf",       label: "Shelf"       },
+                { id: "visual-flow", label: "Visual Flow" },
+                { id: "strategie",   label: "Strategie"   },
+                { id: "buylist",     label: "Hopper"      },
+              ] as const).map((tab) => {
+                const isActive = dashboardView === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      if (isActive) return;
+                      // Slide direction: tabs to the right of current slide in from the right
+                      const order: DashboardView[] = ["shelf", "visual-flow", "strategie", "buylist"];
+                      const fromIdx = order.indexOf(dashboardView);
+                      const toIdx = order.indexOf(tab.id);
+                      setViewSlideDir(toIdx > fromIdx ? "left" : "right");
+                      if (tab.id === "visual-flow") setLastTool("visual-flow");
+                      setDashboardView(tab.id);
+                    }}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`nav-btn${isActive ? " nav-btn--on" : ""}`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
             </nav>
           </div>
         </header>
@@ -564,7 +522,16 @@ export default function FullApp() {
               content (scrolls along with the page) instead of stuck to the viewport. */}
           <div className="bg-diffuse-host">
             <div className="bg-diffuse" aria-hidden="true" />
-          {dashboardView === "buylist" ? (
+          {dashboardView === "strategie" ? (
+            <div className="max-w-[1640px] mx-auto py-16 px-6 text-center">
+              <h1 className="text-3xl font-semibold tracking-tight" style={{ color: "var(--fg)" }}>
+                Strategie
+              </h1>
+              <p className="mt-3 text-sm" style={{ color: "var(--dim)" }}>
+                This page is intentionally empty for now.
+              </p>
+            </div>
+          ) : dashboardView === "buylist" ? (
             <BuylistPanel
               items={buylist}
               onAdd={buylistAdd}

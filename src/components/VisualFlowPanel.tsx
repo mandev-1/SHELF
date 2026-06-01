@@ -1876,6 +1876,82 @@ function VisualFlowPanelInner({
     setSectorManagerOpen(true);
   }, []);
 
+  // Create a new sub-task already connected to a parent node.
+  // Plane-aware: writes to the right positions map + edges list for whichever
+  // plane the user is currently on.
+  const handleAddConnectedSubtask = useCallback(
+    (parentId: string) => {
+      if (!currentPlaneAdd) return;
+      const isGrazeland = plane === "grazeland";
+      const isBin = plane === "bin";
+
+      // Look up parent position in this plane
+      const positions =
+        plane === "main"
+          ? visualFlow.nodePositions
+          : isGrazeland
+            ? visualFlow.grazelandNodePositions
+            : visualFlow.binNodePositions;
+      const parentPos = positions?.[parentId];
+
+      // Offset to the right of the parent (with a small vertical nudge so
+      // it doesn't sit perfectly horizontally aligned and steal the edge path)
+      const dx = NODE_INITIAL_WIDTH + 80;
+      const dy = 40;
+      const newPos = parentPos
+        ? { x: parentPos.x + dx, y: parentPos.y + dy }
+        : { x: 0, y: 0 };
+
+      const baseTodo: ShelfPillarTodoItem = {
+        id: crypto.randomUUID(),
+        text: plane === "main" ? "New sub-task" : "New item",
+        done: false,
+        ...(isGrazeland || isBin
+          ? { grazelandHandleVisibility: createGrazelandHandleVisibility(false) }
+          : {}),
+      };
+
+      currentPlaneAdd(baseTodo);
+
+      const newEdge: VisualFlowEdge = {
+        source: parentId,
+        target: baseTodo.id,
+        arrow: true,
+      };
+
+      // Merge into the right positions map + edges list for this plane
+      if (plane === "main") {
+        onVisualFlowChange({
+          ...visualFlow,
+          nodePositions: { ...(visualFlow.nodePositions ?? {}), [baseTodo.id]: newPos },
+          edges: [...(visualFlow.edges ?? []), newEdge],
+        });
+      } else if (isGrazeland) {
+        onVisualFlowChange({
+          ...visualFlow,
+          grazelandNodePositions: { ...(visualFlow.grazelandNodePositions ?? {}), [baseTodo.id]: newPos },
+          grazelandEdges: [...(visualFlow.grazelandEdges ?? []), newEdge],
+        });
+      } else {
+        onVisualFlowChange({
+          ...visualFlow,
+          binNodePositions: { ...(visualFlow.binNodePositions ?? {}), [baseTodo.id]: newPos },
+          binEdges: [...(visualFlow.binEdges ?? []), newEdge],
+        });
+      }
+
+      setNodeMenu(null);
+      // Open the editor on the new node so the user can name it immediately
+      setEditNodeId(baseTodo.id);
+      onTodoLog?.(
+        `${getVisualFlowPlaneLogLabel(plane)}: added connected sub-task to "${
+          canvasItems.find((t) => t.id === parentId)?.text ?? parentId
+        }"`
+      );
+    },
+    [currentPlaneAdd, plane, visualFlow, onVisualFlowChange, onTodoLog, canvasItems]
+  );
+
   const applySectorColorByName = useCallback(
     (sectorName: string, color: SectorColorKey | undefined) => {
       const trimmed = sectorName.trim();
@@ -2567,16 +2643,21 @@ function VisualFlowPanelInner({
                       Focused
                     </button>
                   )}
-                  {canDelete && (
+                  {currentPlaneAdd && (
                     <button
                       type="button"
-                      className="w-full px-3 py-2 text-left text-sm text-red-400/90 hover:bg-white/10"
+                      className="w-full px-3 py-2 text-left text-sm font-medium text-emerald-300 hover:bg-emerald-400/10 flex items-center gap-2"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDelete(ids[0]);
+                        handleAddConnectedSubtask(ids[0]);
                       }}
+                      title="Create a new node already connected to this one"
                     >
-                      {plane === "main" ? "Delete task" : "Delete item"}
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      Add connected sub-task
                     </button>
                   )}
                   {canEdit && (
@@ -2649,6 +2730,21 @@ function VisualFlowPanelInner({
                           </>
                         )}
                       </div>
+                    </>
+                  )}
+                  {canDelete && (
+                    <>
+                      <div className="my-1 border-t border-white/10" />
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm text-red-400/90 hover:bg-white/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(ids[0]);
+                        }}
+                      >
+                        {plane === "main" ? "Delete task" : "Delete item"}
+                      </button>
                     </>
                   )}
                 </div>

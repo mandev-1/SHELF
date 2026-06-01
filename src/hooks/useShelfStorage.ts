@@ -44,7 +44,14 @@ const PROMPTS_KEY = "shelf-prompts";
 const GRID_LOCKED_KEY = "grid-locked";
 const PROMPT_ROWS_KEY = "prompt-rows";
 const THEME_KEY = "shelf-theme";
-const ACCENT_KEY = "shelf-accent";
+const ACCENT_KEY = "shelf-accent"; // legacy: single accent value, kept for migration read
+const ACCENT_BY_THEME_KEY = "shelf-accent-by-theme"; // Record<themeName, hex>
+
+const DEFAULT_ACCENT_BY_THEME: Record<string, string> = {
+  dark: "#16b981",
+  day: "#d97706",
+  sap: "#0070f2",
+};
 const BOOKMARK_SIZE_KEY = "bookmark-size";
 const VISUAL_FLOW_KEY = "shelf-visual-flow";
 const GRAZELAND_ITEMS_KEY = "shelf-grazeland-items";
@@ -255,7 +262,7 @@ export function useShelfStorage() {
   const [gridLocked, setGridLocked] = useState(false);
   const [promptRows, setPromptRows] = useState<1 | 2>(1);
   const [theme, setThemeState] = useState<ShelfTheme>("auto");
-  const [accent, setAccentState] = useState("#16b981");
+  const [accentByTheme, setAccentByThemeState] = useState<Record<string, string>>(DEFAULT_ACCENT_BY_THEME);
   const [timeTick, setTimeTick] = useState(() => Date.now());
   const [bookmarkSize, setBookmarkSizeState] = useState<BookmarkSize>("normal");
   const [visualFlow, setVisualFlowState] = useState<VisualFlowData>({});
@@ -297,6 +304,7 @@ export function useShelfStorage() {
         PROMPT_ROWS_KEY,
         THEME_KEY,
         ACCENT_KEY,
+        ACCENT_BY_THEME_KEY,
         BOOKMARK_SIZE_KEY,
         VISUAL_FLOW_KEY,
         GRAZELAND_ITEMS_KEY,
@@ -391,8 +399,29 @@ export function useShelfStorage() {
       setPromptRows(result[PROMPT_ROWS_KEY] === 2 ? 2 : 1);
       const t = result[THEME_KEY];
       setThemeState(t === "dark" || t === "day" || t === "sap" || t === "auto" ? t : "auto");
-      const a = result[ACCENT_KEY];
-      setAccentState(typeof a === "string" && a.startsWith("#") ? a : "#16b981");
+      // Per-theme accent map: prefer new key; fall back to migrating the old single-value key
+      const abtRaw = result[ACCENT_BY_THEME_KEY];
+      if (abtRaw && typeof abtRaw === "object" && !Array.isArray(abtRaw)) {
+        const next: Record<string, string> = { ...DEFAULT_ACCENT_BY_THEME };
+        for (const [k, v] of Object.entries(abtRaw as Record<string, unknown>)) {
+          if (typeof v === "string" && v.startsWith("#")) next[k] = v;
+        }
+        setAccentByThemeState(next);
+      } else {
+        // Migration: seed map from legacy single-value accent (applied to current theme),
+        // defaults for the rest.
+        const legacy = result[ACCENT_KEY];
+        const seed = { ...DEFAULT_ACCENT_BY_THEME };
+        if (typeof legacy === "string" && legacy.startsWith("#")) {
+          const themeForLegacy = (result[THEME_KEY] === "day" || result[THEME_KEY] === "sap")
+            ? (result[THEME_KEY] as "day" | "sap")
+            : "dark";
+          seed[themeForLegacy] = legacy;
+        }
+        setAccentByThemeState(seed);
+        // Persist the migrated map so subsequent loads use the new key
+        getStorage()?.set({ [ACCENT_BY_THEME_KEY]: seed });
+      }
       const bs = result[BOOKMARK_SIZE_KEY];
       setBookmarkSizeState(bs === "senior" ? "senior" : "normal");
       const rawUrl = result[LLM_CONSOLE_URL_KEY];
@@ -478,9 +507,15 @@ export function useShelfStorage() {
         const v = changes[THEME_KEY].newValue;
         if (v === "dark" || v === "day" || v === "sap" || v === "auto") setThemeState(v);
       }
-      if (changes[ACCENT_KEY]) {
-        const v = changes[ACCENT_KEY].newValue;
-        if (typeof v === "string" && v.startsWith("#")) setAccentState(v);
+      if (changes[ACCENT_BY_THEME_KEY]) {
+        const v = changes[ACCENT_BY_THEME_KEY].newValue;
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          const next: Record<string, string> = { ...DEFAULT_ACCENT_BY_THEME };
+          for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+            if (typeof val === "string" && val.startsWith("#")) next[k] = val;
+          }
+          setAccentByThemeState(next);
+        }
       }
       if (changes[SHELF_NAME_KEY]) {
         const v = changes[SHELF_NAME_KEY].newValue;
@@ -509,6 +544,11 @@ export function useShelfStorage() {
           return totalMin < darkUntil || totalMin >= darkFrom ? "dark" : "sap";
         })()
       : theme;
+
+  // Derived: the accent for the currently-resolved theme.
+  // Each theme remembers its own accent via the accentByTheme map.
+  const accent: string =
+    accentByTheme[resolvedTheme] ?? DEFAULT_ACCENT_BY_THEME[resolvedTheme] ?? "#16b981";
 
   const saveLayout = useCallback((items: ShelfLayoutItem[]) => {
     setLayout(items);
@@ -723,11 +763,16 @@ export function useShelfStorage() {
     getStorage()?.set({ [BOOKMARK_SIZE_KEY]: next });
   }, []);
 
+  // Writes the picked accent to the slot for the currently-resolved theme.
+  // Each theme remembers its own accent independently.
   const setAccent = useCallback((next: string) => {
     const normalized = next.startsWith("#") ? next : "#16b981";
-    setAccentState(normalized);
-    getStorage()?.set({ [ACCENT_KEY]: normalized });
-  }, []);
+    setAccentByThemeState((prev) => {
+      const updated = { ...prev, [resolvedTheme]: normalized };
+      getStorage()?.set({ [ACCENT_BY_THEME_KEY]: updated });
+      return updated;
+    });
+  }, [resolvedTheme]);
 
   const setVisualFlow = useCallback((next: VisualFlowData) => {
     setVisualFlowState(next);

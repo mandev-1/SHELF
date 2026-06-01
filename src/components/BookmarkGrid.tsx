@@ -1132,14 +1132,7 @@ export function BookmarkGrid() {
                   <button
                     key={t}
                     type="button"
-                    onClick={() => {
-                      setTheme(t);
-                      // Match the theme's canonical accent (no-op for 'auto')
-                      const themeAccent: Record<string, string> = {
-                        dark: "#16b981", day: "#d97706", sap: "#0070f2",
-                      };
-                      if (themeAccent[t]) setAccent(themeAccent[t]);
-                    }}
+                    onClick={() => setTheme(t)}
                     className={`rounded-lg px-2 py-1.5 text-[11px] font-medium capitalize transition ${
                       theme === t
                         ? "bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40"
