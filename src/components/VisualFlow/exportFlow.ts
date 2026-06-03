@@ -1,4 +1,4 @@
-import type { ShelfPillarTodoItem, VisualFlowData, VisualFlowEdge } from "../types/grid";
+import type { ShelfPillarTodoItem, VisualFlowData, VisualFlowEdge } from "../../types/grid";
 
 /**
  * Render the Visual Flow as a single markdown document optimised for pasting

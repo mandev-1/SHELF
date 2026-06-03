@@ -14,20 +14,23 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
 <script src="data.js"></script>
+<script src="strategie.js"></script>
 <script type="text/babel" src="tweaks-panel.jsx"></script>
 <script type="text/babel" src="dragsort.jsx"></script>
 <script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="strategie.jsx"></script>
 
 <script type="text/babel">
 const { useState, useMemo, useRef, useEffect } = React;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "theme": "dark",
+  "theme": "sap",
   "accent": "#0070f2",
   "surface": "solid",
   "density": "compact",
   "radius": 14,
-  "greeting": "Hey Jimmy, smile"
+  "greeting": "Hey Jimmy, smile",
+  "currency": "CZK"
 }/*EDITMODE-END*/;
 
 const THEME_ACCENT = { dark: "#16b981", day: "#d97706", sap: "#0070f2" };
@@ -123,7 +126,7 @@ function App() {
               <kbd>⌘K</kbd>
             </div>
             <nav className="nav">
-              {[["shelf", "Shelf"], ["flow", "Visual Flow"], ["hopper", "Hopper"]].map(([id, label]) => (
+              {[["shelf", "Shelf"], ["flow", "Visual Flow"], ["strategie", "Strategie"], ["hopper", "Hopper"]].map(([id, label]) => (
                 <button key={id} className={"nav-btn" + (tab === id ? " nav-btn--on" : "")} onClick={() => { setTab(id); setQuery(""); }}>{label}</button>
               ))}
             </nav>
@@ -162,7 +165,9 @@ function App() {
                 </div>
               </React.Fragment>
             ) : tab === "hopper" ? (
-              <Hopper data={D} />
+              <Hopper data={D} onToast={showToast} />
+            ) : tab === "strategie" ? (
+              <StrategiePanel currency={t.currency} onCurrency={(c) => setTweak("currency", c)} onToast={showToast} />
             ) : (
               <div className="empty-state">
                 <div className="big">Visual Flow</div>
@@ -184,6 +189,8 @@ function App() {
         <TweakColor label="Accent" value={t.accent}
           options={["#16b981", "#5b9cff", "#c98bff", "#e0905a", "#d97706", "#0070f2"]}
           onChange={(v) => setTweak("accent", v)} />
+        <TweakSection label="Money" />
+        <TweakRadio label="Currency" value={t.currency} options={["USD", "EUR", "CZK"]} onChange={(v) => setTweak("currency", v)} />
         <TweakSection label="Surfaces" />
         <TweakRadio label="Cards" value={t.surface} options={["solid", "glass"]} onChange={(v) => setTweak("surface", v)} />
         <TweakRadio label="Density" value={t.density} options={["compact", "regular", "comfy"]} onChange={(v) => setTweak("density", v)} />

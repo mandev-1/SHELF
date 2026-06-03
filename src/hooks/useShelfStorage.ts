@@ -23,6 +23,9 @@ import {
   type VisualFlowData,
   type VisualFlowNodeSize,
   type BuylistItem,
+  type StrategieState,
+  type MonthStatement,
+  normalizeStrategie,
 } from "../types/grid";
 
 const LAYOUT_KEY = "shelf-layout";
@@ -62,6 +65,7 @@ const PILLAR_TODO_PINS_KEY = "shelf-pillar-todo-pins";
 const FOCUS_DESYNCED_KEY = "shelf-focus-desynced";
 export const LOW_PERFORMANCE_MODE_KEY = "shelf-low-performance-mode";
 const BUYLIST_KEY = "shelf-buylist";
+const STRATEGIE_KEY = "shelf-strategie";
 
 function normalizeBuylist(raw: unknown): BuylistItem[] {
   if (!Array.isArray(raw)) return [];
@@ -274,6 +278,7 @@ export function useShelfStorage() {
   const [focusDesynced, setFocusDesyncedState] = useState(false);
   const [lowPerformanceMode, setLowPerformanceModeState] = useState(false);
   const [buylist, setBuylistState] = useState<BuylistItem[]>([]);
+  const [strategieState, setStrategieState] = useState<StrategieState>(() => normalizeStrategie(null));
   const [ready, setReady] = useState(false);
 
   const load = useCallback(() => {
@@ -315,6 +320,7 @@ export function useShelfStorage() {
         FOCUS_DESYNCED_KEY,
         LOW_PERFORMANCE_MODE_KEY,
         BUYLIST_KEY,
+        STRATEGIE_KEY,
       ],
       (result: { [key: string]: unknown }) => {
       setLayout(Array.isArray(result[LAYOUT_KEY]) ? (result[LAYOUT_KEY] as ShelfLayoutItem[]) : []);
@@ -438,6 +444,7 @@ export function useShelfStorage() {
       setFocusDesyncedState(result[FOCUS_DESYNCED_KEY] === true);
       setLowPerformanceModeState(result[LOW_PERFORMANCE_MODE_KEY] === true);
       setBuylistState(normalizeBuylist(result[BUYLIST_KEY]));
+      setStrategieState(normalizeStrategie(result[STRATEGIE_KEY]));
       const vf = result[VISUAL_FLOW_KEY];
       if (vf && typeof vf === "object" && !Array.isArray(vf)) {
         const raw = vf as Record<string, unknown>;
@@ -718,6 +725,76 @@ export function useShelfStorage() {
     setBuylist((prev) => (prev.length === 0 ? prev : prev.slice(0, -1)));
   }, [setBuylist]);
 
+  // Move a puck to the end of the queue (it becomes the tray / next-to-buy).
+  const buylistBump = useCallback(
+    (id: string) => {
+      setBuylist((prev) => {
+        const it = prev.find((x) => x.id === id);
+        if (!it) return prev;
+        return [...prev.filter((x) => x.id !== id), it];
+      });
+    },
+    [setBuylist]
+  );
+
+  // Move an item back to the top of the queue (used by the tray's "Not yet" action).
+  const buylistSkip = useCallback(
+    (id: string) => {
+      setBuylist((prev) => {
+        const it = prev.find((x) => x.id === id);
+        if (!it) return prev;
+        return [it, ...prev.filter((x) => x.id !== id)];
+      });
+    },
+    [setBuylist]
+  );
+
+  const setStrategie = useCallback((next: StrategieState) => {
+    setStrategieState(next);
+    getStorage()?.set({ [STRATEGIE_KEY]: next });
+  }, []);
+
+  const strategieSaveStatement = useCallback(
+    (book: Record<string, MonthStatement>, order: string[], active: string) => {
+      setStrategieState((prev) => {
+        const next: StrategieState = {
+          ...prev,
+          statements: { current: active, order, byMonth: book },
+        };
+        getStorage()?.set({ [STRATEGIE_KEY]: next });
+        return next;
+      });
+    },
+    []
+  );
+
+  const strategieAddPot = useCallback(
+    (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setStrategieState((prev) => {
+        const next: StrategieState = {
+          ...prev,
+          pots: [
+            ...prev.pots,
+            { id: crypto.randomUUID(), name: trimmed, target: 0, saved: 0, monthly: 0, fromHopper: false },
+          ],
+        };
+        getStorage()?.set({ [STRATEGIE_KEY]: next });
+        return next;
+      });
+    },
+    []
+  );
+
+  const strategieSetCurrency = useCallback((c: string) => {
+    setStrategieState((prev) => {
+      const next: StrategieState = { ...prev, currency: c };
+      getStorage()?.set({ [STRATEGIE_KEY]: next });
+      return next;
+    });
+  }, []);
+
   const saveGoals = useCallback((next: ShelfGoalMap) => {
     setGoals(next);
     getStorage()?.set({ [GOALS_KEY]: next });
@@ -935,8 +1012,9 @@ export function useShelfStorage() {
       focusDesynced,
       lowPerformanceMode,
       buylist,
+      strategie: strategieState,
     };
-  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems]);
+  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, strategieState]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -985,6 +1063,7 @@ export function useShelfStorage() {
     if (typeof backup.focusDesynced === "boolean") setFocusDesyncedState(backup.focusDesynced);
     if (typeof backup.lowPerformanceMode === "boolean") setLowPerformanceModeState(backup.lowPerformanceMode);
     if (Array.isArray(backup.buylist)) setBuylist(backup.buylist as BuylistItem[]);
+    if (backup.strategie) setStrategie(normalizeStrategie(backup.strategie));
 
     getStorage()?.set({
       [LAYOUT_KEY]: backup.layout ?? layout,
@@ -1019,8 +1098,9 @@ export function useShelfStorage() {
       [FOCUS_DESYNCED_KEY]: typeof backup.focusDesynced === "boolean" ? backup.focusDesynced : focusDesynced,
       [LOW_PERFORMANCE_MODE_KEY]: typeof backup.lowPerformanceMode === "boolean" ? backup.lowPerformanceMode : lowPerformanceMode,
       [BUYLIST_KEY]: Array.isArray(backup.buylist) ? backup.buylist : buylist,
+      [STRATEGIE_KEY]: backup.strategie ? normalizeStrategie(backup.strategie) : strategieState,
     });
-  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setGrazelandItems]);
+  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setGrazelandItems, strategieState, setStrategie]);
 
   return {
     layout,
@@ -1090,6 +1170,13 @@ export function useShelfStorage() {
     buylistAdd,
     buylistDiscard,
     buylistBuyBottom,
+    buylistBump,
+    buylistSkip,
+    strategieState,
+    setStrategie,
+    strategieSaveStatement,
+    strategieAddPot,
+    strategieSetCurrency,
     llmConsoleUrl,
     setLlmConsoleUrl,
     showBothNavButtons,

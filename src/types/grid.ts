@@ -249,6 +249,126 @@ export interface ShelfBackupData {
   lowPerformanceMode?: boolean;
   /** Builist (TEMP) — buylist hopper stack */
   buylist?: BuylistItem[];
+  strategie?: StrategieState;
+}
+
+export type CatKey = "housing" | "food" | "transport" | "home" | "fun" | "health" | "shopping" | "other";
+
+export interface IncomeRow { id: string; label: string; amt: number; kind: string; }
+export interface ExpenseRow { id: string; label: string; amt: number; cat: CatKey; date: string; }
+export interface MonthStatement { income: IncomeRow[]; expenses: ExpenseRow[]; }
+
+export interface StrategieState {
+  statements: { current: string; order: string[]; byMonth: Record<string, MonthStatement>; };
+  positions: { invested: number; emergencySaved: number; emergencyTarget: number; };
+  pots: { id: string; name: string; target: number; saved: number; monthly: number; fromHopper: boolean; }[];
+  currency: string;
+}
+
+function _defaultStrategie(): StrategieState {
+  return {
+    statements: {
+      current: "2026-04",
+      order: ["2026-04"],
+      byMonth: { "2026-04": { income: [], expenses: [] } },
+    },
+    positions: { invested: 14000, emergencySaved: 9000, emergencyTarget: 18000 },
+    pots: [
+      { id: "pot-apt",   name: "Apartment deposit", target: 12000, saved: 4500, monthly: 400, fromHopper: false },
+      { id: "pot-japan", name: "Japan spring 2027",  target: 6000,  saved: 1750, monthly: 150, fromHopper: false },
+    ],
+    currency: "CZK",
+  };
+}
+
+function _clampExpenses(stmt: MonthStatement, key: string): MonthStatement {
+  const [y, m] = key.split("-").map(Number);
+  const days = new Date(y, m, 0).getDate();
+  return {
+    income: stmt.income,
+    expenses: stmt.expenses.map((e) => {
+      const parts = e.date?.split("-");
+      if (!parts || parts.length !== 3) return e;
+      const d = Math.max(1, Math.min(parseInt(parts[2], 10), days));
+      return { ...e, date: `${parts[0]}-${parts[1]}-${String(d).padStart(2, "0")}` };
+    }),
+  };
+}
+
+export function normalizeStrategie(raw: unknown): StrategieState {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return _defaultStrategie();
+  const r = raw as Record<string, unknown>;
+
+  // statements
+  let statements: StrategieState["statements"];
+  const rs = r["statements"];
+  if (rs && typeof rs === "object" && !Array.isArray(rs)) {
+    const s = rs as Record<string, unknown>;
+    const current = typeof s["current"] === "string" ? s["current"] : "2026-04";
+    const order = Array.isArray(s["order"])
+      ? (s["order"] as unknown[]).filter((x): x is string => typeof x === "string")
+      : [current];
+    const rawBy = s["byMonth"];
+    const byMonth: Record<string, MonthStatement> = {};
+    if (rawBy && typeof rawBy === "object" && !Array.isArray(rawBy)) {
+      for (const [k, v] of Object.entries(rawBy as Record<string, unknown>)) {
+        if (!v || typeof v !== "object" || Array.isArray(v)) continue;
+        const mv = v as Record<string, unknown>;
+        const income: IncomeRow[] = Array.isArray(mv["income"])
+          ? (mv["income"] as unknown[]).filter((x): x is IncomeRow =>
+              !!x && typeof x === "object" && typeof (x as IncomeRow).id === "string"
+            )
+          : [];
+        const expenses: ExpenseRow[] = Array.isArray(mv["expenses"])
+          ? (mv["expenses"] as unknown[]).filter((x): x is ExpenseRow =>
+              !!x && typeof x === "object" && typeof (x as ExpenseRow).id === "string"
+            )
+          : [];
+        byMonth[k] = _clampExpenses({ income, expenses }, k);
+      }
+    }
+    if (!byMonth[current]) byMonth[current] = { income: [], expenses: [] };
+    statements = { current, order: order.length ? order : [current], byMonth };
+  } else {
+    const def = _defaultStrategie();
+    statements = def.statements;
+  }
+
+  // positions
+  let positions: StrategieState["positions"];
+  const rp = r["positions"];
+  if (rp && typeof rp === "object" && !Array.isArray(rp)) {
+    const p = rp as Record<string, unknown>;
+    positions = {
+      invested:        typeof p["invested"]        === "number" ? p["invested"]        : 14000,
+      emergencySaved:  typeof p["emergencySaved"]  === "number" ? p["emergencySaved"]  : 9000,
+      emergencyTarget: typeof p["emergencyTarget"] === "number" ? p["emergencyTarget"] : 18000,
+    };
+  } else {
+    positions = { invested: 14000, emergencySaved: 9000, emergencyTarget: 18000 };
+  }
+
+  // pots
+  let pots: StrategieState["pots"];
+  if (Array.isArray(r["pots"])) {
+    pots = (r["pots"] as unknown[])
+      .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+      .filter((o) => typeof o["id"] === "string" && typeof o["name"] === "string")
+      .map((o) => ({
+        id:         o["id"] as string,
+        name:       o["name"] as string,
+        target:     typeof o["target"]  === "number" ? o["target"]  : 0,
+        saved:      typeof o["saved"]   === "number" ? o["saved"]   : 0,
+        monthly:    typeof o["monthly"] === "number" ? o["monthly"] : 0,
+        fromHopper: Boolean(o["fromHopper"]),
+      }));
+  } else {
+    pots = _defaultStrategie().pots;
+  }
+
+  const currency = typeof r["currency"] === "string" ? r["currency"] : "CZK";
+
+  return { statements, positions, pots, currency };
 }
 
 export const ACCENT_COLORS = [

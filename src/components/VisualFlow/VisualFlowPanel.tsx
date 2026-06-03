@@ -35,9 +35,9 @@ import {
   type VisualFlowEdge,
   type VisualFlowNodeSize,
   resolveVisualFlowSectorColor,
-} from "../types/grid";
-import { NoteContent, linkifyText } from "./NoteContent";
-import { exportFlowAsMarkdown } from "../utils/exportFlow";
+} from "../../types/grid";
+import { NoteContent, linkifyText } from "../NoteContent";
+import { exportFlowAsMarkdown } from "./exportFlow";
 
 const NODE_INITIAL_WIDTH = 260;
 const NODE_RESIZE_MIN_WIDTH = 5;

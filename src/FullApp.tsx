@@ -7,10 +7,18 @@ import { SearchResults } from "./components/SearchResults";
 import { useShelfStorage } from "./hooks/useShelfStorage";
 import { PromptLibraryCard } from "./components/PromptLibraryCard";
 import { Pillar } from "./components/Pillar";
-const VisualFlowPanel = lazy(() =>
-  import("./components/VisualFlowPanel").then((m) => ({ default: m.VisualFlowPanel }))
-);
-import { BuylistPanel } from "./components/BuylistPanel";
+// Lazy + prefetch: split the React Flow chunk, but warm it in the background
+// (idle time + hover/focus on the nav button) so the click feels instant.
+let _visualFlowPromise: Promise<{ default: typeof import("./components/VisualFlow/VisualFlowPanel")["VisualFlowPanel"] }> | null = null;
+function prefetchVisualFlow() {
+  if (!_visualFlowPromise) {
+    _visualFlowPromise = import("./components/VisualFlow/VisualFlowPanel").then((m) => ({ default: m.VisualFlowPanel }));
+  }
+  return _visualFlowPromise;
+}
+const VisualFlowPanel = lazy(prefetchVisualFlow);
+import { BuylistPanel } from "./components/Hopper/BuylistPanel";
+import { StrategiePanel } from "./components/Strategie/StrategiePanel";
 import { pickCelebrationPhrase } from "./utils/celebration";
 import type { ShelfPillarTodoItem } from "./types/grid";
 
@@ -47,6 +55,28 @@ function openLLMConsoleOverlay(url: string) {
 }
 
 export default function FullApp() {
+  // Warm the Visual Flow chunk during idle time after mount so the user's first
+  // click on the tab loads instantly. Browsers that lack requestIdleCallback fall
+  // back to a short timeout.
+  useEffect(() => {
+    type IdleWindow = Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (h: number) => void;
+    };
+    const w = window as IdleWindow;
+    let idleHandle: number | undefined;
+    let timeoutHandle: number | undefined;
+    if (typeof w.requestIdleCallback === "function") {
+      idleHandle = w.requestIdleCallback(() => { prefetchVisualFlow(); }, { timeout: 4000 });
+    } else {
+      timeoutHandle = window.setTimeout(() => { prefetchVisualFlow(); }, 1500);
+    }
+    return () => {
+      if (idleHandle !== undefined && typeof w.cancelIdleCallback === "function") w.cancelIdleCallback(idleHandle);
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    };
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [dashboardView, setDashboardView] = useState<DashboardView>(() => {
     try {
@@ -99,6 +129,12 @@ export default function FullApp() {
     buylistAdd,
     buylistDiscard,
     buylistBuyBottom,
+    buylistBump,
+    buylistSkip,
+    strategieState,
+    strategieSaveStatement,
+    strategieAddPot,
+    strategieSetCurrency,
   } = useShelfStorage();
   const [editingName, setEditingName] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -487,10 +523,14 @@ export default function FullApp() {
                 { id: "buylist",     label: "Hopper"      },
               ] as const).map((tab) => {
                 const isActive = dashboardView === tab.id;
+                const isVF = tab.id === "visual-flow";
                 return (
                   <button
                     key={tab.id}
                     type="button"
+                    onMouseEnter={isVF ? () => prefetchVisualFlow() : undefined}
+                    onFocus={isVF ? () => prefetchVisualFlow() : undefined}
+                    onTouchStart={isVF ? () => prefetchVisualFlow() : undefined}
                     onClick={() => {
                       if (isActive) return;
                       // Slide direction: tabs to the right of current slide in from the right
@@ -523,13 +563,14 @@ export default function FullApp() {
           <div className="bg-diffuse-host">
             <div className="bg-diffuse" aria-hidden="true" />
           {dashboardView === "strategie" ? (
-            <div className="max-w-[1640px] mx-auto py-16 px-6 text-center">
-              <h1 className="text-3xl font-semibold tracking-tight" style={{ color: "var(--fg)" }}>
-                Strategie
-              </h1>
-              <p className="mt-3 text-sm" style={{ color: "var(--dim)" }}>
-                This page is intentionally empty for now.
-              </p>
+            <div className="max-w-[1640px] mx-auto px-6 py-6">
+              <StrategiePanel
+                state={strategieState}
+                buylistItems={buylist}
+                onSaveStatement={strategieSaveStatement}
+                onAddPot={strategieAddPot}
+                onSetCurrency={strategieSetCurrency}
+              />
             </div>
           ) : dashboardView === "buylist" ? (
             <BuylistPanel
@@ -537,6 +578,8 @@ export default function FullApp() {
               onAdd={buylistAdd}
               onDiscard={buylistDiscard}
               onBuyBottom={buylistBuyBottom}
+              onBump={buylistBump}
+              onSkip={buylistSkip}
             />
           ) : dashboardView === "visual-flow" ? (
             <div className="max-w-[1640px] mx-auto">
