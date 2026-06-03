@@ -1,17 +1,49 @@
 import { useState, useEffect } from "react";
-import type { StrategieState, MonthStatement, CatKey, IncomeRow, ExpenseRow } from "../../types/grid";
+import type { StrategieState, MonthStatement, CatKey, IncomeRow, ExpenseRow, MembershipRow } from "../../types/grid";
 import {
   dayStr, monthWeeks, weekOfDate, stepMonth, monthLabel,
   fmtMoney, CURRENCIES, STMT_CATS, CAT_KEYS,
 } from "./strategie";
-import { IcoX, IcoChev, IcoPlus, IcoTrash, IcoIn, IcoOut } from "./icons";
+import { IcoX, IcoChev, IcoPlus, IcoTrash, IcoIn, IcoOut, IcoRepeat, IcoPencil } from "./icons";
+
+const MEM_PALETTE = [
+  "#E50914", "#FF6B2C", "#F59E0B", "#1DB954", "#10A37F",
+  "#3B82F6", "#1A47BE", "#8B5CF6", "#EC4899", "#8E8E93",
+];
+
+function memInitials(name: string): string {
+  return (name || "")
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
 
 export interface StatementEditorProps {
   statements: StrategieState["statements"] & { byMonth: Record<string, MonthStatement> };
   currency: string;
-  onSave: (book: Record<string, MonthStatement>, order: string[], active: string) => void;
+  memberships: MembershipRow[];
+  onSave: (
+    book: Record<string, MonthStatement>,
+    order: string[],
+    active: string,
+    memberships: MembershipRow[],
+  ) => void;
   onClose: () => void;
 }
+
+type MemEditorState = {
+  mode: "add" | "edit";
+  id?: string;
+  name: string;
+  plan: string;
+  price: string;
+  color: string;
+  mono: string;
+  monoTouched: boolean;
+};
 
 function totalIncome(stmt: MonthStatement) {
   return stmt.income.reduce((s, r) => s + r.amt, 0);
@@ -20,7 +52,7 @@ function totalExpenses(stmt: MonthStatement) {
   return stmt.expenses.reduce((s, r) => s + r.amt, 0);
 }
 
-export function StatementEditor({ statements, currency, onSave, onClose }: StatementEditorProps) {
+export function StatementEditor({ statements, currency, memberships, onSave, onClose }: StatementEditorProps) {
   const curEntry = CURRENCIES[currency] ?? CURRENCIES["USD"];
   const rate = curEntry.rate;
   const sym = currency === "CZK" ? "Kč" : currency === "EUR" ? "€" : "$";
@@ -34,6 +66,8 @@ export function StatementEditor({ statements, currency, onSave, onClose }: State
   const [active, setActive] = useState(statements.current);
   const [gran, setGran] = useState<"all" | number>("all");
   const [amtStrings, setAmtStrings] = useState<Record<string, string>>({});
+  const [members, setMembers] = useState<MembershipRow[]>(() => memberships.map((m) => ({ ...m })));
+  const [memEditor, setMemEditor] = useState<MemEditorState | null>(null);
 
   useEffect(() => {
     let lastEsc = 0;
@@ -208,6 +242,172 @@ export function StatementEditor({ statements, currency, onSave, onClose }: State
               ))}
             </div>
             <button type="button" className="se-add" onClick={addIncome}><IcoPlus /> Add income</button>
+
+            {(() => {
+              const activeMems = members.filter((m) => !m.paused);
+              const memTotal = activeMems.reduce((a, m) => a + m.price, 0);
+              const pausedCount = members.length - activeMems.length;
+              const toggle = (id: string) =>
+                setMembers((ms) => ms.map((m) => m.id === id ? { ...m, paused: !m.paused } : m));
+              const openAdd = () => setMemEditor({
+                mode: "add", name: "", plan: "", price: "",
+                color: MEM_PALETTE[5], mono: "", monoTouched: false,
+              });
+              const openEdit = (m: MembershipRow) => setMemEditor({
+                mode: "edit", id: m.id, name: m.name, plan: m.plan,
+                price: String(toDisplay(m.price)), color: m.color, mono: m.mono, monoTouched: true,
+              });
+              const upd = (patch: Partial<MemEditorState>) =>
+                setMemEditor((e) => e ? { ...e, ...patch } : e);
+              const saveMem = () => {
+                const ed = memEditor; if (!ed) return;
+                const name = ed.name.trim() || "Untitled";
+                const mono = (ed.monoTouched && ed.mono.trim())
+                  ? ed.mono.trim().slice(0, 2).toUpperCase()
+                  : (memInitials(name) || "?");
+                const price = toBase(parseInt(String(ed.price).replace(/[^\d]/g, ""), 10) || 0);
+                if (ed.mode === "add") {
+                  setMembers((ms) => [...ms, {
+                    id: crypto.randomUUID(),
+                    name, plan: ed.plan.trim(), price, color: ed.color, mono,
+                  }]);
+                } else {
+                  setMembers((ms) => ms.map((x) =>
+                    x.id === ed.id ? { ...x, name, plan: ed.plan.trim(), price, color: ed.color, mono } : x
+                  ));
+                }
+                setMemEditor(null);
+              };
+              const removeMem = () => {
+                if (!memEditor?.id) return;
+                setMembers((ms) => ms.filter((x) => x.id !== memEditor.id));
+                setMemEditor(null);
+              };
+              const previewMono = memEditor
+                ? ((memEditor.monoTouched && memEditor.mono.trim())
+                  ? memEditor.mono.trim().slice(0, 2).toUpperCase()
+                  : (memInitials(memEditor.name) || "?"))
+                : "?";
+              return (
+                <div className="se-mem">
+                  <div className="se-mem-head">
+                    <span className="se-mem-title">
+                      <span className="se-pill se-pill--mem"><IcoRepeat /></span>
+                      Memberships <small className="se-col-hint">recurring</small>
+                    </span>
+                    <span className="se-mem-sum">{fmtMoney(memTotal, currency)}<small>/mo</small></span>
+                  </div>
+                  <div className="se-mem-grid">
+                    {members.map((m) => {
+                      const off = !!m.paused;
+                      return (
+                        <button
+                          key={m.id} type="button"
+                          className={"se-tile" + (off ? " off" : "")}
+                          style={{ ["--brand" as string]: m.color } as React.CSSProperties}
+                          onClick={() => toggle(m.id)}
+                          aria-pressed={!off}
+                          aria-label={`${m.name}${m.plan ? " · " + m.plan : ""}${off ? " (paused)" : ""}`}
+                        >
+                          <span className="se-tile-mono">{m.mono}</span>
+                          <span
+                            className="se-tile-edit" role="button" tabIndex={-1}
+                            onClick={(e) => { e.stopPropagation(); openEdit(m); }}
+                            aria-label={`Edit ${m.name}`}
+                          >
+                            <IcoPencil />
+                          </span>
+                          <span className="se-tile-tip">
+                            <b>{m.name}</b>
+                            {m.plan ? <i>{m.plan}</i> : null}
+                            <em>{fmtMoney(m.price, currency)}/mo</em>
+                          </span>
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button" className="se-tile se-tile--add"
+                      aria-label="Add membership" onClick={openAdd}
+                    >
+                      <IcoPlus />
+                    </button>
+                  </div>
+
+                  {memEditor && (
+                    <div className="se-mem-editor">
+                      <div className="se-mem-ed-top">
+                        <span
+                          className="se-tile se-tile--preview"
+                          style={{ ["--brand" as string]: memEditor.color } as React.CSSProperties}
+                        >
+                          <span className="se-tile-mono">{previewMono}</span>
+                        </span>
+                        <div className="se-mem-ed-fields">
+                          <input
+                            className="se-mem-in" placeholder="Name (e.g. Netflix)"
+                            value={memEditor.name} autoFocus
+                            onChange={(e) => upd({ name: e.target.value })}
+                          />
+                          <input
+                            className="se-mem-in se-mem-in--sub" placeholder="Plan (optional)"
+                            value={memEditor.plan}
+                            onChange={(e) => upd({ plan: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div className="se-mem-ed-row">
+                        <label className="se-mem-field">
+                          <span className="se-mem-flab">Price /mo</span>
+                          <span className="se-mem-price">
+                            <i>{CURRENCIES[currency]?.code ?? currency}</i>
+                            <input
+                              inputMode="numeric" value={memEditor.price} placeholder="0"
+                              onChange={(e) => upd({ price: e.target.value.replace(/[^\d]/g, "") })}
+                            />
+                          </span>
+                        </label>
+                        <label className="se-mem-field se-mem-field--mono">
+                          <span className="se-mem-flab">Badge</span>
+                          <input
+                            className="se-mem-in se-mem-mono-in" maxLength={2}
+                            value={memEditor.mono}
+                            placeholder={memInitials(memEditor.name) || "AB"}
+                            onChange={(e) => upd({ mono: e.target.value, monoTouched: true })}
+                          />
+                        </label>
+                      </div>
+                      <div className="se-mem-swatches">
+                        {MEM_PALETTE.map((c) => (
+                          <button
+                            key={c} type="button"
+                            className={"se-sw" + (memEditor.color === c ? " on" : "")}
+                            style={{ ["--brand" as string]: c } as React.CSSProperties}
+                            onClick={() => upd({ color: c })}
+                            aria-label={`Color ${c}`}
+                          />
+                        ))}
+                      </div>
+                      <div className="se-mem-ed-actions">
+                        {memEditor.mode === "edit"
+                          ? <button type="button" className="se-mem-btn se-mem-btn--del" onClick={removeMem}><IcoTrash /> Remove</button>
+                          : <span />}
+                        <div className="se-mem-ed-right">
+                          <button type="button" className="se-mem-btn" onClick={() => setMemEditor(null)}>Cancel</button>
+                          <button type="button" className="se-mem-btn se-mem-btn--save" onClick={saveMem}>
+                            {memEditor.mode === "edit" ? "Save" : "Add"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="se-mem-foot">
+                    <span>{activeMems.length} active{pausedCount ? ` · ${pausedCount} paused` : ""}</span>
+                    <span className="se-mem-hint">tap to pause · ✎ to edit</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="se-col se-col--out">
@@ -335,7 +535,7 @@ export function StatementEditor({ statements, currency, onSave, onClose }: State
             <button className="se-btn se-btn--ghost" onClick={onClose}>Cancel</button>
             <button
               className="se-btn se-btn--primary"
-              onClick={() => { onSave(localBook, localOrder, active); onClose(); }}
+              onClick={() => { onSave(localBook, localOrder, active, members); onClose(); }}
             >
               Save
             </button>

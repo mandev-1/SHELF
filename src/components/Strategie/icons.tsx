@@ -31,6 +31,12 @@ export function IcoFile() {
 export function IcoHopper() {
   return <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2h8l-2 4H4L2 2z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/><path d="M4.5 6v4M7.5 6v4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>;
 }
+export function IcoRepeat() {
+  return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>;
+}
+export function IcoPencil() {
+  return <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>;
+}
 export function IcoUpload() {
   return <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 2v7M3.5 5l3-3 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 10.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>;
 }

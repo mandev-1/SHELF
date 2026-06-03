@@ -258,10 +258,21 @@ export interface IncomeRow { id: string; label: string; amt: number; kind: strin
 export interface ExpenseRow { id: string; label: string; amt: number; cat: CatKey; date: string; }
 export interface MonthStatement { income: IncomeRow[]; expenses: ExpenseRow[]; }
 
+export interface MembershipRow {
+  id: string;
+  name: string;
+  plan: string;
+  price: number; // USD-base, per month
+  color: string;
+  mono: string;
+  paused?: boolean;
+}
+
 export interface StrategieState {
   statements: { current: string; order: string[]; byMonth: Record<string, MonthStatement>; };
   positions: { invested: number; emergencySaved: number; emergencyTarget: number; };
   pots: { id: string; name: string; target: number; saved: number; monthly: number; fromHopper: boolean; }[];
+  memberships: MembershipRow[];
   currency: string;
 }
 
@@ -276,6 +287,14 @@ function _defaultStrategie(): StrategieState {
     pots: [
       { id: "pot-apt",   name: "Apartment deposit", target: 12000, saved: 4500, monthly: 400, fromHopper: false },
       { id: "pot-japan", name: "Japan spring 2027",  target: 6000,  saved: 1750, monthly: 150, fromHopper: false },
+    ],
+    memberships: [
+      { id: "m_net", name: "Netflix",         plan: "Standard",   price: 13, color: "#E50914", mono: "N"  },
+      { id: "m_spo", name: "Spotify",         plan: "Premium",    price: 6,  color: "#1DB954", mono: "S"  },
+      { id: "m_yt",  name: "YouTube Premium", plan: "Individual", price: 12, color: "#FF0033", mono: "YT" },
+      { id: "m_gpt", name: "ChatGPT",         plan: "Plus",       price: 20, color: "#10A37F", mono: "AI" },
+      { id: "m_icl", name: "iCloud+",         plan: "200 GB",     price: 3,  color: "#3B82F6", mono: "iC" },
+      { id: "m_not", name: "Notion",          plan: "Plus",       price: 8,  color: "#8E8E93", mono: "No" },
     ],
     currency: "CZK",
   };
@@ -366,9 +385,28 @@ export function normalizeStrategie(raw: unknown): StrategieState {
     pots = _defaultStrategie().pots;
   }
 
+  // memberships
+  let memberships: MembershipRow[];
+  if (Array.isArray(r["memberships"])) {
+    memberships = (r["memberships"] as unknown[])
+      .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+      .filter((o) => typeof o["id"] === "string" && typeof o["name"] === "string")
+      .map((o) => ({
+        id:     o["id"]    as string,
+        name:   o["name"]  as string,
+        plan:   typeof o["plan"]   === "string" ? o["plan"]   : "",
+        price:  typeof o["price"]  === "number" ? o["price"]  : 0,
+        color:  typeof o["color"]  === "string" ? o["color"]  : "#8E8E93",
+        mono:   typeof o["mono"]   === "string" ? o["mono"]   : "?",
+        paused: Boolean(o["paused"]),
+      }));
+  } else {
+    memberships = _defaultStrategie().memberships;
+  }
+
   const currency = typeof r["currency"] === "string" ? r["currency"] : "CZK";
 
-  return { statements, positions, pots, currency };
+  return { statements, positions, pots, memberships, currency };
 }
 
 export const ACCENT_COLORS = [

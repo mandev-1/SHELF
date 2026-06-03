@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { StrategieState, MonthStatement, CatKey, BuylistItem } from "../../types/grid";
+import type { StrategieState, MonthStatement, CatKey, BuylistItem, MembershipRow } from "../../types/grid";
 import {
   daysInMonth as _daysInMonth,
   monthWeeks, weekOfDate,
@@ -17,7 +17,12 @@ void _daysInMonth;
 interface StrategiePanelProps {
   state: StrategieState;
   buylistItems: BuylistItem[];
-  onSaveStatement: (book: Record<string, MonthStatement>, order: string[], active: string) => void;
+  onSaveStatement: (
+    book: Record<string, MonthStatement>,
+    order: string[],
+    active: string,
+    memberships: MembershipRow[],
+  ) => void;
   onAddPot: (name: string) => void;
   onSetCurrency: (c: string) => void;
   onToast?: (msg: string) => void;
@@ -630,6 +635,7 @@ export function StrategiePanel({
         <StatementEditor
           statements={{ ...statements, byMonth }}
           currency={cur}
+          memberships={state.memberships}
           onSave={onSaveStatement}
           onClose={() => setEditorOpen(false)}
         />

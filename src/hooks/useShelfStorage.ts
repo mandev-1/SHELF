@@ -25,6 +25,7 @@ import {
   type BuylistItem,
   type StrategieState,
   type MonthStatement,
+  type MembershipRow,
   normalizeStrategie,
 } from "../types/grid";
 
@@ -755,11 +756,17 @@ export function useShelfStorage() {
   }, []);
 
   const strategieSaveStatement = useCallback(
-    (book: Record<string, MonthStatement>, order: string[], active: string) => {
+    (
+      book: Record<string, MonthStatement>,
+      order: string[],
+      active: string,
+      memberships?: MembershipRow[],
+    ) => {
       setStrategieState((prev) => {
         const next: StrategieState = {
           ...prev,
           statements: { current: active, order, byMonth: book },
+          memberships: memberships ?? prev.memberships,
         };
         getStorage()?.set({ [STRATEGIE_KEY]: next });
         return next;
