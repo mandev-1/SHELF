@@ -100,17 +100,22 @@ function normalizeSaleItems(raw: unknown): SaleItem[] {
   for (const r of raw) {
     if (!r || typeof r !== "object") continue;
     const o = r as Record<string, unknown>;
-    if (typeof o.title !== "string" || !o.title.trim()) continue;
+    const name = typeof o.name === "string" ? o.name.trim() : (typeof o.title === "string" ? o.title.trim() : "");
+    if (!name) continue;
     const status = (o.status === "listed" || o.status === "reserved" || o.status === "sold") ? o.status : "listed";
+    const now = new Date().toISOString().slice(0, 19);
     out.push({
       id: typeof o.id === "string" && o.id ? o.id : crypto.randomUUID(),
-      title: o.title,
-      platform: typeof o.platform === "string" ? o.platform : "",
+      name,
+      where: typeof o.where === "string" ? o.where : (typeof o.platform === "string" ? o.platform : ""),
       price: typeof o.price === "number" ? o.price : 0,
-      listedAt: typeof o.listedAt === "string" ? o.listedAt : new Date().toISOString().slice(0, 10),
+      unit: typeof o.unit === "string" ? o.unit : "Kč",
       status,
       url: typeof o.url === "string" ? o.url : undefined,
-      note: typeof o.note === "string" ? o.note : undefined,
+      createdAt: typeof o.createdAt === "string" ? o.createdAt : (typeof o.listedAt === "string" ? o.listedAt : now),
+      updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : now,
+      soldAt: typeof o.soldAt === "string" ? o.soldAt : null,
+      history: Array.isArray(o.history) ? (o.history as { at: string; text: string }[]).filter((h) => h && typeof h.at === "string" && typeof h.text === "string") : [],
     });
   }
   return out;
@@ -816,11 +821,10 @@ export function useShelfStorage() {
     });
   }, []);
 
-  const saleItemAdd = useCallback((item: Omit<SaleItem, "id" | "listedAt">) => {
+  const saleItemAdd = useCallback((item: Omit<SaleItem, "id">) => {
     setSaleItems((prev) => [{
       ...item,
       id: crypto.randomUUID(),
-      listedAt: new Date().toISOString().slice(0, 10),
     }, ...prev]);
   }, [setSaleItems]);
 

@@ -220,13 +220,16 @@ export interface BuylistItem {
 export type SaleStatus = "listed" | "reserved" | "sold";
 export interface SaleItem {
   id: string;
-  title: string;
-  platform: string;
+  name: string;
+  where: string;
   price: number;
-  listedAt: string;
+  unit: string;
   status: SaleStatus;
   url?: string;
-  note?: string;
+  createdAt: string;
+  updatedAt: string;
+  soldAt: string | null;
+  history: { at: string; text: string }[];
 }
 
 export type InvCategory = "Tech" | "Music" | "Photo" | "Sport" | "Home" | "Gear" | "Other";

@@ -2480,7 +2480,7 @@ body {
 /* ================================================================
    Hopper — gravity chute: toss in the top, dispense from the bottom
    ================================================================ */
-.hopper { max-width: 600px; margin: 0 auto; }
+.hopper { max-width: 600px; margin: 0 auto; transition: width 0.42s cubic-bezier(0.65,0,0.2,1); }
 .hopper-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
 .hopper-title { font-size: 30px; font-weight: 600; letter-spacing: -0.025em; color: var(--fg); margin: 0; }
 .hopper-sub { font-size: 13.5px; color: var(--muted); margin: 7px 0 0; max-width: 360px; }
@@ -3570,7 +3570,7 @@ body {
 [data-theme="day"] .seg--filter .seg-btn.on .seg-n, [data-theme="sap"] .seg--filter .seg-btn.on .seg-n { color: var(--accent-deep); }
 .ledger-bar-meta { font-size: 11px; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; }
 
-.ledger-head, .sale-row, .ledger-foot {
+.ledger-head, .sale-row {
   display: grid; grid-template-columns: minmax(0,1fr) 124px 78px 96px 110px 32px;
   align-items: center; gap: 10px;
 }
@@ -3641,6 +3641,51 @@ body {
 .sm-seg-btn--listed.on   { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); color: var(--accent-bright); }
 .sm-seg-btn--reserved.on { background: color-mix(in srgb, var(--hue-orange) 22%, var(--surface)); color: var(--hue-orange); }
 .sm-seg-btn--sold.on     { background: var(--surface-3); color: var(--fg); box-shadow: var(--sh-1); }
+
+.sm-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 12px 14px; background: var(--inset); border: 1px solid var(--line-faint); border-radius: var(--r-inner); }
+.sm-meta-cell { display: flex; flex-direction: column; gap: 3px; }
+.sm-meta-k { font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.sm-meta-v { font-size: 12.5px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sm-meta-v.is-sold { color: var(--hue-green, #5ec96b); }
+.sm-hist { display: flex; flex-direction: column; gap: 8px; }
+.sm-hist-label { display: flex; align-items: center; gap: 6px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.sm-hist-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0; }
+.sm-hist-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line-faint); }
+.sm-hist-row:last-child { border-bottom: 0; }
+.sm-hist-dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-top: 2px; }
+.sm-hist-text { flex: 1; font-size: 12.5px; color: var(--fg-2); }
+.sm-hist-time { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sm-hist-empty { font-size: 12px; color: var(--dim); padding: 8px 0; }
+.sm-open { display: inline-flex; align-items: center; gap: 5px; padding: 0 14px; height: 38px; border-radius: var(--r-inner); font-size: 12.5px; font-weight: 600; color: var(--fg-2); background: var(--surface-2); border: 1px solid var(--line); text-decoration: none; white-space: nowrap; transition: background-color 0.14s; flex-shrink: 0; }
+.sm-open:hover { background: var(--surface-3); }
+.sm-open.is-off { opacity: 0.35; cursor: default; }
+.sm-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-top: 1px solid var(--line-faint); }
+.sm-foot-r { display: flex; align-items: center; gap: 10px; }
+.sm-del { display: inline-flex; align-items: center; gap: 6px; font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--dim); background: transparent; border: 1px solid transparent; border-radius: var(--r-inner); padding: 7px 14px; cursor: pointer; transition: color 0.14s, background-color 0.14s; }
+.sm-del:hover { color: #f87171; background: color-mix(in srgb, #f87171 12%, transparent); border-color: color-mix(in srgb, #f87171 24%, transparent); }
+
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 7px; background: transparent; border: 0; color: var(--dim); cursor: pointer; transition: background-color 0.14s, color 0.14s; flex-shrink: 0; padding: 0; }
+.icon-btn:hover { background: var(--surface-3); color: var(--fg-2); }
+.icon-btn svg { width: 14px; height: 14px; display: block; }
+
+.hopper--sell { max-width: none; }
+.hopper.is-resizing { transition: none; user-select: none; }
+
+.lh-where { overflow: hidden; }
+.lh-listed { white-space: nowrap; }
+.lh-status { }
+.sale-status { }
+
+.ledger-foot { display: flex; align-items: center; justify-content: space-between; }
+.ledger-add { padding: 8px 2px 2px; }
+.ledger-add-btn { width: 100%; justify-content: center; }
+.ledger-resize {
+  position: absolute; bottom: 4px; right: 4px; width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--dim); cursor: nwse-resize; opacity: 0.5; transition: opacity 0.14s;
+}
+.ledger-resize:hover { opacity: 1; }
+.ledger-resize svg { width: 12px; height: 12px; display: block; }
 
 /* =========================================================
    INVENTORY — catalogue of what I own
