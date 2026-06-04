@@ -217,6 +217,29 @@ export interface BuylistItem {
   addedAt: string;
 }
 
+export type SaleStatus = "listed" | "reserved" | "sold";
+export interface SaleItem {
+  id: string;
+  title: string;
+  platform: string;
+  price: number;
+  listedAt: string;
+  status: SaleStatus;
+  url?: string;
+  note?: string;
+}
+
+export type InvCategory = "Tech" | "Music" | "Photo" | "Sport" | "Home" | "Gear" | "Other";
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: InvCategory;
+  estimatedValue: number;
+  notes?: string;
+  url?: string;
+  addedAt: string;
+}
+
 export interface ShelfBackupData {
   version: number;
   layout: ShelfLayoutItem[];

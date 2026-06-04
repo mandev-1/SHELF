@@ -890,7 +890,7 @@ function GoalCard({
   );
 }
 
-export function BookmarkGrid() {
+export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = {}) {
   const { tree, error, reload } = useBookmarksTree();
   const {
     layout: savedLayout,
@@ -1065,6 +1065,7 @@ export function BookmarkGrid() {
 
   return (
     <div className="space-y-4">
+      {!bodyHidden && (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-zinc-400">Drag cards to reorder them. Drop bookmarks into a folder card to move them.</p>
         <div className="flex items-center gap-2">
@@ -1115,6 +1116,7 @@ export function BookmarkGrid() {
           </Button>
         </div>
       </div>
+      )}
       {showSettings && (
         <div
           className="fixed inset-0 z-40"
@@ -1519,6 +1521,8 @@ export function BookmarkGrid() {
           )}
         </button>
       </div>
+      {!bodyHidden && (
+      <>
       <div ref={gridRef} className="grid-stack shelf-grid pb-[2px]" data-gs-column={COLUMNS}>
         {[...folders, ...goalItems].map((node, i) => {
           const pos = layout[i];
@@ -1604,6 +1608,8 @@ export function BookmarkGrid() {
         })}
       </div>
       {moving && <p className="text-xs text-zinc-500">Moving bookmark…</p>}
+      </>
+      )}
     </div>
   );
 }

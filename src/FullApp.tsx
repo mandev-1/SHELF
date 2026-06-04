@@ -19,13 +19,14 @@ function prefetchVisualFlow() {
 const VisualFlowPanel = lazy(prefetchVisualFlow);
 import { BuylistPanel } from "./components/Hopper/BuylistPanel";
 import { StrategiePanel } from "./components/Strategie/StrategiePanel";
+import { InventoryPanel } from "./components/Inventory/InventoryPanel";
 import { pickCelebrationPhrase } from "./utils/celebration";
 import type { ShelfPillarTodoItem } from "./types/grid";
 
 const DASHBOARD_OPEN_KEY = "shelf-dashboard-view";
 const DASHBOARD_LAST_TOOL_KEY = "shelf-dashboard-last-tool";
 
-type DashboardView = "shelf" | "visual-flow" | "buylist" | "strategie";
+type DashboardView = "shelf" | "visual-flow" | "buylist" | "strategie" | "inventory";
 type LastTool = "visual-flow" | "llm-console";
 
 /** Render a greeting, styling the word "smile" (case-insensitive) in --accent-bright. */
@@ -81,7 +82,7 @@ export default function FullApp() {
   const [dashboardView, setDashboardView] = useState<DashboardView>(() => {
     try {
       const v = window.localStorage.getItem(DASHBOARD_OPEN_KEY);
-      if (v === "visual-flow" || v === "buylist" || v === "strategie") return v;
+      if (v === "visual-flow" || v === "buylist" || v === "strategie" || v === "inventory") return v;
       return "shelf";
     } catch {
       return "shelf";
@@ -131,6 +132,14 @@ export default function FullApp() {
     buylistBuyBottom,
     buylistBump,
     buylistSkip,
+    saleItems,
+    saleItemAdd,
+    saleItemUpdate,
+    saleItemRemove,
+    inventoryItems,
+    inventoryAdd,
+    inventoryUpdate,
+    inventoryRemove,
     strategieState,
     strategieSaveStatement,
     strategieAddPot,
@@ -521,6 +530,7 @@ export default function FullApp() {
                 { id: "visual-flow", label: "Visual Flow" },
                 { id: "strategie",   label: "Strategie"   },
                 { id: "buylist",     label: "Hopper"      },
+                { id: "inventory",   label: "Inventory"   },
               ] as const).map((tab) => {
                 const isActive = dashboardView === tab.id;
                 const isVF = tab.id === "visual-flow";
@@ -575,12 +585,25 @@ export default function FullApp() {
           ) : dashboardView === "buylist" ? (
             <BuylistPanel
               items={buylist}
+              saleItems={saleItems}
               onAdd={buylistAdd}
               onDiscard={buylistDiscard}
               onBuyBottom={buylistBuyBottom}
               onBump={buylistBump}
               onSkip={buylistSkip}
+              onSaleAdd={saleItemAdd}
+              onSaleUpdate={saleItemUpdate}
+              onSaleRemove={saleItemRemove}
             />
+          ) : dashboardView === "inventory" ? (
+            <div className="max-w-[1640px] mx-auto px-6 py-6">
+              <InventoryPanel
+                items={inventoryItems}
+                onAdd={inventoryAdd}
+                onUpdate={inventoryUpdate}
+                onRemove={inventoryRemove}
+              />
+            </div>
           ) : dashboardView === "visual-flow" ? (
             <div className="max-w-[1640px] mx-auto">
               <Suspense fallback={<div className="py-20 text-center text-sm text-slate-500">Loading Visual Flow…</div>}>
@@ -618,6 +641,7 @@ export default function FullApp() {
                 fullPage
               />
               </Suspense>
+              <BookmarkGrid bodyHidden />
             </div>
           ) : (
             <div className="max-w-[1640px] mx-auto">

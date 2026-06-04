@@ -26,8 +26,14 @@ import {
   type StrategieState,
   type MonthStatement,
   type MembershipRow,
+  type SaleItem,
+  type SaleStatus,
+  type InventoryItem,
+  type InvCategory,
   normalizeStrategie,
 } from "../types/grid";
+void (undefined as unknown as SaleStatus);
+void (undefined as unknown as InvCategory);
 
 const LAYOUT_KEY = "shelf-layout";
 const COLORS_KEY = "shelf-colors";
@@ -66,6 +72,8 @@ const PILLAR_TODO_PINS_KEY = "shelf-pillar-todo-pins";
 const FOCUS_DESYNCED_KEY = "shelf-focus-desynced";
 export const LOW_PERFORMANCE_MODE_KEY = "shelf-low-performance-mode";
 const BUYLIST_KEY = "shelf-buylist";
+const SALE_ITEMS_KEY = "shelf-sale-items";
+const INVENTORY_KEY = "shelf-inventory";
 const STRATEGIE_KEY = "shelf-strategie";
 
 function normalizeBuylist(raw: unknown): BuylistItem[] {
@@ -81,6 +89,50 @@ function normalizeBuylist(raw: unknown): BuylistItem[] {
       url: typeof o.url === "string" ? o.url : undefined,
       note: typeof o.note === "string" ? o.note : undefined,
       addedAt: typeof o.addedAt === "string" ? o.addedAt : new Date().toISOString(),
+    });
+  }
+  return out;
+}
+
+function normalizeSaleItems(raw: unknown): SaleItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SaleItem[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    if (typeof o.title !== "string" || !o.title.trim()) continue;
+    const status = (o.status === "listed" || o.status === "reserved" || o.status === "sold") ? o.status : "listed";
+    out.push({
+      id: typeof o.id === "string" && o.id ? o.id : crypto.randomUUID(),
+      title: o.title,
+      platform: typeof o.platform === "string" ? o.platform : "",
+      price: typeof o.price === "number" ? o.price : 0,
+      listedAt: typeof o.listedAt === "string" ? o.listedAt : new Date().toISOString().slice(0, 10),
+      status,
+      url: typeof o.url === "string" ? o.url : undefined,
+      note: typeof o.note === "string" ? o.note : undefined,
+    });
+  }
+  return out;
+}
+
+const INV_CATS = ["Tech", "Music", "Photo", "Sport", "Home", "Gear", "Other"] as const;
+function normalizeInventory(raw: unknown): InventoryItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: InventoryItem[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    if (typeof o.name !== "string" || !o.name.trim()) continue;
+    const category = INV_CATS.includes(o.category as InvCategory) ? (o.category as InvCategory) : "Other";
+    out.push({
+      id: typeof o.id === "string" && o.id ? o.id : crypto.randomUUID(),
+      name: o.name,
+      category,
+      estimatedValue: typeof o.estimatedValue === "number" ? o.estimatedValue : 0,
+      notes: typeof o.notes === "string" ? o.notes : undefined,
+      url: typeof o.url === "string" ? o.url : undefined,
+      addedAt: typeof o.addedAt === "string" ? o.addedAt : new Date().toISOString().slice(0, 10),
     });
   }
   return out;
@@ -279,6 +331,8 @@ export function useShelfStorage() {
   const [focusDesynced, setFocusDesyncedState] = useState(false);
   const [lowPerformanceMode, setLowPerformanceModeState] = useState(false);
   const [buylist, setBuylistState] = useState<BuylistItem[]>([]);
+  const [saleItems, setSaleItemsState] = useState<SaleItem[]>([]);
+  const [inventoryItems, setInventoryItemsState] = useState<InventoryItem[]>([]);
   const [strategieState, setStrategieState] = useState<StrategieState>(() => normalizeStrategie(null));
   const [ready, setReady] = useState(false);
 
@@ -321,6 +375,8 @@ export function useShelfStorage() {
         FOCUS_DESYNCED_KEY,
         LOW_PERFORMANCE_MODE_KEY,
         BUYLIST_KEY,
+        SALE_ITEMS_KEY,
+        INVENTORY_KEY,
         STRATEGIE_KEY,
       ],
       (result: { [key: string]: unknown }) => {
@@ -445,6 +501,8 @@ export function useShelfStorage() {
       setFocusDesyncedState(result[FOCUS_DESYNCED_KEY] === true);
       setLowPerformanceModeState(result[LOW_PERFORMANCE_MODE_KEY] === true);
       setBuylistState(normalizeBuylist(result[BUYLIST_KEY]));
+      setSaleItemsState(normalizeSaleItems(result[SALE_ITEMS_KEY]));
+      setInventoryItemsState(normalizeInventory(result[INVENTORY_KEY]));
       setStrategieState(normalizeStrategie(result[STRATEGIE_KEY]));
       const vf = result[VISUAL_FLOW_KEY];
       if (vf && typeof vf === "object" && !Array.isArray(vf)) {
@@ -749,6 +807,54 @@ export function useShelfStorage() {
     },
     [setBuylist]
   );
+
+  const setSaleItems = useCallback((next: SaleItem[] | ((prev: SaleItem[]) => SaleItem[])) => {
+    setSaleItemsState((prev) => {
+      const list = typeof next === "function" ? next(prev) : next;
+      getStorage()?.set({ [SALE_ITEMS_KEY]: list });
+      return list;
+    });
+  }, []);
+
+  const saleItemAdd = useCallback((item: Omit<SaleItem, "id" | "listedAt">) => {
+    setSaleItems((prev) => [{
+      ...item,
+      id: crypto.randomUUID(),
+      listedAt: new Date().toISOString().slice(0, 10),
+    }, ...prev]);
+  }, [setSaleItems]);
+
+  const saleItemUpdate = useCallback((id: string, patch: Partial<SaleItem>) => {
+    setSaleItems((prev) => prev.map((x) => x.id === id ? { ...x, ...patch } : x));
+  }, [setSaleItems]);
+
+  const saleItemRemove = useCallback((id: string) => {
+    setSaleItems((prev) => prev.filter((x) => x.id !== id));
+  }, [setSaleItems]);
+
+  const setInventory = useCallback((next: InventoryItem[] | ((prev: InventoryItem[]) => InventoryItem[])) => {
+    setInventoryItemsState((prev) => {
+      const list = typeof next === "function" ? next(prev) : next;
+      getStorage()?.set({ [INVENTORY_KEY]: list });
+      return list;
+    });
+  }, []);
+
+  const inventoryAdd = useCallback((item: Omit<InventoryItem, "id" | "addedAt">) => {
+    setInventory((prev) => [{
+      ...item,
+      id: crypto.randomUUID(),
+      addedAt: new Date().toISOString().slice(0, 10),
+    }, ...prev]);
+  }, [setInventory]);
+
+  const inventoryUpdate = useCallback((id: string, patch: Partial<InventoryItem>) => {
+    setInventory((prev) => prev.map((x) => x.id === id ? { ...x, ...patch } : x));
+  }, [setInventory]);
+
+  const inventoryRemove = useCallback((id: string) => {
+    setInventory((prev) => prev.filter((x) => x.id !== id));
+  }, [setInventory]);
 
   const setStrategie = useCallback((next: StrategieState) => {
     setStrategieState(next);
@@ -1179,6 +1285,16 @@ export function useShelfStorage() {
     buylistBuyBottom,
     buylistBump,
     buylistSkip,
+    saleItems,
+    setSaleItems,
+    saleItemAdd,
+    saleItemUpdate,
+    saleItemRemove,
+    inventoryItems,
+    setInventory,
+    inventoryAdd,
+    inventoryUpdate,
+    inventoryRemove,
     strategieState,
     setStrategie,
     strategieSaveStatement,

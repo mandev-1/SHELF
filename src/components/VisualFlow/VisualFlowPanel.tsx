@@ -13,6 +13,8 @@ import {
   BaseEdge,
   getBezierPath,
   SelectionMode,
+  Background,
+  BackgroundVariant,
   type Node,
   type Edge,
   type Connection,
@@ -931,8 +933,8 @@ function buildInitialNodes(
 
 const EDGE_STYLE = {
   stroke: "#0070f2",
-  strokeWidth: 3,
-  strokeDasharray: "12 12",
+  strokeWidth: 2.5,
+  strokeDasharray: "9 11",
   strokeLinecap: "round",
 } as const;
 
@@ -2352,9 +2354,9 @@ function VisualFlowPanelInner({
             style={{ marginRight: drawerOpen ? FOCUS_DRAWER_CARD_MARGIN : 0 }}
           >
             <div
-              className={`relative h-full min-h-[280px] rounded-xl border visual-flow-canvas shelf-flow-canvas-transition ${
-                plane === "main" ? "border-white/10" : planeMeta?.canvasClass ?? "border-white/10"
-              }`}
+              className={`relative h-full min-h-[280px] rounded-xl border visual-flow-canvas shelf-flow-canvas-transition${
+                plane === "grazeland" ? " visual-flow-canvas--graze" : plane === "bin" ? " visual-flow-canvas--bin" : ""
+              } ${plane === "main" ? "border-white/10" : planeMeta?.canvasClass ?? "border-white/10"}`}
               style={{ transform: drawerOpen ? `translateX(${FOCUS_DRAWER_CANVAS_TRANSLATE})` : "translateX(0)" }}
             >
               <ReactFlow
@@ -2365,8 +2367,8 @@ function VisualFlowPanelInner({
                 connectionMode={plane === "main" ? ConnectionMode.Strict : ConnectionMode.Loose}
                 connectionLineStyle={{
                   stroke: "#0070f2",
-                  strokeWidth: 3,
-                  strokeDasharray: "12 12",
+                  strokeWidth: 2.5,
+                  strokeDasharray: "9 11",
                   strokeLinecap: "round",
                 }}
                 onNodesChange={(ch) => {
@@ -2399,7 +2401,14 @@ function VisualFlowPanelInner({
                 proOptions={{ hideAttribution: true }}
                 minZoom={0.2}
                 maxZoom={2}
-              />
+              >
+                <Background
+                  variant={BackgroundVariant.Dots}
+                  gap={26}
+                  size={1}
+                  className="shelf-vf-dots"
+                />
+              </ReactFlow>
               {canvasItems.length === 0 && (
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-4">
                   <p className="text-sm text-zinc-400">
@@ -2413,6 +2422,33 @@ function VisualFlowPanelInner({
                   </p>
                 </div>
               )}
+            </div>
+
+            {/* Excel-style sheet tabs — switch the existing plane state */}
+            <div className="shelf-vf-sheets" role="tablist" aria-label="Canvas sheet">
+              <div
+                role="tab"
+                aria-selected={plane === "main"}
+                className={`shelf-vf-sheet-tab${plane === "main" ? " on" : ""}`}
+                onClick={() => switchPlane("main")}
+                title="Main canvas"
+              >
+                <span className="shelf-vf-sheet-name">Main canvas</span>
+              </div>
+              {SPECIAL_VISUAL_FLOW_PLANES.map((sp) => (
+                <div
+                  key={sp}
+                  role="tab"
+                  aria-selected={plane === sp}
+                  className={`shelf-vf-sheet-tab${plane === sp ? " on " + sp : ""}`}
+                  onClick={() => switchPlane(sp)}
+                  title={SPECIAL_VISUAL_FLOW_PLANE_META[sp].tabLabel}
+                >
+                  <span className="shelf-vf-sheet-name">
+                    {SPECIAL_VISUAL_FLOW_PLANE_META[sp].tabLabel}
+                  </span>
+                </div>
+              ))}
             </div>
 
             {nodeMenu && (() => {
