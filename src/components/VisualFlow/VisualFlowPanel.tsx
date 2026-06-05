@@ -1617,22 +1617,42 @@ function VisualFlowPanelInner({
     setNodes((ns) => ns.map((n) => {
       const base = (n.className ?? "").replace(/\bvf-node-dim\b/g, "").trim();
       if (!focusedNodeId) return n.className === base ? n : { ...n, className: base };
-      const connected = new Set([focusedNodeId]);
-      for (const e of currentEdges) {
-        if (e.source === focusedNodeId) connected.add(e.target);
-        if (e.target === focusedNodeId) connected.add(e.source);
+      // BFS: collect all nodes reachable from focusedNodeId following edges in either direction
+      const reachable = new Set([focusedNodeId]);
+      const queue = [focusedNodeId];
+      while (queue.length > 0) {
+        const cur = queue.shift()!;
+        for (const e of currentEdges) {
+          if (e.source === cur && !reachable.has(e.target)) { reachable.add(e.target); queue.push(e.target); }
+          if (e.target === cur && !reachable.has(e.source)) { reachable.add(e.source); queue.push(e.source); }
+        }
       }
-      const dim = !connected.has(n.id);
+      const dim = !reachable.has(n.id);
       const next = dim ? (base ? base + " vf-node-dim" : "vf-node-dim") : base;
       return n.className === next ? n : { ...n, className: next };
     }));
-    setEdges((es) => es.map((e) => {
-      const base = (e.className ?? "").replace(/\bvf-edge-dim\b/g, "").trim();
-      if (!focusedNodeId) return e.className === base ? e : { ...e, className: base };
-      const dim = e.source !== focusedNodeId && e.target !== focusedNodeId;
-      const next = dim ? (base ? base + " vf-edge-dim" : "vf-edge-dim") : base;
-      return e.className === next ? e : { ...e, className: next };
-    }));
+    setEdges((es) => {
+      if (!focusedNodeId) return es.map((e) => {
+        const base = (e.className ?? "").replace(/\bvf-edge-dim\b/g, "").trim();
+        return e.className === base ? e : { ...e, className: base };
+      });
+      // Same BFS to find lit node set, then light edges where both endpoints are in it
+      const reachable = new Set([focusedNodeId]);
+      const queue = [focusedNodeId];
+      while (queue.length > 0) {
+        const cur = queue.shift()!;
+        for (const e of es) {
+          if (e.source === cur && !reachable.has(e.target)) { reachable.add(e.target); queue.push(e.target); }
+          if (e.target === cur && !reachable.has(e.source)) { reachable.add(e.source); queue.push(e.source); }
+        }
+      }
+      return es.map((e) => {
+        const base = (e.className ?? "").replace(/\bvf-edge-dim\b/g, "").trim();
+        const dim = !reachable.has(e.source) || !reachable.has(e.target);
+        const next = dim ? (base ? base + " vf-edge-dim" : "vf-edge-dim") : base;
+        return e.className === next ? e : { ...e, className: next };
+      });
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedNodeId]);
 
