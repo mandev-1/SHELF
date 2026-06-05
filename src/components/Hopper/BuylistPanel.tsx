@@ -181,9 +181,11 @@ function SaleEditor({ sale, onSave, onClose, onDelete }: {
         </div>
 
         <div className="sm-foot">
-          <button type="button" className="sm-del" onClick={() => onDelete(sale.id)}>
-            <ITrash style={{ width: 14, height: 14 }} /> Delete
-          </button>
+          {sale.status !== "sold" && (
+            <button type="button" className="sm-del" onClick={() => onDelete(sale.id)}>
+              <ITrash style={{ width: 14, height: 14 }} /> Delete
+            </button>
+          )}
           <div className="sm-foot-r">
             <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
             <button
@@ -273,7 +275,9 @@ export function BuylistPanel({
   const cycleStatus = (id: string) => {
     const s = saleItems.find((x) => x.id === id);
     if (!s) return;
-    updateSale(id, { status: SALE_STATUS[(SALE_STATUS.indexOf(s.status) + 1) % SALE_STATUS.length] });
+    const next = SALE_STATUS[(SALE_STATUS.indexOf(s.status) + 1) % SALE_STATUS.length];
+    if (next === "sold") { setEditId(id); return; }
+    updateSale(id, { status: next });
   };
 
   const dropSale = (id: string) => { onSaleRemove(id); setEditId(null); };
@@ -469,7 +473,7 @@ export function BuylistPanel({
                     </span>
                     <span className="sale-price">{s.price.toLocaleString("cs-CZ")} {s.unit}</span>
                     <span className="sale-x">
-                      <button
+                      {s.status !== "sold" && <button
                         type="button"
                         className="icon-btn"
                         title="Remove"
@@ -477,7 +481,7 @@ export function BuylistPanel({
                         tabIndex={face === "sell" ? 0 : -1}
                       >
                         <IX style={{ width: 14, height: 14 }} />
-                      </button>
+                      </button>}
                     </span>
                   </div>
                 ))}

@@ -1,4 +1,4 @@
-import type { ShelfPillarTodoItem, VisualFlowData, VisualFlowEdge } from "../../types/grid";
+import type { SaleItem, ShelfPillarTodoItem, VisualFlowData, VisualFlowEdge } from "../../types/grid";
 
 /**
  * Render the Visual Flow as a single markdown document optimised for pasting
@@ -14,6 +14,7 @@ export interface FlowExportInput {
   pillarTodos: ShelfPillarTodoItem[];
   grazelandItems: ShelfPillarTodoItem[];
   binItems: ShelfPillarTodoItem[];
+  saleItems: SaleItem[];
   visualFlow: VisualFlowData;
 }
 
@@ -85,8 +86,22 @@ function indexById(items: ShelfPillarTodoItem[]): Map<string, ShelfPillarTodoIte
   return m;
 }
 
+function renderSaleItems(items: SaleItem[]): string {
+  if (items.length === 0) return "_(none)_\n";
+  return items
+    .map((s) => {
+      const status = s.status === "sold" ? "✓ sold" : s.status === "reserved" ? "⏳ reserved" : "🟢 listed";
+      const price = `${s.price.toLocaleString("cs-CZ")} ${s.unit}`;
+      const meta: string[] = [`status: ${status}`, `price: ${price}`];
+      if (s.where) meta.push(`where: ${s.where}`);
+      if (s.soldAt) meta.push(`sold: ${s.soldAt.slice(0, 10)}`);
+      return `- **${s.name}** — ${meta.join(" · ")}`;
+    })
+    .join("\n");
+}
+
 export function exportFlowAsMarkdown(input: FlowExportInput): string {
-  const { pillarTodos, grazelandItems, binItems, visualFlow } = input;
+  const { pillarTodos, grazelandItems, binItems, saleItems, visualFlow } = input;
   const pillarIx = indexById(pillarTodos);
   const grazeIx = indexById(grazelandItems);
   const binIx = indexById(binItems);
@@ -96,13 +111,16 @@ export function exportFlowAsMarkdown(input: FlowExportInput): string {
     (visualFlow.edges?.length ?? 0) +
     (visualFlow.grazelandEdges?.length ?? 0) +
     (visualFlow.binEdges?.length ?? 0);
+  const liveSales = saleItems.filter((s) => s.status !== "sold").length;
+  const soldSales = saleItems.length - liveSales;
 
   const sectorEntries = Object.entries(visualFlow.sectorColors ?? {});
 
   const header =
     `# ShELF Todo Network — Export for AI Consolidation\n\n` +
     `This is a structured snapshot of my todos and their relationships, exported from ShELF (a personal task/bookmark tool). I'd like you to **consolidate this**: find duplicates, suggest merges, group by theme, surface stale items, and propose a cleaner structure. Each task has a stable short ID (e.g. \`#abc12345\`) — use those when you reference items.\n\n` +
-    `**Snapshot:** ${totalTasks} task${totalTasks === 1 ? "" : "s"} across 3 planes, ${totalEdges} relationship${totalEdges === 1 ? "" : "s"}.\n\n` +
+    `**Snapshot:** ${totalTasks} task${totalTasks === 1 ? "" : "s"} across 3 planes, ${totalEdges} relationship${totalEdges === 1 ? "" : "s"}` +
+    (saleItems.length > 0 ? `, ${liveSales} active listing${liveSales === 1 ? "" : "s"} + ${soldSales} sold` : "") + `.\n\n` +
     `**Arrow notation in the relationship lists:**\n` +
     `- \`A → B\` — directed link (A leads to / depends on / produces B)\n` +
     `- \`A ↔ B\` — bidirectional / mutual\n` +
@@ -126,5 +144,9 @@ export function exportFlowAsMarkdown(input: FlowExportInput): string {
     `\n---\n\n## Bin — Archive\n\n### Tasks\n\n${renderTasks(binItems)}\n\n### Relationships\n\n${renderRelationships(visualFlow.binEdges, binIx)}\n`,
   ].join("");
 
-  return header + sectorBlock + sections;
+  const sellingSection = saleItems.length > 0
+    ? `\n---\n\n## Selling Inventory\n\n${renderSaleItems(saleItems)}\n`
+    : "";
+
+  return header + sectorBlock + sections + sellingSection;
 }

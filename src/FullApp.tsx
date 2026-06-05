@@ -120,6 +120,7 @@ export default function FullApp() {
     focusDesynced,
     grazelandItems,
     setGrazelandItems,
+    binItems,
     setBinItems,
     setPillarTodos,
     obsidianLog,
@@ -610,6 +611,8 @@ export default function FullApp() {
               <VisualFlowPanel
                 todos={pillarTodos}
                 grazelandItems={grazelandItems}
+                binItems={binItems}
+                saleItems={saleItems}
                 showTodoDates={showTodoDates}
                 visualFlow={visualFlow}
                 onVisualFlowChange={setVisualFlow}

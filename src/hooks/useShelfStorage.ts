@@ -553,6 +553,12 @@ export function useShelfStorage() {
           binEdges: parseEdges(raw.binEdges),
           ...(binNodeSizes && { binNodeSizes }),
           ...(sectorColors && { sectorColors }),
+          ...(Array.isArray(raw.customPlanes) ? { customPlanes: raw.customPlanes as { id: string; name: string }[] } : {}),
+          ...(raw.customPlaneItems && typeof raw.customPlaneItems === "object" ? { customPlaneItems: raw.customPlaneItems as Record<string, import("../types/grid").ShelfPillarTodoItem[]> } : {}),
+          ...(raw.customPlaneNodePositions && typeof raw.customPlaneNodePositions === "object" ? { customPlaneNodePositions: raw.customPlaneNodePositions as Record<string, Record<string, { x: number; y: number }>> } : {}),
+          ...(raw.customPlaneEdges && typeof raw.customPlaneEdges === "object" ? { customPlaneEdges: raw.customPlaneEdges as Record<string, import("../types/grid").VisualFlowEdge[]> } : {}),
+          ...(raw.customPlaneNodeSizes && typeof raw.customPlaneNodeSizes === "object" ? { customPlaneNodeSizes: raw.customPlaneNodeSizes as Record<string, Record<string, import("../types/grid").VisualFlowNodeSize>> } : {}),
+          ...(raw.planeViewports && typeof raw.planeViewports === "object" ? { planeViewports: raw.planeViewports as Record<string, { x: number; y: number; zoom: number }> } : {}),
         });
       }
       setReady(true);
@@ -1130,8 +1136,9 @@ export function useShelfStorage() {
       lowPerformanceMode,
       buylist,
       strategie: strategieState,
+      saleItems,
     };
-  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, strategieState]);
+  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -1181,6 +1188,7 @@ export function useShelfStorage() {
     if (typeof backup.lowPerformanceMode === "boolean") setLowPerformanceModeState(backup.lowPerformanceMode);
     if (Array.isArray(backup.buylist)) setBuylist(backup.buylist as BuylistItem[]);
     if (backup.strategie) setStrategie(normalizeStrategie(backup.strategie));
+    if (Array.isArray(backup.saleItems)) setSaleItems(normalizeSaleItems(backup.saleItems));
 
     getStorage()?.set({
       [LAYOUT_KEY]: backup.layout ?? layout,
@@ -1216,8 +1224,9 @@ export function useShelfStorage() {
       [LOW_PERFORMANCE_MODE_KEY]: typeof backup.lowPerformanceMode === "boolean" ? backup.lowPerformanceMode : lowPerformanceMode,
       [BUYLIST_KEY]: Array.isArray(backup.buylist) ? backup.buylist : buylist,
       [STRATEGIE_KEY]: backup.strategie ? normalizeStrategie(backup.strategie) : strategieState,
+      [SALE_ITEMS_KEY]: Array.isArray(backup.saleItems) ? normalizeSaleItems(backup.saleItems) : saleItems,
     });
-  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setGrazelandItems, strategieState, setStrategie]);
+  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setGrazelandItems, setSaleItems, strategieState, setStrategie]);
 
   return {
     layout,

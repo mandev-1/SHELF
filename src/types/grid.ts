@@ -167,6 +167,8 @@ export type BookmarkSize = "normal" | "senior";
 export type VisualFlowEdge = {
   source: string;
   target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
   arrow?: boolean;
   doubled?: boolean;
   muted?: boolean;
@@ -192,6 +194,14 @@ export interface VisualFlowData {
   binNodeSizes?: Record<string, VisualFlowNodeSize>;
   /** Sector label → border color; applies to all tasks with that sector name on both planes */
   sectorColors?: Record<string, SectorColorKey>;
+  /** User-created custom planes beyond the three built-ins */
+  customPlanes?: { id: string; name: string }[];
+  customPlaneItems?: Record<string, ShelfPillarTodoItem[]>;
+  customPlaneNodePositions?: Record<string, Record<string, { x: number; y: number }>>;
+  customPlaneEdges?: Record<string, VisualFlowEdge[]>;
+  customPlaneNodeSizes?: Record<string, Record<string, VisualFlowNodeSize>>;
+  /** Saved viewport (pan + zoom) per plane id */
+  planeViewports?: Record<string, { x: number; y: number; zoom: number }>;
 }
 
 /** Border/handle color for a node: managed sector map wins, then per-task `sectorColor`. */
@@ -276,6 +286,7 @@ export interface ShelfBackupData {
   /** Builist (TEMP) — buylist hopper stack */
   buylist?: BuylistItem[];
   strategie?: StrategieState;
+  saleItems?: SaleItem[];
 }
 
 export type CatKey = "housing" | "food" | "transport" | "home" | "fun" | "health" | "shopping" | "other";
