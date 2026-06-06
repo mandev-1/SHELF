@@ -1237,6 +1237,57 @@ function VisualFlowPanelInner({
   const [renamingPlaneId, setRenamingPlaneId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
+  // Undo stack for visualFlow snapshots. Covers position/edge changes on every
+  // plane, custom-plane item add/delete/edit, sector colors, plane registry
+  // edits, and viewport changes — anything that flows through onUpdateVisualFlow.
+  // Does NOT cover item add/edit on main/grazeland/bin planes (those mutations
+  // go through pillarTodos / grazelandItems / binItems, outside this object).
+  const undoStackRef = useRef<VisualFlowData[]>([]);
+  const prevVisualFlowRef = useRef<VisualFlowData>(visualFlow);
+  const undoMountedRef = useRef(false);
+  const skipNextUndoSnapshotRef = useRef(false);
+  const UNDO_LIMIT = 50;
+
+  useEffect(() => {
+    // Skip the initial hydration so the first user action isn't an undo of "load".
+    if (!undoMountedRef.current) {
+      undoMountedRef.current = true;
+      prevVisualFlowRef.current = visualFlow;
+      return;
+    }
+    // Skip snapshots produced by an undo apply — otherwise Ctrl+Z would just
+    // pingpong between the two most-recent states.
+    if (skipNextUndoSnapshotRef.current) {
+      skipNextUndoSnapshotRef.current = false;
+      prevVisualFlowRef.current = visualFlow;
+      return;
+    }
+    if (prevVisualFlowRef.current !== visualFlow) {
+      undoStackRef.current.push(prevVisualFlowRef.current);
+      if (undoStackRef.current.length > UNDO_LIMIT) undoStackRef.current.shift();
+      prevVisualFlowRef.current = visualFlow;
+    }
+  }, [visualFlow]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z" || e.shiftKey) return;
+      // Defer to the input/textarea's own undo when text is being edited.
+      const a = document.activeElement;
+      if (a instanceof HTMLElement) {
+        const tag = a.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || a.isContentEditable) return;
+      }
+      const prev = undoStackRef.current.pop();
+      if (!prev) return;
+      e.preventDefault();
+      skipNextUndoSnapshotRef.current = true;
+      onUpdateVisualFlow(() => prev);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onUpdateVisualFlow]);
+
   useEffect(() => {
     return () => {
       if (exportToastTimerRef.current !== null) window.clearTimeout(exportToastTimerRef.current);
@@ -1848,17 +1899,20 @@ function VisualFlowPanelInner({
   useEffect(() => {
     if (!nodeMenu) return;
     const close = (e: MouseEvent) => {
+      if (e.button !== 0) return; // left-button only — leave right-click reopens to onContextMenu
       const target = e.target;
       if (menuRef.current && target instanceof HTMLElement && !menuRef.current.contains(target))
         setNodeMenu(null);
     };
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
+    // mousedown rather than click so drags (which never produce a `click`) also dismiss the menu.
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
   }, [nodeMenu]);
 
   useEffect(() => {
     if (!paneMenu) return;
     const close = (e: MouseEvent) => {
+      if (e.button !== 0) return;
       const target = e.target;
       if (
         paneMenuRef.current &&
@@ -1867,8 +1921,8 @@ function VisualFlowPanelInner({
       )
         setPaneMenu(null);
     };
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
   }, [paneMenu]);
 
   useEffect(() => {
@@ -1883,6 +1937,7 @@ function VisualFlowPanelInner({
   useEffect(() => {
     if (!edgeMenu) return;
     const close = (e: MouseEvent) => {
+      if (e.button !== 0) return;
       const target = e.target;
       if (
         edgeMenuRef.current &&
@@ -1891,8 +1946,8 @@ function VisualFlowPanelInner({
       )
         setEdgeMenu(null);
     };
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
   }, [edgeMenu]);
 
   useEffect(() => {
@@ -1910,6 +1965,7 @@ function VisualFlowPanelInner({
   useEffect(() => {
     if (!drawerMenu) return;
     const close = (e: MouseEvent) => {
+      if (e.button !== 0) return;
       const target = e.target;
       if (
         drawerMenuRef.current &&
@@ -1918,8 +1974,8 @@ function VisualFlowPanelInner({
       )
         setDrawerMenu(null);
     };
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
   }, [drawerMenu]);
 
   const onPaneContextMenu = useCallback(
