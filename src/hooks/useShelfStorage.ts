@@ -23,7 +23,17 @@ import {
   type VisualFlowData,
   type VisualFlowNodeSize,
   type BuylistItem,
+  type StrategieState,
+  type MonthStatement,
+  type MembershipRow,
+  type SaleItem,
+  type SaleStatus,
+  type InventoryItem,
+  type InvCategory,
+  normalizeStrategie,
 } from "../types/grid";
+void (undefined as unknown as SaleStatus);
+void (undefined as unknown as InvCategory);
 
 const LAYOUT_KEY = "shelf-layout";
 const COLORS_KEY = "shelf-colors";
@@ -44,6 +54,14 @@ const PROMPTS_KEY = "shelf-prompts";
 const GRID_LOCKED_KEY = "grid-locked";
 const PROMPT_ROWS_KEY = "prompt-rows";
 const THEME_KEY = "shelf-theme";
+const ACCENT_KEY = "shelf-accent"; // legacy: single accent value, kept for migration read
+const ACCENT_BY_THEME_KEY = "shelf-accent-by-theme"; // Record<themeName, hex>
+
+const DEFAULT_ACCENT_BY_THEME: Record<string, string> = {
+  dark: "#16b981",
+  day: "#d97706",
+  sap: "#0070f2",
+};
 const BOOKMARK_SIZE_KEY = "bookmark-size";
 const VISUAL_FLOW_KEY = "shelf-visual-flow";
 const GRAZELAND_ITEMS_KEY = "shelf-grazeland-items";
@@ -54,6 +72,9 @@ const PILLAR_TODO_PINS_KEY = "shelf-pillar-todo-pins";
 const FOCUS_DESYNCED_KEY = "shelf-focus-desynced";
 export const LOW_PERFORMANCE_MODE_KEY = "shelf-low-performance-mode";
 const BUYLIST_KEY = "shelf-buylist";
+const SALE_ITEMS_KEY = "shelf-sale-items";
+const INVENTORY_KEY = "shelf-inventory";
+const STRATEGIE_KEY = "shelf-strategie";
 
 function normalizeBuylist(raw: unknown): BuylistItem[] {
   if (!Array.isArray(raw)) return [];
@@ -68,6 +89,55 @@ function normalizeBuylist(raw: unknown): BuylistItem[] {
       url: typeof o.url === "string" ? o.url : undefined,
       note: typeof o.note === "string" ? o.note : undefined,
       addedAt: typeof o.addedAt === "string" ? o.addedAt : new Date().toISOString(),
+    });
+  }
+  return out;
+}
+
+function normalizeSaleItems(raw: unknown): SaleItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SaleItem[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    const name = typeof o.name === "string" ? o.name.trim() : (typeof o.title === "string" ? o.title.trim() : "");
+    if (!name) continue;
+    const status = (o.status === "listed" || o.status === "reserved" || o.status === "sold") ? o.status : "listed";
+    const now = new Date().toISOString().slice(0, 19);
+    out.push({
+      id: typeof o.id === "string" && o.id ? o.id : crypto.randomUUID(),
+      name,
+      where: typeof o.where === "string" ? o.where : (typeof o.platform === "string" ? o.platform : ""),
+      price: typeof o.price === "number" ? o.price : 0,
+      unit: typeof o.unit === "string" ? o.unit : "Kč",
+      status,
+      url: typeof o.url === "string" ? o.url : undefined,
+      createdAt: typeof o.createdAt === "string" ? o.createdAt : (typeof o.listedAt === "string" ? o.listedAt : now),
+      updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : now,
+      soldAt: typeof o.soldAt === "string" ? o.soldAt : null,
+      history: Array.isArray(o.history) ? (o.history as { at: string; text: string }[]).filter((h) => h && typeof h.at === "string" && typeof h.text === "string") : [],
+    });
+  }
+  return out;
+}
+
+const INV_CATS = ["Tech", "Music", "Photo", "Sport", "Home", "Gear", "Other"] as const;
+function normalizeInventory(raw: unknown): InventoryItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: InventoryItem[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    if (typeof o.name !== "string" || !o.name.trim()) continue;
+    const category = INV_CATS.includes(o.category as InvCategory) ? (o.category as InvCategory) : "Other";
+    out.push({
+      id: typeof o.id === "string" && o.id ? o.id : crypto.randomUUID(),
+      name: o.name,
+      category,
+      estimatedValue: typeof o.estimatedValue === "number" ? o.estimatedValue : 0,
+      notes: typeof o.notes === "string" ? o.notes : undefined,
+      url: typeof o.url === "string" ? o.url : undefined,
+      addedAt: typeof o.addedAt === "string" ? o.addedAt : new Date().toISOString().slice(0, 10),
     });
   }
   return out;
@@ -254,6 +324,7 @@ export function useShelfStorage() {
   const [gridLocked, setGridLocked] = useState(false);
   const [promptRows, setPromptRows] = useState<1 | 2>(1);
   const [theme, setThemeState] = useState<ShelfTheme>("auto");
+  const [accentByTheme, setAccentByThemeState] = useState<Record<string, string>>(DEFAULT_ACCENT_BY_THEME);
   const [timeTick, setTimeTick] = useState(() => Date.now());
   const [bookmarkSize, setBookmarkSizeState] = useState<BookmarkSize>("normal");
   const [visualFlow, setVisualFlowState] = useState<VisualFlowData>({});
@@ -265,6 +336,9 @@ export function useShelfStorage() {
   const [focusDesynced, setFocusDesyncedState] = useState(false);
   const [lowPerformanceMode, setLowPerformanceModeState] = useState(false);
   const [buylist, setBuylistState] = useState<BuylistItem[]>([]);
+  const [saleItems, setSaleItemsState] = useState<SaleItem[]>([]);
+  const [inventoryItems, setInventoryItemsState] = useState<InventoryItem[]>([]);
+  const [strategieState, setStrategieState] = useState<StrategieState>(() => normalizeStrategie(null));
   const [ready, setReady] = useState(false);
 
   const load = useCallback(() => {
@@ -294,6 +368,8 @@ export function useShelfStorage() {
         GRID_LOCKED_KEY,
         PROMPT_ROWS_KEY,
         THEME_KEY,
+        ACCENT_KEY,
+        ACCENT_BY_THEME_KEY,
         BOOKMARK_SIZE_KEY,
         VISUAL_FLOW_KEY,
         GRAZELAND_ITEMS_KEY,
@@ -304,6 +380,9 @@ export function useShelfStorage() {
         FOCUS_DESYNCED_KEY,
         LOW_PERFORMANCE_MODE_KEY,
         BUYLIST_KEY,
+        SALE_ITEMS_KEY,
+        INVENTORY_KEY,
+        STRATEGIE_KEY,
       ],
       (result: { [key: string]: unknown }) => {
       setLayout(Array.isArray(result[LAYOUT_KEY]) ? (result[LAYOUT_KEY] as ShelfLayoutItem[]) : []);
@@ -388,6 +467,29 @@ export function useShelfStorage() {
       setPromptRows(result[PROMPT_ROWS_KEY] === 2 ? 2 : 1);
       const t = result[THEME_KEY];
       setThemeState(t === "dark" || t === "day" || t === "sap" || t === "auto" ? t : "auto");
+      // Per-theme accent map: prefer new key; fall back to migrating the old single-value key
+      const abtRaw = result[ACCENT_BY_THEME_KEY];
+      if (abtRaw && typeof abtRaw === "object" && !Array.isArray(abtRaw)) {
+        const next: Record<string, string> = { ...DEFAULT_ACCENT_BY_THEME };
+        for (const [k, v] of Object.entries(abtRaw as Record<string, unknown>)) {
+          if (typeof v === "string" && v.startsWith("#")) next[k] = v;
+        }
+        setAccentByThemeState(next);
+      } else {
+        // Migration: seed map from legacy single-value accent (applied to current theme),
+        // defaults for the rest.
+        const legacy = result[ACCENT_KEY];
+        const seed = { ...DEFAULT_ACCENT_BY_THEME };
+        if (typeof legacy === "string" && legacy.startsWith("#")) {
+          const themeForLegacy = (result[THEME_KEY] === "day" || result[THEME_KEY] === "sap")
+            ? (result[THEME_KEY] as "day" | "sap")
+            : "dark";
+          seed[themeForLegacy] = legacy;
+        }
+        setAccentByThemeState(seed);
+        // Persist the migrated map so subsequent loads use the new key
+        getStorage()?.set({ [ACCENT_BY_THEME_KEY]: seed });
+      }
       const bs = result[BOOKMARK_SIZE_KEY];
       setBookmarkSizeState(bs === "senior" ? "senior" : "normal");
       const rawUrl = result[LLM_CONSOLE_URL_KEY];
@@ -404,6 +506,9 @@ export function useShelfStorage() {
       setFocusDesyncedState(result[FOCUS_DESYNCED_KEY] === true);
       setLowPerformanceModeState(result[LOW_PERFORMANCE_MODE_KEY] === true);
       setBuylistState(normalizeBuylist(result[BUYLIST_KEY]));
+      setSaleItemsState(normalizeSaleItems(result[SALE_ITEMS_KEY]));
+      setInventoryItemsState(normalizeInventory(result[INVENTORY_KEY]));
+      setStrategieState(normalizeStrategie(result[STRATEGIE_KEY]));
       const vf = result[VISUAL_FLOW_KEY];
       if (vf && typeof vf === "object" && !Array.isArray(vf)) {
         const raw = vf as Record<string, unknown>;
@@ -448,6 +553,12 @@ export function useShelfStorage() {
           binEdges: parseEdges(raw.binEdges),
           ...(binNodeSizes && { binNodeSizes }),
           ...(sectorColors && { sectorColors }),
+          ...(Array.isArray(raw.customPlanes) ? { customPlanes: raw.customPlanes as { id: string; name: string }[] } : {}),
+          ...(raw.customPlaneItems && typeof raw.customPlaneItems === "object" ? { customPlaneItems: raw.customPlaneItems as Record<string, import("../types/grid").ShelfPillarTodoItem[]> } : {}),
+          ...(raw.customPlaneNodePositions && typeof raw.customPlaneNodePositions === "object" ? { customPlaneNodePositions: raw.customPlaneNodePositions as Record<string, Record<string, { x: number; y: number }>> } : {}),
+          ...(raw.customPlaneEdges && typeof raw.customPlaneEdges === "object" ? { customPlaneEdges: raw.customPlaneEdges as Record<string, import("../types/grid").VisualFlowEdge[]> } : {}),
+          ...(raw.customPlaneNodeSizes && typeof raw.customPlaneNodeSizes === "object" ? { customPlaneNodeSizes: raw.customPlaneNodeSizes as Record<string, Record<string, import("../types/grid").VisualFlowNodeSize>> } : {}),
+          ...(raw.planeViewports && typeof raw.planeViewports === "object" ? { planeViewports: raw.planeViewports as Record<string, { x: number; y: number; zoom: number }> } : {}),
         });
       }
       setReady(true);
@@ -457,6 +568,40 @@ export function useShelfStorage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /* Cross-hook-instance sync: when one component writes a setting to
+     chrome.storage.local, other components calling useShelfStorage() in
+     the same tab should pick it up live. Listen to onChanged for the keys
+     that cross instance boundaries (theme/accent/shelf name). */
+  useEffect(() => {
+    if (typeof chrome === "undefined" || !chrome.storage?.onChanged) return;
+    const listener = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string
+    ) => {
+      if (areaName !== "local") return;
+      if (changes[THEME_KEY]) {
+        const v = changes[THEME_KEY].newValue;
+        if (v === "dark" || v === "day" || v === "sap" || v === "auto") setThemeState(v);
+      }
+      if (changes[ACCENT_BY_THEME_KEY]) {
+        const v = changes[ACCENT_BY_THEME_KEY].newValue;
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          const next: Record<string, string> = { ...DEFAULT_ACCENT_BY_THEME };
+          for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+            if (typeof val === "string" && val.startsWith("#")) next[k] = val;
+          }
+          setAccentByThemeState(next);
+        }
+      }
+      if (changes[SHELF_NAME_KEY]) {
+        const v = changes[SHELF_NAME_KEY].newValue;
+        if (typeof v === "string") setShelfNameState(v);
+      }
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, []);
 
   /* Update every minute so "auto" theme switches at 08:00 and 21:40 */
   useEffect(() => {
@@ -476,6 +621,11 @@ export function useShelfStorage() {
           return totalMin < darkUntil || totalMin >= darkFrom ? "dark" : "sap";
         })()
       : theme;
+
+  // Derived: the accent for the currently-resolved theme.
+  // Each theme remembers its own accent via the accentByTheme map.
+  const accent: string =
+    accentByTheme[resolvedTheme] ?? DEFAULT_ACCENT_BY_THEME[resolvedTheme] ?? "#16b981";
 
   const saveLayout = useCallback((items: ShelfLayoutItem[]) => {
     setLayout(items);
@@ -645,6 +795,129 @@ export function useShelfStorage() {
     setBuylist((prev) => (prev.length === 0 ? prev : prev.slice(0, -1)));
   }, [setBuylist]);
 
+  // Move a puck to the end of the queue (it becomes the tray / next-to-buy).
+  const buylistBump = useCallback(
+    (id: string) => {
+      setBuylist((prev) => {
+        const it = prev.find((x) => x.id === id);
+        if (!it) return prev;
+        return [...prev.filter((x) => x.id !== id), it];
+      });
+    },
+    [setBuylist]
+  );
+
+  // Move an item back to the top of the queue (used by the tray's "Not yet" action).
+  const buylistSkip = useCallback(
+    (id: string) => {
+      setBuylist((prev) => {
+        const it = prev.find((x) => x.id === id);
+        if (!it) return prev;
+        return [it, ...prev.filter((x) => x.id !== id)];
+      });
+    },
+    [setBuylist]
+  );
+
+  const setSaleItems = useCallback((next: SaleItem[] | ((prev: SaleItem[]) => SaleItem[])) => {
+    setSaleItemsState((prev) => {
+      const list = typeof next === "function" ? next(prev) : next;
+      getStorage()?.set({ [SALE_ITEMS_KEY]: list });
+      return list;
+    });
+  }, []);
+
+  const saleItemAdd = useCallback((item: Omit<SaleItem, "id">) => {
+    setSaleItems((prev) => [{
+      ...item,
+      id: crypto.randomUUID(),
+    }, ...prev]);
+  }, [setSaleItems]);
+
+  const saleItemUpdate = useCallback((id: string, patch: Partial<SaleItem>) => {
+    setSaleItems((prev) => prev.map((x) => x.id === id ? { ...x, ...patch } : x));
+  }, [setSaleItems]);
+
+  const saleItemRemove = useCallback((id: string) => {
+    setSaleItems((prev) => prev.filter((x) => x.id !== id));
+  }, [setSaleItems]);
+
+  const setInventory = useCallback((next: InventoryItem[] | ((prev: InventoryItem[]) => InventoryItem[])) => {
+    setInventoryItemsState((prev) => {
+      const list = typeof next === "function" ? next(prev) : next;
+      getStorage()?.set({ [INVENTORY_KEY]: list });
+      return list;
+    });
+  }, []);
+
+  const inventoryAdd = useCallback((item: Omit<InventoryItem, "id" | "addedAt">) => {
+    setInventory((prev) => [{
+      ...item,
+      id: crypto.randomUUID(),
+      addedAt: new Date().toISOString().slice(0, 10),
+    }, ...prev]);
+  }, [setInventory]);
+
+  const inventoryUpdate = useCallback((id: string, patch: Partial<InventoryItem>) => {
+    setInventory((prev) => prev.map((x) => x.id === id ? { ...x, ...patch } : x));
+  }, [setInventory]);
+
+  const inventoryRemove = useCallback((id: string) => {
+    setInventory((prev) => prev.filter((x) => x.id !== id));
+  }, [setInventory]);
+
+  const setStrategie = useCallback((next: StrategieState) => {
+    setStrategieState(next);
+    getStorage()?.set({ [STRATEGIE_KEY]: next });
+  }, []);
+
+  const strategieSaveStatement = useCallback(
+    (
+      book: Record<string, MonthStatement>,
+      order: string[],
+      active: string,
+      memberships?: MembershipRow[],
+    ) => {
+      setStrategieState((prev) => {
+        const next: StrategieState = {
+          ...prev,
+          statements: { current: active, order, byMonth: book },
+          memberships: memberships ?? prev.memberships,
+        };
+        getStorage()?.set({ [STRATEGIE_KEY]: next });
+        return next;
+      });
+    },
+    []
+  );
+
+  const strategieAddPot = useCallback(
+    (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setStrategieState((prev) => {
+        const next: StrategieState = {
+          ...prev,
+          pots: [
+            ...prev.pots,
+            { id: crypto.randomUUID(), name: trimmed, target: 0, saved: 0, monthly: 0, fromHopper: false },
+          ],
+        };
+        getStorage()?.set({ [STRATEGIE_KEY]: next });
+        return next;
+      });
+    },
+    []
+  );
+
+  const strategieSetCurrency = useCallback((c: string) => {
+    setStrategieState((prev) => {
+      const next: StrategieState = { ...prev, currency: c };
+      getStorage()?.set({ [STRATEGIE_KEY]: next });
+      return next;
+    });
+  }, []);
+
   const saveGoals = useCallback((next: ShelfGoalMap) => {
     setGoals(next);
     getStorage()?.set({ [GOALS_KEY]: next });
@@ -689,6 +962,17 @@ export function useShelfStorage() {
     setBookmarkSizeState(next);
     getStorage()?.set({ [BOOKMARK_SIZE_KEY]: next });
   }, []);
+
+  // Writes the picked accent to the slot for the currently-resolved theme.
+  // Each theme remembers its own accent independently.
+  const setAccent = useCallback((next: string) => {
+    const normalized = next.startsWith("#") ? next : "#16b981";
+    setAccentByThemeState((prev) => {
+      const updated = { ...prev, [resolvedTheme]: normalized };
+      getStorage()?.set({ [ACCENT_BY_THEME_KEY]: updated });
+      return updated;
+    });
+  }, [resolvedTheme]);
 
   const setVisualFlow = useCallback((next: VisualFlowData) => {
     setVisualFlowState(next);
@@ -851,8 +1135,10 @@ export function useShelfStorage() {
       focusDesynced,
       lowPerformanceMode,
       buylist,
+      strategie: strategieState,
+      saleItems,
     };
-  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems]);
+  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -901,6 +1187,8 @@ export function useShelfStorage() {
     if (typeof backup.focusDesynced === "boolean") setFocusDesyncedState(backup.focusDesynced);
     if (typeof backup.lowPerformanceMode === "boolean") setLowPerformanceModeState(backup.lowPerformanceMode);
     if (Array.isArray(backup.buylist)) setBuylist(backup.buylist as BuylistItem[]);
+    if (backup.strategie) setStrategie(normalizeStrategie(backup.strategie));
+    if (Array.isArray(backup.saleItems)) setSaleItems(normalizeSaleItems(backup.saleItems));
 
     getStorage()?.set({
       [LAYOUT_KEY]: backup.layout ?? layout,
@@ -935,8 +1223,10 @@ export function useShelfStorage() {
       [FOCUS_DESYNCED_KEY]: typeof backup.focusDesynced === "boolean" ? backup.focusDesynced : focusDesynced,
       [LOW_PERFORMANCE_MODE_KEY]: typeof backup.lowPerformanceMode === "boolean" ? backup.lowPerformanceMode : lowPerformanceMode,
       [BUYLIST_KEY]: Array.isArray(backup.buylist) ? backup.buylist : buylist,
+      [STRATEGIE_KEY]: backup.strategie ? normalizeStrategie(backup.strategie) : strategieState,
+      [SALE_ITEMS_KEY]: Array.isArray(backup.saleItems) ? normalizeSaleItems(backup.saleItems) : saleItems,
     });
-  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setGrazelandItems]);
+  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setGrazelandItems, setSaleItems, strategieState, setStrategie]);
 
   return {
     layout,
@@ -991,6 +1281,8 @@ export function useShelfStorage() {
     theme,
     resolvedTheme,
     setTheme,
+    accent,
+    setAccent,
     bookmarkSize,
     setBookmarkSize,
     visualFlow,
@@ -1004,6 +1296,23 @@ export function useShelfStorage() {
     buylistAdd,
     buylistDiscard,
     buylistBuyBottom,
+    buylistBump,
+    buylistSkip,
+    saleItems,
+    setSaleItems,
+    saleItemAdd,
+    saleItemUpdate,
+    saleItemRemove,
+    inventoryItems,
+    setInventory,
+    inventoryAdd,
+    inventoryUpdate,
+    inventoryRemove,
+    strategieState,
+    setStrategie,
+    strategieSaveStatement,
+    strategieAddPot,
+    strategieSetCurrency,
     llmConsoleUrl,
     setLlmConsoleUrl,
     showBothNavButtons,

@@ -1,5 +1,5 @@
-import { Input, SearchField, Surface } from "@heroui/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Input } from "@heroui/react";
+import { useCallback, useEffect, useRef, useState, lazy, Suspense } from "react";
 import { useBookmarksSearch } from "./hooks/useBookmarks";
 import { useBookmarksTree } from "./hooks/useBookmarks";
 import { BookmarkGrid } from "./components/BookmarkGrid";
@@ -7,16 +7,40 @@ import { SearchResults } from "./components/SearchResults";
 import { useShelfStorage } from "./hooks/useShelfStorage";
 import { PromptLibraryCard } from "./components/PromptLibraryCard";
 import { Pillar } from "./components/Pillar";
-import { VisualFlowPanel } from "./components/VisualFlowPanel";
-import { BuylistPanel } from "./components/BuylistPanel";
+// Lazy + prefetch: split the React Flow chunk, but warm it in the background
+// (idle time + hover/focus on the nav button) so the click feels instant.
+let _visualFlowPromise: Promise<{ default: typeof import("./components/VisualFlow/VisualFlowPanel")["VisualFlowPanel"] }> | null = null;
+function prefetchVisualFlow() {
+  if (!_visualFlowPromise) {
+    _visualFlowPromise = import("./components/VisualFlow/VisualFlowPanel").then((m) => ({ default: m.VisualFlowPanel }));
+  }
+  return _visualFlowPromise;
+}
+const VisualFlowPanel = lazy(prefetchVisualFlow);
+import { BuylistPanel } from "./components/Hopper/BuylistPanel";
+import { StrategiePanel } from "./components/Strategie/StrategiePanel";
+import { InventoryPanel } from "./components/Inventory/InventoryPanel";
 import { pickCelebrationPhrase } from "./utils/celebration";
 import type { ShelfPillarTodoItem } from "./types/grid";
 
 const DASHBOARD_OPEN_KEY = "shelf-dashboard-view";
 const DASHBOARD_LAST_TOOL_KEY = "shelf-dashboard-last-tool";
 
-type DashboardView = "shelf" | "visual-flow" | "buylist";
+type DashboardView = "shelf" | "visual-flow" | "buylist" | "strategie" | "inventory";
 type LastTool = "visual-flow" | "llm-console";
+
+/** Render a greeting, styling the word "smile" (case-insensitive) in --accent-bright. */
+function renderGreeting(text: string) {
+  if (!text) return null;
+  const parts = text.split(/(smile)/i);
+  return parts.map((part, i) =>
+    /^smile$/i.test(part) ? (
+      <span key={i} className="smile">{part}</span>
+    ) : (
+      <span key={i}>{part}</span>
+    )
+  );
+}
 
 function openLLMConsoleOverlay(url: string) {
   const resolved = (url || "https://example.org").trim();
@@ -32,11 +56,33 @@ function openLLMConsoleOverlay(url: string) {
 }
 
 export default function FullApp() {
+  // Warm the Visual Flow chunk during idle time after mount so the user's first
+  // click on the tab loads instantly. Browsers that lack requestIdleCallback fall
+  // back to a short timeout.
+  useEffect(() => {
+    type IdleWindow = Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (h: number) => void;
+    };
+    const w = window as IdleWindow;
+    let idleHandle: number | undefined;
+    let timeoutHandle: number | undefined;
+    if (typeof w.requestIdleCallback === "function") {
+      idleHandle = w.requestIdleCallback(() => { prefetchVisualFlow(); }, { timeout: 4000 });
+    } else {
+      timeoutHandle = window.setTimeout(() => { prefetchVisualFlow(); }, 1500);
+    }
+    return () => {
+      if (idleHandle !== undefined && typeof w.cancelIdleCallback === "function") w.cancelIdleCallback(idleHandle);
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    };
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [dashboardView, setDashboardView] = useState<DashboardView>(() => {
     try {
       const v = window.localStorage.getItem(DASHBOARD_OPEN_KEY);
-      if (v === "visual-flow" || v === "buylist") return v;
+      if (v === "visual-flow" || v === "buylist" || v === "strategie" || v === "inventory") return v;
       return "shelf";
     } catch {
       return "shelf";
@@ -56,6 +102,7 @@ export default function FullApp() {
     shelfName,
     setShelfName,
     resolvedTheme,
+    accent,
     pillarTodos,
     showTodoDates,
     visualFlow,
@@ -73,19 +120,47 @@ export default function FullApp() {
     focusDesynced,
     grazelandItems,
     setGrazelandItems,
+    binItems,
     setBinItems,
     setPillarTodos,
     obsidianLog,
     logToObsidian,
     appendTaskLog,
     llmConsoleUrl,
-    showBothNavButtons,
     buylist,
     buylistAdd,
     buylistDiscard,
     buylistBuyBottom,
+    buylistBump,
+    buylistSkip,
+    saleItems,
+    saleItemAdd,
+    saleItemUpdate,
+    saleItemRemove,
+    inventoryItems,
+    inventoryAdd,
+    inventoryUpdate,
+    inventoryRemove,
+    strategieState,
+    strategieSaveStatement,
+    strategieAddPot,
+    strategieSetCurrency,
   } = useShelfStorage();
   const [editingName, setEditingName] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ⌘K / Ctrl+K → focus the topbar search input
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
   const [pendingEditPromptId, setPendingEditPromptId] = useState<string | null>(null);
   const [celebration, setCelebration] = useState<string | null>(null);
   const celebrationTimerRef = useRef<number | null>(null);
@@ -203,8 +278,40 @@ export default function FullApp() {
   }, [dashboardView]);
 
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", resolvedTheme);
+    const root = document.documentElement;
+    root.classList.add("no-transition");
+    root.setAttribute("data-theme", resolvedTheme);
+    const id = requestAnimationFrame(() =>
+      requestAnimationFrame(() => root.classList.remove("no-transition"))
+    );
+    return () => cancelAnimationFrame(id);
   }, [resolvedTheme]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const accentPalettes: Record<string, { bright: string; deep: string; ink: string }> = {
+      "#16b981": { bright: "#34d399", deep: "#0c8f66", ink: "#d4f3e7" },
+      "#5b9cff": { bright: "#8bb8ff", deep: "#3a6fd0", ink: "#d6e6ff" },
+      "#c98bff": { bright: "#dcb0ff", deep: "#9d5fd6", ink: "#eedcff" },
+      "#e0905a": { bright: "#f2ad7d", deep: "#bf6f3c", ink: "#f8e3d3" },
+      "#d97706": { bright: "#f59e0b", deep: "#b45309", ink: "#7c4a0c" },
+      "#0070f2": { bright: "#1b90ff", deep: "#0058c4", ink: "#084298" },
+    };
+    const palette = accentPalettes[accent] || accentPalettes["#16b981"];
+    root.classList.add("no-transition");
+    root.style.setProperty("--accent", accent);
+    root.style.setProperty("--accent-bright", palette.bright);
+    root.style.setProperty("--accent-deep", palette.deep);
+    root.style.setProperty("--accent-ink", palette.ink);
+    const id = requestAnimationFrame(() =>
+      requestAnimationFrame(() => root.classList.remove("no-transition"))
+    );
+    return () => cancelAnimationFrame(id);
+  }, [accent]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-density", "compact");
+  }, []);
 
   useEffect(() => {
     const isWin = /Win/.test(navigator.userAgent) || /Win/.test(navigator.platform ?? "");
@@ -334,7 +441,7 @@ export default function FullApp() {
   return (
     <div
       className="flex h-screen overflow-hidden"
-      style={{ background: "var(--shelf-bg)", color: "var(--shelf-fg)" }}
+      style={{ color: "var(--shelf-fg)" }}
     >
       <Pillar
         shelfName={shelfName}
@@ -367,8 +474,8 @@ export default function FullApp() {
         onTaskCompleted={showTaskCelebration}
       />
       <div className="flex-1 flex flex-col min-w-0" data-swipe-area>
-        <header className="shrink-0 border-b border-white/10 px-6 py-5">
-          <div className="max-w-[1640px] mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <header className="topbar">
+          <div className="topbar-inner">
             {editingName ? (
               <Input
                 autoFocus
@@ -386,103 +493,73 @@ export default function FullApp() {
               <button
                 type="button"
                 onClick={() => setEditingName(true)}
-                className="text-2xl font-semibold tracking-tight text-white text-left"
+                className="greeting"
+                title="Click to edit"
               >
-                {shelfName}
+                {renderGreeting(shelfName)}
               </button>
             )}
-            <Surface
-              data-search-area
-              variant="secondary"
-              className="w-full sm:max-w-md rounded-2xl p-2 border border-white/10 bg-white/5"
-            >
-              <SearchField
+            <div className="search-pill" data-search-area>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                ref={searchInputRef}
+                type="text"
                 aria-label="Search bookmarks"
+                placeholder="Search bookmarks…"
                 value={searchQuery}
-                onChange={setSearchQuery}
-                variant="secondary"
-                fullWidth
-                className="search-field"
-              >
-                <SearchField.Group>
-                  <SearchField.SearchIcon />
-                  <SearchField.Input placeholder="Search bookmarks…" />
-                  <SearchField.ClearButton />
-                </SearchField.Group>
-              </SearchField>
-            </Surface>
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  if (dashboardView === "buylist") {
-                    setViewSlideDir("right");
-                    setDashboardView("shelf");
-                  } else {
-                    setViewSlideDir("left");
-                    setDashboardView("buylist");
-                  }
-                }}
-                className={
-                  dashboardView === "buylist"
-                    ? "rounded-xl border border-emerald-300/40 bg-emerald-400/20 px-3 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-400/30"
-                    : "rounded-xl border border-emerald-300/30 bg-emerald-400/10 px-3 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-400/20"
-                }
-              >
-                {dashboardView === "buylist" ? "Back to Shelf" : "Hopper"}
-              </button>
-              {showBothNavButtons ? (
-                <>
-                  {dashboardView !== "shelf" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setViewSlideDir("right");
-                        setDashboardView("shelf");
-                      }}
-                      className="rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20"
-                    >
-                      Back to Shelf
-                    </button>
-                  )}
-                  {dashboardView !== "visual-flow" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLastTool("visual-flow");
-                        setViewSlideDir("left");
-                        setDashboardView("visual-flow");
-                      }}
-                      className="rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20"
-                    >
-                      Visual Flow
-                    </button>
-                  )}
-                </>
-              ) : (
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (dashboardView !== "shelf") {
-                      setViewSlideDir("right");
-                      setDashboardView("shelf");
-                    } else if (lastTool === "llm-console") {
-                      openLLMConsoleOverlay(llmConsoleUrl);
-                    } else {
-                      setViewSlideDir("left");
-                      setDashboardView(lastTool);
-                    }
-                  }}
-                  className="rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-400/20"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Clear search"
+                  style={{ background: "none", border: 0, color: "var(--dim)", cursor: "pointer", padding: 0, fontSize: 14, lineHeight: 1 }}
                 >
-                  {dashboardView !== "shelf"
-                    ? "Back to Shelf"
-                    : lastTool === "llm-console"
-                      ? "Open LLM Console"
-                      : "Visual Flow"}
+                  ×
                 </button>
+              ) : (
+                <kbd>⌘K</kbd>
               )}
             </div>
+            <nav className="nav">
+              {([
+                { id: "shelf",       label: "Shelf"       },
+                { id: "visual-flow", label: "Visual Flow" },
+                { id: "strategie",   label: "Strategie"   },
+                { id: "buylist",     label: "Hopper"      },
+                { id: "inventory",   label: "Inventory"   },
+              ] as const).map((tab) => {
+                const isActive = dashboardView === tab.id;
+                const isVF = tab.id === "visual-flow";
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onMouseEnter={isVF ? () => prefetchVisualFlow() : undefined}
+                    onFocus={isVF ? () => prefetchVisualFlow() : undefined}
+                    onTouchStart={isVF ? () => prefetchVisualFlow() : undefined}
+                    onClick={() => {
+                      if (isActive) return;
+                      // Slide direction: tabs to the right of current slide in from the right
+                      const order: DashboardView[] = ["shelf", "visual-flow", "strategie", "buylist"];
+                      const fromIdx = order.indexOf(dashboardView);
+                      const toIdx = order.indexOf(tab.id);
+                      setViewSlideDir(toIdx > fromIdx ? "left" : "right");
+                      if (tab.id === "visual-flow") setLastTool("visual-flow");
+                      setDashboardView(tab.id);
+                    }}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`nav-btn${isActive ? " nav-btn--on" : ""}`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </nav>
           </div>
         </header>
 
@@ -492,18 +569,50 @@ export default function FullApp() {
             className={`shelf-view-slide h-full px-6 py-6 overflow-auto ${viewSlideDir === "left" ? "shelf-view-slide--from-right" : viewSlideDir === "right" ? "shelf-view-slide--from-left" : ""}`}
             onAnimationEnd={() => setViewSlideDir(null)}
           >
-          {dashboardView === "buylist" ? (
+          {/* bg-diffuse-host = relative wrapper so the aurora is part of the scroll
+              content (scrolls along with the page) instead of stuck to the viewport. */}
+          <div className="bg-diffuse-host">
+            <div className="bg-diffuse" aria-hidden="true" />
+          {dashboardView === "strategie" ? (
+            <div className="max-w-[1640px] mx-auto px-6 py-6">
+              <StrategiePanel
+                state={strategieState}
+                buylistItems={buylist}
+                onSaveStatement={strategieSaveStatement}
+                onAddPot={strategieAddPot}
+                onSetCurrency={strategieSetCurrency}
+              />
+            </div>
+          ) : dashboardView === "buylist" ? (
             <BuylistPanel
               items={buylist}
+              saleItems={saleItems}
               onAdd={buylistAdd}
               onDiscard={buylistDiscard}
               onBuyBottom={buylistBuyBottom}
+              onBump={buylistBump}
+              onSkip={buylistSkip}
+              onSaleAdd={saleItemAdd}
+              onSaleUpdate={saleItemUpdate}
+              onSaleRemove={saleItemRemove}
             />
+          ) : dashboardView === "inventory" ? (
+            <div className="max-w-[1640px] mx-auto px-6 py-6">
+              <InventoryPanel
+                items={inventoryItems}
+                onAdd={inventoryAdd}
+                onUpdate={inventoryUpdate}
+                onRemove={inventoryRemove}
+              />
+            </div>
           ) : dashboardView === "visual-flow" ? (
             <div className="max-w-[1640px] mx-auto">
+              <Suspense fallback={<div className="py-20 text-center text-sm text-slate-500">Loading Visual Flow…</div>}>
               <VisualFlowPanel
                 todos={pillarTodos}
                 grazelandItems={grazelandItems}
+                binItems={binItems}
+                saleItems={saleItems}
                 showTodoDates={showTodoDates}
                 visualFlow={visualFlow}
                 onVisualFlowChange={setVisualFlow}
@@ -534,6 +643,8 @@ export default function FullApp() {
                 }}
                 fullPage
               />
+              </Suspense>
+              <BookmarkGrid bodyHidden />
             </div>
           ) : (
             <div className="max-w-[1640px] mx-auto">
@@ -572,6 +683,7 @@ export default function FullApp() {
               )}
             </div>
           )}
+          </div> {/* /bg-diffuse-host */}
           </div>
 
           {showSearch && dashboardView === "visual-flow" && (
