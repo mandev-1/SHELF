@@ -183,15 +183,84 @@ export const RETURN_SCENARIOS: { id: string; label: string; rate: number }[] = [
   { id: "sp500",        label: "S&P 500 avg",   rate: 10.5 },
 ];
 
-export const DEFAULT_LADDER: {
-  id: number; title: string; note: string;
-  status: "done" | "active" | "queued"; pct?: number;
-}[] = [
-  { id: 1, title: "Emergency fund",      note: "3–6 months of expenses",    status: "active", pct: 50 },
-  { id: 2, title: "Pay off bad debt",    note: "Credit cards & high APR",   status: "queued" },
-  { id: 3, title: "Employer match",      note: "Free money — capture it",   status: "done" },
-  { id: 4, title: "Tax-advantaged acc",  note: "IRA / 401k / ISA top-up",   status: "queued" },
-  { id: 5, title: "Invest surplus",      note: "Low-cost index funds",      status: "queued" },
+export interface LadderAccount {
+  name: string;
+  tag: string;
+  balance: number;
+  target?: number;
+}
+export interface LadderHistoryEntry {
+  date: string;
+  label: string;
+  amt: number;
+}
+export interface LadderRung {
+  id: number;
+  title: string;
+  note: string;
+  status: "done" | "active" | "queued";
+  pct?: number;
+  icon?: string;
+  hue?: string;
+  blurb?: string;
+  accounts?: LadderAccount[];
+  history?: LadderHistoryEntry[];
+  target?: number;
+}
+
+export const DEFAULT_LADDER: LadderRung[] = [
+  {
+    id: 1, title: "Emergency fund", note: "3–6 months of expenses",
+    status: "active", pct: 50,
+    icon: "shield", hue: "#f59e0b",
+    blurb: "A liquid buffer that covers 3–6 months of living costs. Kept in a high-yield savings account, never invested. This is your financial immune system — it lets you weather job loss or unexpected expenses without derailing everything else.",
+    accounts: [
+      { name: "High-yield savings", tag: "HYSA", balance: 4200, target: 8400 },
+    ],
+    history: [
+      { date: "2026-05", label: "Monthly top-up", amt: 300 },
+      { date: "2026-04", label: "Monthly top-up", amt: 300 },
+      { date: "2026-03", label: "Initial deposit", amt: 3600 },
+    ],
+  },
+  {
+    id: 2, title: "Pay off bad debt", note: "Credit cards & high APR",
+    status: "queued",
+    icon: "flame", hue: "#ef4444",
+    blurb: "High-interest debt (credit cards, personal loans above 7%) destroys compounding. Eliminate the most expensive balances first using the avalanche method before redirecting cash to investments.",
+    accounts: [],
+    history: [],
+  },
+  {
+    id: 3, title: "Employer match", note: "Free money — capture it",
+    status: "done",
+    icon: "gift", hue: "#22c55e",
+    blurb: "Employer pension / 401k matching is an instant 50–100% return on your contribution. Always contribute at least enough to capture the full match before allocating elsewhere.",
+    accounts: [
+      { name: "Company pension", tag: "401k", balance: 12400 },
+    ],
+    history: [
+      { date: "2025-01", label: "Match threshold reached", amt: 0 },
+    ],
+  },
+  {
+    id: 4, title: "Tax-advantaged acc", note: "IRA / 401k / ISA top-up",
+    status: "queued",
+    icon: "vault", hue: "#6366f1",
+    blurb: "After capturing the employer match, maximise tax-sheltered wrappers. Every euro/dollar of growth inside an ISA or Roth IRA compounds tax-free. Priority: fill these before taxable brokerage.",
+    accounts: [
+      { name: "Roth IRA", tag: "IRA", balance: 3200, target: 7000 },
+    ],
+    history: [],
+  },
+  {
+    id: 5, title: "Invest surplus", note: "Low-cost index funds",
+    status: "queued",
+    icon: "growth", hue: "#3b82f6",
+    blurb: "Any surplus after the above steps goes into low-cost, broadly diversified index funds. A simple three-fund portfolio (global equities, bonds, cash) is sufficient for most investors. Automate and ignore short-term noise.",
+    accounts: [],
+    history: [],
+  },
 ];
 
 export const DEFAULT_ALLOCATION: {

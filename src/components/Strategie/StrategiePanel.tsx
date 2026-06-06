@@ -8,7 +8,9 @@ import {
   RETURN_SCENARIOS, DEFAULT_LADDER, DEFAULT_ALLOCATION, DEFAULT_PILLARS,
   DEFAULT_STATEMENTS, CURRENCIES,
 } from "./strategie";
-import { IcoCheck, IcoLock, IcoPlus, IcoFile, IcoHopper, IcoUpload } from "./icons";
+import type { LadderRung } from "./strategie";
+import { IcoCheck, IcoLock, IcoPlus, IcoFile, IcoHopper, IcoUpload, IcoFlip, IcoX, IcoChev,
+  IcoShield, IcoFlame, IcoGift, IcoVault, IcoGrowth, IcoTarget, IcoLeaf } from "./icons";
 import { StatementEditor } from "./StatementEditor";
 
 void _daysInMonth;
@@ -17,6 +19,7 @@ void _daysInMonth;
 interface StrategiePanelProps {
   state: StrategieState;
   buylistItems: BuylistItem[];
+  extraAssets?: number;
   onSaveStatement: (
     book: Record<string, MonthStatement>,
     order: string[],
@@ -40,6 +43,136 @@ function expensesByCat(stmt: MonthStatement): Record<CatKey, number> {
   for (const k of CAT_KEYS) out[k] = 0;
   for (const e of stmt.expenses) out[e.cat] = (out[e.cat] ?? 0) + e.amt;
   return out;
+}
+
+// ─── Rung icon ────────────────────────────────────────────────────────────────
+function RungIcon({ icon }: { icon?: string }) {
+  switch (icon) {
+    case "shield": return <IcoShield />;
+    case "flame":  return <IcoFlame />;
+    case "gift":   return <IcoGift />;
+    case "vault":  return <IcoVault />;
+    case "growth": return <IcoGrowth />;
+    case "leaf":   return <IcoLeaf />;
+    case "target": return <IcoTarget />;
+    default:       return null;
+  }
+}
+
+// ─── SpendingChart ────────────────────────────────────────────────────────────
+function SpendingChart({ series }: { series: { label: string; total: number }[] }) {
+  const W = 760; const H = 220;
+  const PAD = { top: 16, right: 20, bottom: 28, left: 52 };
+  const cw = W - PAD.left - PAD.right;
+  const ch = H - PAD.top - PAD.bottom;
+  if (series.length < 2) return <div style={{ padding: 20, fontSize: 12, color: "var(--faint)" }}>Not enough data.</div>;
+  const maxVal = Math.max(...series.map((s) => s.total), 1);
+  const avg = series.reduce((s, p) => s + p.total, 0) / series.length;
+  const yMax = niceCeil(maxVal);
+  const xOf = (i: number) => PAD.left + (i / (series.length - 1)) * cw;
+  const yOf = (v: number) => PAD.top + ch - (v / yMax) * ch;
+  const area: string[] = [];
+  const line: string[] = [];
+  series.forEach((p, i) => {
+    const x = xOf(i); const y = yOf(p.total);
+    if (i === 0) { area.push(`M${x},${yOf(0)}`); }
+    area.push(`L${x},${y}`);
+    line.push(i === 0 ? `M${x},${y}` : `L${x},${y}`);
+  });
+  area.push(`L${xOf(series.length - 1)},${yOf(0)}Z`);
+  const avgY = yOf(avg);
+  const yTicks = 4;
+  return (
+    <svg className="proj-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      <g className="proj-grid">
+        {Array.from({ length: yTicks + 1 }, (_, i) => {
+          const v = (yMax / yTicks) * i;
+          return <line key={i} x1={PAD.left} y1={yOf(v)} x2={W - PAD.right} y2={yOf(v)} />;
+        })}
+      </g>
+      {Array.from({ length: yTicks + 1 }, (_, i) => {
+        const v = (yMax / yTicks) * i;
+        return <text key={i} className="proj-ylab" x={PAD.left - 6} y={yOf(v) + 4}>{v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}</text>;
+      })}
+      {series.map((p, i) => (
+        <text key={i} className="proj-xlab" x={xOf(i)} y={H - 4}>{p.label}</text>
+      ))}
+      <path className="spend-area" d={area.join(" ")} />
+      <path className="spend-line" d={line.join(" ")} />
+      <line className="spend-avgline" x1={PAD.left} y1={avgY} x2={W - PAD.right} y2={avgY} />
+      <text className="spend-avglab" x={PAD.left + 4} y={avgY - 5}>avg</text>
+      {series.map((p, i) => {
+        const x = xOf(i); const y = yOf(p.total);
+        return i === series.length - 1
+          ? <circle key={i} className="spend-dot-end" cx={x} cy={y} r={5} />
+          : <circle key={i} className="spend-dot" cx={x} cy={y} r={3} />;
+      })}
+    </svg>
+  );
+}
+
+// ─── LadderDetail modal ───────────────────────────────────────────────────────
+function LadderDetail({ rung, currency, onClose }: { rung: LadderRung; currency: string; onClose: () => void }) {
+  const statusClass = rung.status === "done" ? "ld-status--done" : rung.status === "active" ? "ld-status--active" : "ld-status--queued";
+  const statusLabel = rung.status === "done" ? "Complete" : rung.status === "active" ? "In progress" : "Queued";
+  return (
+    <div className="ld-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="ld-modal" style={{ ["--ld-hue" as string]: rung.hue ?? "var(--accent)" }}>
+        <div className="ld-hero">
+          <div className="ld-hero-wash" />
+          <div className="ld-hero-ghost"><RungIcon icon={rung.icon} /></div>
+          <button className="ld-close" onClick={onClose}><IcoX /></button>
+          <div className="ld-step-num">Step {rung.id}</div>
+          <div className="ld-title">{rung.title}</div>
+          <div className={`ld-status ${statusClass}`}>{statusLabel}</div>
+          {rung.status === "active" && typeof rung.pct === "number" && (
+            <div className="rung-bar" style={{ marginTop: 10, maxWidth: 200 }}>
+              <span style={{ width: `${rung.pct}%` }} />
+            </div>
+          )}
+        </div>
+        <div className="ld-body">
+          {rung.blurb && <p className="ld-blurb">{rung.blurb}</p>}
+          {(rung.accounts?.length ?? 0) > 0 && (
+            <div>
+              <div className="ld-section-head">Where the money sits</div>
+              <div className="ld-accounts">
+                {rung.accounts!.map((acc, i) => (
+                  <div key={i} className="ld-account-row">
+                    <div className="ld-account-name">{acc.name}</div>
+                    <div className="ld-account-tag">{acc.tag}</div>
+                    <div className="ld-account-bal">{fmtMoney(acc.balance, currency, { abbr: true })}</div>
+                    {acc.target && (
+                      <div style={{ flex: "0 0 60px" }}>
+                        <div className="ld-account-progress">
+                          <span style={{ width: `${Math.min(100, (acc.balance / acc.target) * 100)}%` }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {(rung.history?.length ?? 0) > 0 && (
+            <div>
+              <div className="ld-section-head">History</div>
+              <div className="ld-history">
+                {[...rung.history!].reverse().map((h, i) => (
+                  <div key={i} className="ld-hist-row">
+                    <div className="ld-hist-dot" />
+                    <div className="ld-hist-date">{h.date}</div>
+                    <div className="ld-hist-label">{h.label}</div>
+                    {h.amt > 0 && <div className="ld-hist-amt">{fmtMoney(h.amt, currency, { abbr: true })}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── ProjectionChart ─────────────────────────────────────────────────────────
@@ -126,6 +259,7 @@ function ProjectionChart({
 export function StrategiePanel({
   state,
   buylistItems,
+  extraAssets = 0,
   onSaveStatement,
   onAddPot,
   onSetCurrency,
@@ -138,6 +272,8 @@ export function StrategiePanel({
   const [scenarioId, setScenarioId] = useState("balanced");
   const [horizon, setHorizon] = useState(120);
   const [monthly, setMonthly] = useState(300);
+  const [heroFace, setHeroFace] = useState<"grow" | "spend">("grow");
+  const [detailRung, setDetailRung] = useState<LadderRung | null>(null);
 
   const { statements, positions, pots, currency } = state;
   const cur = currency;
@@ -155,7 +291,7 @@ export function StrategiePanel({
   const inc = totalIncome(stmt);
   const exp = totalExpenses(stmt);
   const surplus = inc - exp;
-  const toPots = Math.min(200, surplus > 0 ? surplus : 0);
+  void Math.min(200, surplus > 0 ? surplus : 0); // toPots removed from KPI
 
   const scenario = RETURN_SCENARIOS.find((s) => s.id === scenarioId) ?? RETURN_SCENARIOS[1];
   const projPts = project(positions.invested, monthly, scenario.rate, horizon);
@@ -164,6 +300,12 @@ export function StrategiePanel({
   const byCat = expensesByCat(stmt);
   const totalExp = exp || 1;
   const emergencyPct = Math.min(100, Math.round((positions.emergencySaved / positions.emergencyTarget) * 100));
+
+  const netWorth = positions.invested + positions.emergencySaved + extraAssets;
+
+  const spendSeries = Object.keys(byMonth)
+    .sort()
+    .map((k) => ({ label: monthAbbr(k), total: totalExpenses(byMonth[k]) }));
 
   useEffect(() => {
     if (!potMenuOpen) return;
@@ -195,8 +337,8 @@ export function StrategiePanel({
       {/* header */}
       <div className="strat-head">
         <div>
-          <div className="strat-eyebrow">Dashboard</div>
-          <div className="strat-title">Strategie</div>
+          <div className="strat-eyebrow">Strategie · Life &amp; capital plan</div>
+          <div className="strat-title">Your 5-year strategy</div>
         </div>
         <div className="strat-tools">
           <div className="seg">
@@ -204,45 +346,39 @@ export function StrategiePanel({
               <button key={c} className={`seg-btn${cur === c ? " on" : ""}`} onClick={() => onSetCurrency(c)}>{c}</button>
             ))}
           </div>
-          <button className="ghost-btn" onClick={() => setEditorOpen(true)}>
-            <IcoFile /> Edit statements
+          <button
+            className={`ghost-btn${Object.keys(statements.byMonth).length > 0 ? " ok" : ""}`}
+            onClick={() => setEditorOpen(true)}
+          >
+            <IcoFile />
+            {Object.keys(statements.byMonth).length > 0
+              ? `Statement · ${monthAbbr(activeKey)}`
+              : "Import statement"}
           </button>
         </div>
       </div>
 
       {/* KPI strip */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="kpi-row">
-          <div className="kpi accent">
-            <div className="kpi-lab">Monthly surplus</div>
-            <div className="kpi-val">{fmtMoney(surplus, cur, { abbr: true })}</div>
-            <div className={`kpi-sub${surplus > 0 ? " up" : ""}`}>{surplus > 0 ? "Positive cashflow" : "Negative cashflow"}</div>
-          </div>
-          <div className="kpi">
-            <div className="kpi-lab">Income</div>
-            <div className="kpi-val">{fmtMoney(inc, cur, { abbr: true })}</div>
-            <div className="kpi-sub">{monthAbbr(activeKey)}</div>
-          </div>
-          <div className="kpi">
-            <div className="kpi-lab">Expenses</div>
-            <div className="kpi-val">{fmtMoney(exp, cur, { abbr: true })}</div>
-            <div className="kpi-sub">{((exp / (inc || 1)) * 100).toFixed(0)}% of income</div>
-          </div>
-          <div className="kpi">
-            <div className="kpi-lab">Invested</div>
-            <div className="kpi-val">{fmtMoney(positions.invested, cur, { abbr: true })}</div>
-            <div className="kpi-sub">Portfolio</div>
-          </div>
-          <div className="kpi">
-            <div className="kpi-lab">Emergency</div>
-            <div className="kpi-val">{fmtMoney(positions.emergencySaved, cur, { abbr: true })}</div>
-            <div className="kpi-sub">{emergencyPct}% of target</div>
-          </div>
-          <div className="kpi">
-            <div className="kpi-lab">To pots / mo</div>
-            <div className="kpi-val">{fmtMoney(toPots, cur, { abbr: true })}</div>
-            <div className="kpi-sub">Savings goals</div>
-          </div>
+      <div className="kpi-row" style={{ marginBottom: 16 }}>
+        <div className="kpi">
+          <div className="kpi-lab">Net worth</div>
+          <div className="kpi-val">{fmtMoney(netWorth, cur, { abbr: true })}</div>
+          <div className="kpi-sub">Invested + emergency{extraAssets > 0 ? " + assets" : ""}</div>
+        </div>
+        <div className="kpi accent">
+          <div className="kpi-lab">Monthly surplus</div>
+          <div className="kpi-val">{fmtMoney(surplus, cur, { abbr: true })}</div>
+          <div className={`kpi-sub${surplus > 0 ? " up" : ""}`}>{surplus > 0 ? "Positive cashflow" : "Negative cashflow"}</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-lab">Projected 5Y</div>
+          <div className="kpi-val">{fmtMoney(project(positions.invested, monthly, RETURN_SCENARIOS[1].rate, 60).at(-1)?.bal ?? 0, cur, { abbr: true })}</div>
+          <div className="kpi-sub">At {RETURN_SCENARIOS[1].rate}% p.a.</div>
+        </div>
+        <div className="kpi">
+          <div className="kpi-lab">Emergency cover</div>
+          <div className="kpi-val">{emergencyPct}%</div>
+          <div className="kpi-sub">{fmtMoney(positions.emergencySaved, cur, { abbr: true })} of {fmtMoney(positions.emergencyTarget, cur, { abbr: true })}</div>
         </div>
       </div>
 
@@ -254,60 +390,95 @@ export function StrategiePanel({
           <div className="card-head">
             <div>
               <div className="card-eyebrow">Wealth projection</div>
-              <div className="card-title">Portfolio growth</div>
+              <div className="card-title">{heroFace === "grow" ? "Compounding engine" : "Where the money goes"}</div>
             </div>
-            <div className="seg">
-              {RETURN_SCENARIOS.map((s) => (
-                <button key={s.id} className={`seg-btn${scenarioId === s.id ? " on" : ""}`} onClick={() => setScenarioId(s.id)}>
-                  {s.label}
-                </button>
-              ))}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {heroFace === "grow" && (
+                <div className="seg">
+                  {RETURN_SCENARIOS.map((s) => (
+                    <button key={s.id} className={`seg-btn${scenarioId === s.id ? " on" : ""}`} onClick={() => setScenarioId(s.id)}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                className={`hero-flip-btn${heroFace === "spend" ? " on" : ""}`}
+                onClick={() => setHeroFace((f) => f === "grow" ? "spend" : "grow")}
+                title="Flip card"
+              >
+                <IcoFlip />
+              </button>
             </div>
           </div>
-          <div className="proj-figure">
-            <div className="proj-head">
-              <div className="proj-big">{fmtMoney(projFinal, cur, { abbr: true })}</div>
-              <div className="proj-cap">in {Math.round(horizon / 12)} years at {scenario.rate}% p.a.</div>
-            </div>
-            <div className="proj-split">
-              <div className="split-item">
-                <span className="sw sw-contrib" />
-                {fmtMoney(positions.invested + monthly * horizon, cur, { abbr: true })} contrib.
+          <div className="hero-scene">
+            <div className={`hero-stack${heroFace === "spend" ? " flipped" : ""}`}>
+              <div className="hero-face hero-front">
+                <div className="proj-figure">
+                  <div className="proj-head">
+                    <div className="proj-big">{fmtMoney(projFinal, cur, { abbr: true })}</div>
+                    <div className="proj-cap">in {Math.round(horizon / 12)} years at {scenario.rate}% p.a.</div>
+                  </div>
+                  <div className="proj-split">
+                    <div className="split-item">
+                      <span className="sw sw-contrib" />
+                      {fmtMoney(positions.invested + monthly * horizon, cur, { abbr: true })} contrib.
+                    </div>
+                    <div className="split-item">
+                      <span className="sw sw-growth" />
+                      {fmtMoney(Math.max(0, projFinal - positions.invested - monthly * horizon), cur, { abbr: true })} growth
+                    </div>
+                  </div>
+                  <ProjectionChart
+                    principal={positions.invested}
+                    monthly={monthly}
+                    scenarioRate={scenario.rate}
+                    horizon={horizon}
+                  />
+                </div>
+                <div className="proj-controls">
+                  <div>
+                    <div className="ctl-lab">
+                      Monthly contribution <span className="ctl-val">{fmtMoney(monthly, cur)}</span>
+                    </div>
+                    <input
+                      className="slider"
+                      type="range" min={0} max={2500} step={50}
+                      value={monthly}
+                      onChange={(e) => setMonthly(Number(e.target.value))}
+                    />
+                  </div>
+                  <div>
+                    <div className="ctl-lab">
+                      Horizon <span className="ctl-val">{Math.round(horizon / 12)} years</span>
+                    </div>
+                    <input
+                      className="slider"
+                      type="range" min={12} max={360} step={12}
+                      value={horizon}
+                      onChange={(e) => setHorizon(Number(e.target.value))}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="split-item">
-                <span className="sw sw-growth" />
-                {fmtMoney(Math.max(0, projFinal - positions.invested - monthly * horizon), cur, { abbr: true })} growth
+              <div className={`hero-face hero-back${heroFace === "grow" ? " is-hidden" : ""}`}>
+                <div className="proj-figure">
+                  <div className="proj-head">
+                    <div className="proj-big">{fmtMoney(exp, cur, { abbr: true })}</div>
+                    <div className="proj-cap">monthly spending · {monthAbbr(activeKey)}</div>
+                  </div>
+                  <div className="proj-split">
+                    <div className="split-item">
+                      <span className="sw sw-spend" />
+                      {((exp / (inc || 1)) * 100).toFixed(0)}% of income
+                    </div>
+                    <div className="split-item" style={{ color: surplus >= 0 ? "var(--accent)" : "#ef4444" }}>
+                      {surplus >= 0 ? "+" : ""}{fmtMoney(surplus, cur, { abbr: true })} surplus
+                    </div>
+                  </div>
+                  <SpendingChart series={spendSeries} />
+                </div>
               </div>
-            </div>
-            <ProjectionChart
-              principal={positions.invested}
-              monthly={monthly}
-              scenarioRate={scenario.rate}
-              horizon={horizon}
-            />
-          </div>
-          <div className="proj-controls">
-            <div>
-              <div className="ctl-lab">
-                Monthly contribution <span className="ctl-val">{fmtMoney(monthly, cur)}</span>
-              </div>
-              <input
-                className="slider"
-                type="range" min={0} max={2500} step={50}
-                value={monthly}
-                onChange={(e) => setMonthly(Number(e.target.value))}
-              />
-            </div>
-            <div>
-              <div className="ctl-lab">
-                Horizon <span className="ctl-val">{Math.round(horizon / 12)} years</span>
-              </div>
-              <input
-                className="slider"
-                type="range" min={12} max={360} step={12}
-                value={horizon}
-                onChange={(e) => setHorizon(Number(e.target.value))}
-              />
             </div>
           </div>
         </div>
@@ -322,7 +493,7 @@ export function StrategiePanel({
           </div>
           <div style={{ paddingTop: 12 }}>
             {DEFAULT_LADDER.map((rung, i) => (
-              <div key={rung.id} className={`rung rung--${rung.status}`}>
+              <button key={rung.id} className={`rung rung--${rung.status} rung-hit`} onClick={() => setDetailRung(rung)}>
                 <div className="rung-mark">
                   {rung.status === "done" ? <IcoCheck /> : rung.status === "active" ? <IcoLock /> : <span>{i + 1}</span>}
                 </div>
@@ -336,7 +507,8 @@ export function StrategiePanel({
                 <span className="rung-tag">
                   {rung.status === "done" ? "Done" : rung.status === "active" ? "Active" : "Queued"}
                 </span>
-              </div>
+                <span className="rung-chev"><IcoChev dir="right" /></span>
+              </button>
             ))}
           </div>
         </div>
@@ -639,6 +811,11 @@ export function StrategiePanel({
           onSave={onSaveStatement}
           onClose={() => setEditorOpen(false)}
         />
+      )}
+
+      {/* ladder detail modal */}
+      {detailRung && (
+        <LadderDetail rung={detailRung} currency={cur} onClose={() => setDetailRung(null)} />
       )}
     </div>
   );
