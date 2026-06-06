@@ -71,6 +71,9 @@ const SHOW_BOTH_NAV_BUTTONS_KEY = "shelf-show-both-nav-buttons";
 const PILLAR_TODO_PINS_KEY = "shelf-pillar-todo-pins";
 const FOCUS_DESYNCED_KEY = "shelf-focus-desynced";
 export const LOW_PERFORMANCE_MODE_KEY = "shelf-low-performance-mode";
+const SHOW_STRATEGIE_TAB_KEY = "shelf-show-strategie-tab";
+const SHOW_HOPPER_TAB_KEY    = "shelf-show-hopper-tab";
+const SHOW_INVENTORY_TAB_KEY = "shelf-show-inventory-tab";
 const BUYLIST_KEY = "shelf-buylist";
 const SALE_ITEMS_KEY = "shelf-sale-items";
 const INVENTORY_KEY = "shelf-inventory";
@@ -347,6 +350,9 @@ export function useShelfStorage() {
   const [pillarTodoPins, setPillarTodoPinsState] = useState<string[]>([]);
   const [focusDesynced, setFocusDesyncedState] = useState(false);
   const [lowPerformanceMode, setLowPerformanceModeState] = useState(false);
+  const [showStrategieTab, setShowStrategieTabState] = useState(true);
+  const [showHopperTab,    setShowHopperTabState]    = useState(true);
+  const [showInventoryTab, setShowInventoryTabState] = useState(true);
   const [buylist, setBuylistState] = useState<BuylistItem[]>([]);
   const [saleItems, setSaleItemsState] = useState<SaleItem[]>([]);
   const [inventoryItems, setInventoryItemsState] = useState<InventoryItem[]>([]);
@@ -391,6 +397,9 @@ export function useShelfStorage() {
         PILLAR_TODO_PINS_KEY,
         FOCUS_DESYNCED_KEY,
         LOW_PERFORMANCE_MODE_KEY,
+        SHOW_STRATEGIE_TAB_KEY,
+        SHOW_HOPPER_TAB_KEY,
+        SHOW_INVENTORY_TAB_KEY,
         BUYLIST_KEY,
         SALE_ITEMS_KEY,
         INVENTORY_KEY,
@@ -517,6 +526,9 @@ export function useShelfStorage() {
       );
       setFocusDesyncedState(result[FOCUS_DESYNCED_KEY] === true);
       setLowPerformanceModeState(result[LOW_PERFORMANCE_MODE_KEY] === true);
+      setShowStrategieTabState(result[SHOW_STRATEGIE_TAB_KEY] !== false);
+      setShowHopperTabState   (result[SHOW_HOPPER_TAB_KEY]    !== false);
+      setShowInventoryTabState(result[SHOW_INVENTORY_TAB_KEY] !== false);
       setBuylistState(normalizeBuylist(result[BUYLIST_KEY]));
       setSaleItemsState(normalizeSaleItems(result[SALE_ITEMS_KEY]));
       setInventoryItemsState(normalizeInventory(result[INVENTORY_KEY]));
@@ -1086,6 +1098,19 @@ export function useShelfStorage() {
     getStorage()?.set({ [LOW_PERFORMANCE_MODE_KEY]: next });
   }, []);
 
+  const setShowStrategieTab = useCallback((next: boolean) => {
+    setShowStrategieTabState(next);
+    getStorage()?.set({ [SHOW_STRATEGIE_TAB_KEY]: next });
+  }, []);
+  const setShowHopperTab = useCallback((next: boolean) => {
+    setShowHopperTabState(next);
+    getStorage()?.set({ [SHOW_HOPPER_TAB_KEY]: next });
+  }, []);
+  const setShowInventoryTab = useCallback((next: boolean) => {
+    setShowInventoryTabState(next);
+    getStorage()?.set({ [SHOW_INVENTORY_TAB_KEY]: next });
+  }, []);
+
   const setPromptRowsState = useCallback((next: 1 | 2) => {
     setPromptRows(next);
     getStorage()?.set({ [PROMPT_ROWS_KEY]: next });
@@ -1326,6 +1351,12 @@ export function useShelfStorage() {
     setFocusDesynced,
     lowPerformanceMode,
     setLowPerformanceMode,
+    showStrategieTab,
+    setShowStrategieTab,
+    showHopperTab,
+    setShowHopperTab,
+    showInventoryTab,
+    setShowInventoryTab,
     obsidianLog,
     setObsidianLogConfig,
     logToObsidian,

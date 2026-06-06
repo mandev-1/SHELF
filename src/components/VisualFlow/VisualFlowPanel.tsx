@@ -1034,6 +1034,7 @@ function TodoFlowEdge(props: EdgeProps) {
     markerStart,
     markerEnd,
     interactionWidth = EDGE_INTERACTION_WIDTH,
+    selected,
   } = props;
   const arrow = data?.arrow ?? false;
   const doubled = data?.doubled ?? false;
@@ -1050,6 +1051,7 @@ function TodoFlowEdge(props: EdgeProps) {
 
   const effectiveMarkerEnd = arrow ? undefined : markerEnd;
 
+  const SELECTED_STROKE = "#ef4444";
   const pathStyle = {
     ...(style as object),
     fill: "none",
@@ -1057,11 +1059,20 @@ function TodoFlowEdge(props: EdgeProps) {
       stroke: "#6b7280",
       opacity: 0.5,
     } as React.CSSProperties),
+    ...(selected && {
+      stroke: SELECTED_STROKE,
+      strokeWidth: 2.6,
+      opacity: 1,
+    } as React.CSSProperties),
   };
 
   const parallelPaths = doubled ? createParallelPaths(path, PARALLEL_OFFSET) : null;
   const arrowPlacements = arrow ? getArrowPlacements(path, ARROW_COUNT) : null;
-  const arrowColor = muted ? "#6b7280" : (style as { stroke?: string })?.stroke ?? EDGE_STYLE.stroke;
+  const arrowColor = selected
+    ? SELECTED_STROKE
+    : muted
+      ? "#6b7280"
+      : (style as { stroke?: string })?.stroke ?? EDGE_STYLE.stroke;
 
   const renderArrows = () => {
     if (!arrowPlacements) return null;
@@ -1220,6 +1231,7 @@ function VisualFlowPanelInner({
 }) {
   const { screenToFlowPosition, getNodes, getViewport, setViewport, fitView } = useReactFlow();
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [nodeMenu, setNodeMenu] = useState<{ nodeIds: string[]; x: number; y: number } | null>(null);
   const [edgeMenu, setEdgeMenu] = useState<{ edgeId: string; x: number; y: number } | null>(null);
   const [paneMenu, setPaneMenu] = useState<{ x: number; y: number } | null>(null);
@@ -1356,6 +1368,21 @@ function VisualFlowPanelInner({
   const canvasItems = isCustomPlane
     ? customPlaneItems
     : plane === "main" ? todos : plane === "grazeland" ? grazelandItems : binItems;
+
+  // Search: when the user types a query in the top-right input, dim nodes that
+  // don't match any of their text fields. Empty query = no filter applied.
+  const searchMatchingIds = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return null;
+    const hit = new Set<string>();
+    for (const t of canvasItems) {
+      const haystack = [
+        t.text, t.note, t.subtitle, t.tag, t.url, t.sectorName, t.potentialValue, t.date,
+      ].filter(Boolean).join(" ").toLowerCase();
+      if (haystack.includes(q)) hit.add(t.id);
+    }
+    return hit;
+  }, [searchQuery, canvasItems]);
   const allVisualFlowSectorNames = useMemo(() => {
     const set = new Set<string>();
     for (const t of todos) {
@@ -1632,14 +1659,15 @@ function VisualFlowPanelInner({
   const edgesRef = useRef(edges);
   edgesRef.current = edges;
 
-  // Dim nodes/edges not connected to the focused node
+  // Dim nodes/edges not connected to the focused node OR not matching the search.
+  // A node is dimmed if either constraint says so; an edge is dimmed if either
+  // endpoint is dimmed. Both constraints can be active simultaneously.
   useEffect(() => {
     const currentEdges = edgesRef.current;
-    setNodes((ns) => ns.map((n) => {
-      const base = (n.className ?? "").replace(/\bvf-node-dim\b/g, "").trim();
-      if (!focusedNodeId) return n.className === base ? n : { ...n, className: base };
-      // BFS: collect all nodes reachable from focusedNodeId following edges in either direction
-      const reachable = new Set([focusedNodeId]);
+
+    // Pre-compute focus-reachable set once per run (used for both nodes and edges).
+    const reachable = focusedNodeId ? new Set([focusedNodeId]) : null;
+    if (focusedNodeId && reachable) {
       const queue = [focusedNodeId];
       while (queue.length > 0) {
         const cur = queue.shift()!;
@@ -1648,34 +1676,26 @@ function VisualFlowPanelInner({
           if (e.target === cur && !reachable.has(e.source)) { reachable.add(e.source); queue.push(e.source); }
         }
       }
-      const dim = !reachable.has(n.id);
+    }
+
+    const isNodeDim = (id: string) =>
+      (reachable !== null && !reachable.has(id)) ||
+      (searchMatchingIds !== null && !searchMatchingIds.has(id));
+
+    setNodes((ns) => ns.map((n) => {
+      const base = (n.className ?? "").replace(/\bvf-node-dim\b/g, "").trim();
+      const dim = isNodeDim(n.id);
       const next = dim ? (base ? base + " vf-node-dim" : "vf-node-dim") : base;
       return n.className === next ? n : { ...n, className: next };
     }));
-    setEdges((es) => {
-      if (!focusedNodeId) return es.map((e) => {
-        const base = (e.className ?? "").replace(/\bvf-edge-dim\b/g, "").trim();
-        return e.className === base ? e : { ...e, className: base };
-      });
-      // Same BFS to find lit node set, then light edges where both endpoints are in it
-      const reachable = new Set([focusedNodeId]);
-      const queue = [focusedNodeId];
-      while (queue.length > 0) {
-        const cur = queue.shift()!;
-        for (const e of es) {
-          if (e.source === cur && !reachable.has(e.target)) { reachable.add(e.target); queue.push(e.target); }
-          if (e.target === cur && !reachable.has(e.source)) { reachable.add(e.source); queue.push(e.source); }
-        }
-      }
-      return es.map((e) => {
-        const base = (e.className ?? "").replace(/\bvf-edge-dim\b/g, "").trim();
-        const dim = !reachable.has(e.source) || !reachable.has(e.target);
-        const next = dim ? (base ? base + " vf-edge-dim" : "vf-edge-dim") : base;
-        return e.className === next ? e : { ...e, className: next };
-      });
-    });
+    setEdges((es) => es.map((e) => {
+      const base = (e.className ?? "").replace(/\bvf-edge-dim\b/g, "").trim();
+      const dim = isNodeDim(e.source) || isNodeDim(e.target);
+      const next = dim ? (base ? base + " vf-edge-dim" : "vf-edge-dim") : base;
+      return e.className === next ? e : { ...e, className: next };
+    }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusedNodeId]);
+  }, [focusedNodeId, searchMatchingIds]);
 
   useEffect(() => {
     if (lastSyncedCanvasKeyRef.current === canvasSyncKey) return;
@@ -1866,6 +1886,16 @@ function VisualFlowPanelInner({
     [setEdges]
   );
 
+  const handleDeleteSelectedEdges = useCallback(() => {
+    setEdgeMenu(null);
+    setPaneMenu(null);
+    hasInteracted.current = true;
+    setEdges((eds) => eds.filter((e) => !e.selected));
+  }, [setEdges]);
+
+  const selectedEdgeCount = edges.reduce((n, e) => (e.selected ? n + 1 : n), 0);
+
+
   const handleEdgeToggleDoubled = useCallback(
     (edgeId: string) => {
       setEdges((eds) =>
@@ -1961,6 +1991,24 @@ function VisualFlowPanelInner({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [nodeMenu, paneMenu, edgeMenu]);
+
+  // Cmd/Ctrl+A — select all nodes + edges on the current plane.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "a" || e.shiftKey) return;
+      const a = document.activeElement;
+      if (a instanceof HTMLElement) {
+        const tag = a.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || a.isContentEditable) return;
+      }
+      e.preventDefault();
+      hasInteracted.current = true;
+      setNodes((ns) => ns.map((n) => (n.selected ? n : { ...n, selected: true })));
+      setEdges((es) => es.map((ed) => (ed.selected ? ed : { ...ed, selected: true })));
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [setNodes, setEdges]);
 
   useEffect(() => {
     if (!drawerMenu) return;
@@ -2407,6 +2455,57 @@ function VisualFlowPanelInner({
     [canvasItems, currentPlaneDelete, onTodoLog, plane, setEdges, setNodes]
   );
 
+  /** Single-confirm bulk delete used by the Backspace/Delete keyboard shortcut. */
+  const handleBackspaceDelete = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0 || !currentPlaneDelete) return;
+      const noun = plane === "main" ? "task" : "item";
+      const label =
+        ids.length === 1
+          ? (() => {
+              const t = canvasItems.find((c) => c.id === ids[0]);
+              return t?.text ? `"${t.text}"` : `this ${noun}`;
+            })()
+          : `${ids.length} ${noun}${ids.length === 1 ? "" : "s"}`;
+      if (!window.confirm(`Remove ${label}? This cannot be undone.`)) return;
+      setNodeMenu(null);
+      setEditNodeId(null);
+      hasInteracted.current = true;
+      for (const id of ids) {
+        const t = canvasItems.find((c) => c.id === id);
+        currentPlaneDelete(id);
+        if (t) {
+          onTodoLog?.(`${getVisualFlowPlaneLogLabel(plane)}: removed ${noun} "${t.text}"`);
+        }
+      }
+      const idSet = new Set(ids);
+      setEdges((eds) => eds.filter((e) => !idSet.has(e.source) && !idSet.has(e.target)));
+      setNodes((ns) => ns.filter((n) => !idSet.has(n.id)));
+    },
+    [canvasItems, currentPlaneDelete, onTodoLog, plane, setEdges, setNodes]
+  );
+
+  // Backspace / Delete on selected nodes — confirmation then delete. Skips when
+  // focus is in an editable field so native input erase still works.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Backspace" && e.key !== "Delete") return;
+      const a = document.activeElement;
+      if (a instanceof HTMLElement) {
+        const tag = a.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || a.isContentEditable) return;
+      }
+      const ids = getNodes()
+        .filter((n) => n.selected)
+        .map((n) => String(n.id));
+      if (ids.length === 0) return;
+      e.preventDefault();
+      handleBackspaceDelete(ids);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [getNodes, handleBackspaceDelete]);
+
   const handleMarkCompleted = useCallback(
     (id: string) => {
       const canComplete = currentPlaneDelete;
@@ -2660,11 +2759,46 @@ function VisualFlowPanelInner({
             )}
           </button>
         </div>
-        <div
-          className="flex rounded-lg border border-white/10 bg-black/30 p-0.5 text-xs font-medium"
-          role="tablist"
-          aria-label="Canvas layer"
-        >
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="vf-search">
+            <svg className="vf-search-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && searchQuery) {
+                  e.stopPropagation();
+                  setSearchQuery("");
+                }
+              }}
+              placeholder="Search nodes…"
+              aria-label="Search nodes on this canvas"
+              className="vf-search-in"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="vf-search-x"
+                onClick={() => setSearchQuery("")}
+                aria-label="Clear search"
+                title="Clear (Esc)"
+              >
+                ×
+              </button>
+            )}
+            {searchMatchingIds && (
+              <span className="vf-search-n" aria-live="polite">{searchMatchingIds.size}</span>
+            )}
+          </div>
+          <div
+            className="flex rounded-lg border border-white/10 bg-black/30 p-0.5 text-xs font-medium"
+            role="tablist"
+            aria-label="Canvas layer"
+          >
           <button
             type="button"
             role="tab"
@@ -2690,6 +2824,7 @@ function VisualFlowPanelInner({
               {SPECIAL_VISUAL_FLOW_PLANE_META[specialPlane].tabLabel}
             </button>
           ))}
+          </div>
         </div>
       </div>
 
@@ -2737,6 +2872,7 @@ function VisualFlowPanelInner({
                 selectionKeyCode={["Control", "Meta"]}
                 multiSelectionKeyCode={["Shift"]}
                 selectionMode={SelectionMode.Partial}
+                deleteKeyCode={null}
                 onMoveEnd={(_, vp) => {
                   onUpdateVisualFlow((prev) => ({
                     ...prev,
@@ -3314,41 +3450,72 @@ function VisualFlowPanelInner({
                   >
                     Delete connection
                   </button>
+                  {selectedEdgeCount > 1 && (
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-sm text-red-400/90 hover:bg-white/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteSelectedEdges();
+                      }}
+                    >
+                      Delete {selectedEdgeCount} selected connections
+                    </button>
+                  )}
                 </div>
               );
             })()}
 
-            {paneMenu && currentPlaneAdd && (() => {
-              const menuW = 200;
-              const menuH = 108;
+            {paneMenu && (currentPlaneAdd || selectedEdgeCount > 0) && (() => {
+              const menuW = 220;
+              const menuH = selectedEdgeCount > 0 ? 152 : 108;
               const left = Math.max(8, Math.min(paneMenu.x, window.innerWidth - menuW));
               const top = Math.max(8, Math.min(paneMenu.y, window.innerHeight - menuH));
               return (
               <div
                 ref={paneMenuRef}
-                className="shelf-note-popover fixed z-[200] min-w-[180px] rounded-xl border border-emerald-400/20 bg-zinc-900 py-1 shadow-xl"
+                className="shelf-note-popover fixed z-[200] min-w-[200px] rounded-xl border border-emerald-400/20 bg-zinc-900 py-1 shadow-xl"
                 style={{ left, top }}
               >
-                <button
-                  type="button"
-                  className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCreateTask();
-                  }}
-                >
-                  {plane === "main" ? "Create new task" : "Create new item"}
-                </button>
-                <button
-                  type="button"
-                  className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenSectorManager();
-                  }}
-                >
-                  Manage sectors
-                </button>
+                {currentPlaneAdd && (
+                  <>
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCreateTask();
+                      }}
+                    >
+                      {plane === "main" ? "Create new task" : "Create new item"}
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenSectorManager();
+                      }}
+                    >
+                      Manage sectors
+                    </button>
+                  </>
+                )}
+                {selectedEdgeCount > 0 && (
+                  <>
+                    {currentPlaneAdd && <div className="my-1 border-t border-white/10" />}
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-sm text-red-400/90 hover:bg-white/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteSelectedEdges();
+                      }}
+                    >
+                      Delete {selectedEdgeCount} selected connection{selectedEdgeCount === 1 ? "" : "s"}
+                    </button>
+                  </>
+                )}
               </div>
             );
             })()}

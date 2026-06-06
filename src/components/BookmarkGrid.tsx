@@ -941,6 +941,12 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
     setFocusDesynced,
     lowPerformanceMode,
     setLowPerformanceMode,
+    showStrategieTab,
+    setShowStrategieTab,
+    showHopperTab,
+    setShowHopperTab,
+    showInventoryTab,
+    setShowInventoryTab,
     strategieState,
     strategieSetCurrency,
     strategieSetSecondaryCurrency,
@@ -1245,6 +1251,27 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
               <div className="mt-1 text-[10px] text-zinc-500">
                 When set, a small ↔ toggle appears in Strategie to show values in both currencies.
               </div>
+            </div>
+            <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
+              <div className="mb-1.5 text-xs font-medium text-emerald-200">Visible tabs</div>
+              <div className="mb-1 text-[10px] text-zinc-500">Shelf and Visual Flow are always on.</div>
+              {([
+                { id: "strategie", label: "Strategie", on: showStrategieTab, set: setShowStrategieTab },
+                { id: "hopper",    label: "Hopper",    on: showHopperTab,    set: setShowHopperTab    },
+                { id: "inventory", label: "Inventory", on: showInventoryTab, set: setShowInventoryTab },
+              ] as const).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => t.set(!t.on)}
+                  className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[12px] text-zinc-200 hover:bg-white/5"
+                >
+                  <span>{t.label}</span>
+                  <span className={`text-xs ${t.on ? "text-emerald-300" : "text-zinc-500"}`}>
+                    {t.on ? "Shown" : "Hidden"}
+                  </span>
+                </button>
+              ))}
             </div>
             <button
               type="button"

@@ -192,31 +192,9 @@
 }
 .pin.is-dragging { opacity: 0.4; }
 
-/* Drop-position indicator — a 2px accent bar at the top or bottom edge
-   shows exactly where the dragged pin will land. Always rendered (so we can
-   fade them) but only visible when the drop-position modifier is present. */
+/* Drop-position indicator removed: pins now reorder live on dragenter with a
+   FLIP animation, so the static drop hint is unnecessary. */
 .pin { position: relative; }
-.pin::before,
-.pin::after {
-  content: "";
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  height: 2px;
-  background: var(--accent);
-  border-radius: 2px;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
-  pointer-events: none;
-  z-index: 2;
-  opacity: 0;
-  transform: scaleX(0.6);
-  transform-origin: center;
-  transition: opacity 0.14s ease, transform 0.18s cubic-bezier(.2,.9,.3,1);
-}
-.pin::before { top: -5px; }
-.pin::after  { bottom: -5px; }
-.pin--drop-before::before,
-.pin--drop-after::after { opacity: 1; transform: scaleX(1); }
 .pin-grip {
   display: flex;
   flex-direction: column;
@@ -362,11 +340,36 @@
   flex: 1;
 }
 .todo--done .todo-title { text-decoration: line-through; }
-.todo-link.todo-title {
+/* Title-as-link variants */
+a.todo-title {
   text-decoration: none;
   transition: color 0.13s;
 }
-.todo-link.todo-title:hover { color: var(--accent-bright); }
+a.todo-title:hover { color: var(--accent-bright); }
+
+/* Standalone link-indicator icon, like the reference (sits next to the title). */
+.todo-link {
+  font-size: 12px;
+  color: var(--dim);
+  display: inline-flex;
+  align-items: center;
+}
+.todo-link:hover { color: var(--accent-bright); }
+
+/* Edit-link pencil — hidden by default, revealed on todo hover next to the X. */
+.todo-link-edit {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--faint);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 4px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.todo:hover .todo-link-edit { opacity: 1; }
+.todo-link-edit:hover { color: var(--accent-bright); }
 .todo-sub {
   font-size: 12px;
   color: var(--dim);
@@ -3517,6 +3520,54 @@ body {
 .react-flow__node:not(.vf-node-dim) { transition: opacity 0.18s; }
 .react-flow__edge.vf-edge-dim { opacity: 0.08; transition: opacity 0.18s; }
 .react-flow__edge:not(.vf-edge-dim) { transition: opacity 0.18s; }
+
+/* ── Visual Flow: search input in the top-right header ───────────────────── */
+.vf-search {
+  display: inline-flex; align-items: center; gap: 6px;
+  width: 240px; min-width: 0;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: border-color 0.14s, background-color 0.14s;
+}
+.vf-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: rgba(0, 0, 0, 0.4);
+}
+.vf-search-ico { flex-shrink: 0; color: var(--dim); }
+.vf-search:focus-within .vf-search-ico { color: var(--accent-bright); }
+[data-theme="day"] .vf-search:focus-within .vf-search-ico,
+[data-theme="sap"] .vf-search:focus-within .vf-search-ico { color: var(--accent-deep); }
+.vf-search-in {
+  flex: 1; min-width: 0;
+  background: transparent; border: 0; outline: none;
+  font-family: inherit; font-size: 12.5px; color: #f4f4f5;
+  padding: 7px 0;
+}
+.vf-search-in::placeholder { color: rgb(113, 113, 122); }
+.vf-search-x {
+  flex-shrink: 0;
+  display: grid; place-items: center;
+  width: 18px; height: 18px; border-radius: 5px;
+  background: transparent; border: 0;
+  color: var(--dim); font-size: 16px; line-height: 1; cursor: pointer;
+  transition: background-color 0.14s, color 0.14s;
+}
+.vf-search-x:hover { background: rgba(255, 255, 255, 0.08); color: var(--fg); }
+.vf-search-n {
+  flex-shrink: 0;
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 10.5px; font-weight: 600;
+  padding: 2px 7px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-bright);
+}
+[data-theme="day"] .vf-search-n, [data-theme="sap"] .vf-search-n { color: var(--accent-deep); }
+
+@media (max-width: 760px) {
+  .vf-search { width: 160px; }
+}
 
 /* =========================================================
    VISUAL FLOW — Excel-style sheet tabs

@@ -13,6 +13,14 @@ function faviconUrl(url: string) {
   }
 }
 
+/** 1×1 transparent gif used to suppress the native drag ghost during pin reorder. */
+const BLANK_DRAG_IMG: HTMLImageElement | null = (() => {
+  if (typeof Image === "undefined") return null;
+  const img = new Image();
+  img.src = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+  return img;
+})();
+
 function truncateSubtitle(text: string, maxLen = 25) {
   return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
 }
@@ -104,7 +112,6 @@ export function Pillar({
   }, [notePopover?.id]);
   const [pinMenu, setPinMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [draggingPinId, setDraggingPinId] = useState<string | null>(null);
-  const [dropHint, setDropHint] = useState<{ id: string; pos: "before" | "after" } | null>(null);
   const notePopoverRef = useRef<HTMLDivElement | null>(null);
   const pinMenuRef = useRef<HTMLDivElement | null>(null);
   const todosRef = useRef(todos);
@@ -167,20 +174,6 @@ export function Pillar({
     });
     pinRectsRef.current = new Map();
   }, [pinnedTop]);
-
-  // Drag-to-reorder Top-6 pins (HTML5 DnD; persists via onSetPinned).
-  // Position-aware: "before" inserts above target, "after" inserts below.
-  const reorderPin = (sourceId: string, targetId: string, pos: "before" | "after") => {
-    if (sourceId === targetId) return;
-    const next = pinnedTop.filter((id) => id !== sourceId);
-    let targetIdx = next.indexOf(targetId);
-    if (targetIdx < 0) return;
-    if (pos === "after") targetIdx += 1;
-    next.splice(targetIdx, 0, sourceId);
-    if (JSON.stringify(next) === JSON.stringify(pinnedTop)) return;
-    capturePinPositions();
-    onSetPinned({ top: next });
-  };
 
   // Deterministic tag color per spec (only violet or blue available)
   const tagClass = (tag: string) => {
@@ -376,52 +369,44 @@ export function Pillar({
                       if (el) pinNodeRefs.current.set(b.id, el);
                       else pinNodeRefs.current.delete(b.id);
                     }}
-                    className={`pin${isDragging ? " is-dragging" : ""}${
-                      dropHint?.id === b.id ? ` pin--drop-${dropHint.pos}` : ""
-                    }`}
+                    data-sort-key={b.id}
+                    className={`pin${isDragging ? " is-dragging" : ""}`}
                     draggable
                     onDragStart={(e) => {
                       e.dataTransfer.effectAllowed = "move";
                       e.dataTransfer.setData("application/x-shelf-pin-reorder", b.id);
+                      if (BLANK_DRAG_IMG) {
+                        try { e.dataTransfer.setDragImage(BLANK_DRAG_IMG, 0, 0); } catch { /* ignore */ }
+                      }
                       setDraggingPinId(b.id);
+                    }}
+                    onDragEnter={() => {
+                      // Immediate reorder on dragenter — drives the FLIP animation.
+                      if (!draggingPinId || draggingPinId === b.id) return;
+                      const from = pinnedTop.indexOf(draggingPinId);
+                      const to = pinnedTop.indexOf(b.id);
+                      if (from < 0 || to < 0 || from === to) return;
+                      capturePinPositions();
+                      const next = pinnedTop.slice();
+                      const [moved] = next.splice(from, 1);
+                      next.splice(to, 0, moved);
+                      onSetPinned({ top: next });
+                    }}
+                    onDragOver={(e) => {
+                      // Must preventDefault to accept the drop and keep the dragenter cycle live.
+                      if (e.dataTransfer.types.includes("application/x-shelf-pin-reorder")) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.dataTransfer.dropEffect = "move";
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDraggingPinId(null);
                     }}
                     onDragEnd={() => {
                       setDraggingPinId(null);
-                      setDropHint(null);
-                    }}
-                    onDragOver={(e) => {
-                      if (!e.dataTransfer.types.includes("application/x-shelf-pin-reorder")) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.dataTransfer.dropEffect = "move";
-                      if (draggingPinId === b.id) {
-                        if (dropHint) setDropHint(null);
-                        return;
-                      }
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      const pos: "before" | "after" =
-                        e.clientY < rect.top + rect.height / 2 ? "before" : "after";
-                      if (dropHint?.id !== b.id || dropHint.pos !== pos) {
-                        setDropHint({ id: b.id, pos });
-                      }
-                    }}
-                    onDragLeave={(e) => {
-                      // Only clear when leaving the pin entirely (not entering a child)
-                      const related = e.relatedTarget as Node | null;
-                      if (related && (e.currentTarget as Node).contains(related)) return;
-                      if (dropHint?.id === b.id) setDropHint(null);
-                    }}
-                    onDrop={(e) => {
-                      const sourceId = e.dataTransfer.getData("application/x-shelf-pin-reorder");
-                      if (!sourceId) return;
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      const pos: "before" | "after" =
-                        e.clientY < rect.top + rect.height / 2 ? "before" : "after";
-                      reorderPin(sourceId, b.id, pos);
-                      setDraggingPinId(null);
-                      setDropHint(null);
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
@@ -544,7 +529,7 @@ export function Pillar({
                           href={t.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="todo-link todo-title"
+                          className="todo-title"
                         >
                           {t.text}
                         </Link>
@@ -553,29 +538,44 @@ export function Pillar({
                           {t.text}
                         </span>
                       )}
+                      {t.url && (
+                        <span className="todo-link" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ width: 13, height: 13 }}>
+                            <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" />
+                            <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" />
+                          </svg>
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={() => {
                           const next = window.prompt("Link URL", t.url ?? "");
                           if (next !== null) setTodoUrl(t.id, next || undefined);
                         }}
-                        className="text-[12px] text-[var(--dim)] hover:text-[var(--accent-bright)]"
+                        className="todo-link-edit"
                         aria-label={t.url ? "Edit link" : "Add link"}
                         title={t.url ? "Edit link" : "Add link"}
                       >
-                        🔗
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 12, height: 12 }}>
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                        </svg>
                       </button>
                     </div>
-                    {t.subtitle && (
+                    {t.tag ? (
+                      <div>
+                        <span className={`todo-tag ${tagClass(t.tag)}`}>{t.tag}</span>
+                        {t.subtitle && (
+                          <span className="todo-sub" style={{ marginLeft: 8, display: "inline" }}>
+                            {truncateSubtitle(t.subtitle, 25)}
+                          </span>
+                        )}
+                      </div>
+                    ) : t.subtitle ? (
                       <div className="todo-sub">
                         {truncateSubtitle(t.subtitle, 25)}
                       </div>
-                    )}
-                    {t.tag && (
-                      <div className={`todo-tag ${tagClass(t.tag)}`}>
-                        {t.tag}
-                      </div>
-                    )}
+                    ) : null}
                   </div>
                   <button
                     type="button"
