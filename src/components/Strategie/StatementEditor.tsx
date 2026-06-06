@@ -6,6 +6,7 @@ import {
   dayStr, daysInMonth, monthWeeks, weekOfDate, stepMonth, monthLabel, monthAbbr,
   cloneMonth, fmtMoney, CURRENCIES, STMT_CATS, CAT_KEYS,
 } from "./strategie";
+import { brandMatch, BrandMark, BRAND_COLORS } from "./brandLogos";
 import {
   IcoX, IcoChev, IcoPlus, IcoTrash, IcoIn, IcoOut,
   IcoFile, IcoCheck, IcoRepeat, IcoPencil,
@@ -399,16 +400,20 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
               <div className="se-mem-grid">
                 {members.map((m) => {
                   const off = !!m.paused;
+                  const brand = brandMatch(m.name);
+                  const brandColor = brand ? BRAND_COLORS[brand] : m.color;
                   return (
                     <button
                       key={m.id} type="button"
-                      className={"se-tile" + (off ? " off" : "")}
-                      style={{ ["--brand" as string]: m.color } as React.CSSProperties}
+                      className={"se-tile" + (off ? " off" : "") + (brand ? " se-tile--brand" : "")}
+                      style={{ ["--brand" as string]: brandColor } as React.CSSProperties}
                       onClick={() => toggleMem(m.id)}
                       aria-pressed={!off}
                       aria-label={`${m.name}${m.plan ? " · " + m.plan : ""}${off ? " (paused)" : ""}`}
                     >
-                      <span className="se-tile-mono">{m.mono}</span>
+                      {brand
+                        ? <span className="se-tile-logo"><BrandMark brand={brand} /></span>
+                        : <span className="se-tile-mono">{m.mono}</span>}
                       <span
                         className="se-tile-edit" role="button" tabIndex={-1}
                         onClick={(e) => { e.stopPropagation(); openEditMem(m); }}
@@ -432,14 +437,19 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
                 </button>
               </div>
 
-              {memEditor && (
+              {memEditor && (() => {
+                const previewBrand = brandMatch(memEditor.name);
+                const previewBrandColor = previewBrand ? BRAND_COLORS[previewBrand] : memEditor.color;
+                return (
                 <div className="se-mem-editor">
                   <div className="se-mem-ed-top">
                     <span
-                      className="se-tile se-tile--preview"
-                      style={{ ["--brand" as string]: memEditor.color } as React.CSSProperties}
+                      className={"se-tile se-tile--preview" + (previewBrand ? " se-tile--brand" : "")}
+                      style={{ ["--brand" as string]: previewBrandColor } as React.CSSProperties}
                     >
-                      <span className="se-tile-mono">{previewMono}</span>
+                      {previewBrand
+                        ? <span className="se-tile-logo"><BrandMark brand={previewBrand} /></span>
+                        : <span className="se-tile-mono">{previewMono}</span>}
                     </span>
                     <div className="se-mem-ed-fields">
                       <input
@@ -498,7 +508,8 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
                     </div>
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               <div className="se-mem-foot">
                 <span>{activeMems.length} active{pausedCount ? ` · ${pausedCount} paused` : ""}</span>

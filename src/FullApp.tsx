@@ -106,7 +106,7 @@ export default function FullApp() {
     pillarTodos,
     showTodoDates,
     visualFlow,
-    setVisualFlow,
+    updateVisualFlow,
     prompts,
     savePrompts,
     updatePrompt,
@@ -145,6 +145,9 @@ export default function FullApp() {
     strategieSaveStatement,
     strategieAddPot,
     strategieSetCurrency,
+    strategieToggleCompareCurrency,
+    strategieSetRungAccounts,
+    strategieUpsertAccountDictEntry,
   } = useShelfStorage();
   const [editingName, setEditingName] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -581,6 +584,9 @@ export default function FullApp() {
                 onSaveStatement={strategieSaveStatement}
                 onAddPot={strategieAddPot}
                 onSetCurrency={strategieSetCurrency}
+                onToggleCompareCurrency={strategieToggleCompareCurrency}
+                onSetRungAccounts={strategieSetRungAccounts}
+                onUpsertAccountDictEntry={strategieUpsertAccountDictEntry}
               />
             </div>
           ) : dashboardView === "buylist" ? (
@@ -603,6 +609,21 @@ export default function FullApp() {
                 onAdd={inventoryAdd}
                 onUpdate={inventoryUpdate}
                 onRemove={inventoryRemove}
+                onSell={(it) => {
+                  const now = new Date().toISOString();
+                  saleItemAdd({
+                    name: it.name,
+                    where: "resale",
+                    price: it.estimatedValue,
+                    unit: "Kč",
+                    status: "listed",
+                    url: it.sellUrl,
+                    createdAt: now,
+                    updatedAt: now,
+                    soldAt: null,
+                    history: [{ at: now, text: "Moved from inventory" }],
+                  });
+                }}
               />
             </div>
           ) : dashboardView === "visual-flow" ? (
@@ -612,10 +633,9 @@ export default function FullApp() {
                 todos={pillarTodos}
                 grazelandItems={grazelandItems}
                 binItems={binItems}
-                saleItems={saleItems}
                 showTodoDates={showTodoDates}
                 visualFlow={visualFlow}
-                onVisualFlowChange={setVisualFlow}
+                onUpdateVisualFlow={updateVisualFlow}
                 focusDesynced={focusDesynced}
                 setPillarTodoPins={setPillarTodoPins}
                 onEditTodo={handleVisualFlowEditTodo}

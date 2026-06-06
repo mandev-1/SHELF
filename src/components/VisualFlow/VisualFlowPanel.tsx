@@ -40,6 +40,7 @@ import {
 } from "../../types/grid";
 import { NoteContent, linkifyText } from "../NoteContent";
 import { exportFlowAsMarkdown } from "./exportFlow";
+import { writePlane, getPlaneSizes, type PlaneId } from "./visualFlowWriter";
 
 const NODE_INITIAL_WIDTH = 260;
 const NODE_RESIZE_MIN_WIDTH = 5;
@@ -1174,10 +1175,9 @@ function VisualFlowPanelInner({
   todos,
   grazelandItems = [],
   binItems = [],
-  saleItems = [],
   showTodoDates = false,
   visualFlow,
-  onVisualFlowChange,
+  onUpdateVisualFlow,
   focusDesynced = false,
   setPillarTodoPins,
   onEditTodo,
@@ -1196,10 +1196,13 @@ function VisualFlowPanelInner({
   todos: ShelfPillarTodoItem[];
   grazelandItems?: ShelfPillarTodoItem[];
   binItems?: ShelfPillarTodoItem[];
-  saleItems?: import("../../types/grid").SaleItem[];
   showTodoDates?: boolean;
   visualFlow: VisualFlowData;
-  onVisualFlowChange: (data: VisualFlowData) => void;
+  /**
+   * Single write path for visualFlow. Always functional-updater — reads React's
+   * latest state in `prev` so two updates in the same tick can't clobber each other.
+   */
+  onUpdateVisualFlow: (updater: (prev: VisualFlowData) => VisualFlowData) => void;
   focusDesynced?: boolean;
   setPillarTodoPins?: (next: string[] | ((prev: string[]) => string[])) => void;
   onEditTodo?: (id: string, updates: Partial<ShelfPillarTodoItem>) => void;
@@ -1234,35 +1237,6 @@ function VisualFlowPanelInner({
   const [renamingPlaneId, setRenamingPlaneId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
-  const handleExportForAI = useCallback(async () => {
-    const md = exportFlowAsMarkdown({
-      pillarTodos: todos,
-      grazelandItems: grazelandItems ?? [],
-      binItems: binItems ?? [],
-      saleItems: saleItems ?? [],
-      visualFlow,
-    });
-    try {
-      await navigator.clipboard.writeText(md);
-      setExportToast("Copied to clipboard");
-    } catch {
-      // Fallback: trigger a download so the user still gets the data
-      const blob = new Blob([md], { type: "text/markdown" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `shelf-flow-${new Date().toISOString().slice(0, 10)}.md`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setExportToast("Downloaded (clipboard unavailable)");
-    }
-    if (exportToastTimerRef.current !== null) window.clearTimeout(exportToastTimerRef.current);
-    exportToastTimerRef.current = window.setTimeout(() => {
-      setExportToast(null);
-      exportToastTimerRef.current = null;
-    }, 1900);
-  }, [todos, grazelandItems, binItems, visualFlow]);
-
   useEffect(() => {
     return () => {
       if (exportToastTimerRef.current !== null) window.clearTimeout(exportToastTimerRef.current);
@@ -1294,37 +1268,37 @@ function VisualFlowPanelInner({
 
   const currentPlaneEdit = isCustomPlane
     ? (id: string, updates: Partial<ShelfPillarTodoItem>) => {
-        onVisualFlowChange({
-          ...visualFlow,
+        onUpdateVisualFlow((prev) => ({
+          ...prev,
           customPlaneItems: {
-            ...(visualFlow.customPlaneItems ?? {}),
-            [plane]: (visualFlow.customPlaneItems?.[plane] ?? []).map((t) => t.id === id ? { ...t, ...updates } : t),
+            ...(prev.customPlaneItems ?? {}),
+            [plane]: (prev.customPlaneItems?.[plane] ?? []).map((t) => t.id === id ? { ...t, ...updates } : t),
           },
-        });
+        }));
       }
     : plane === "main" ? onEditTodo : plane === "grazeland" ? onEditGrazelandItem : onEditBinItem;
 
   const currentPlaneDelete = isCustomPlane
     ? (id: string) => {
-        onVisualFlowChange({
-          ...visualFlow,
+        onUpdateVisualFlow((prev) => ({
+          ...prev,
           customPlaneItems: {
-            ...(visualFlow.customPlaneItems ?? {}),
-            [plane]: (visualFlow.customPlaneItems?.[plane] ?? []).filter((t) => t.id !== id),
+            ...(prev.customPlaneItems ?? {}),
+            [plane]: (prev.customPlaneItems?.[plane] ?? []).filter((t) => t.id !== id),
           },
-        });
+        }));
       }
     : plane === "main" ? onDeleteTodo : plane === "grazeland" ? onDeleteGrazelandItem : onDeleteBinItem;
 
   const currentPlaneAdd = isCustomPlane
     ? (todo: ShelfPillarTodoItem) => {
-        onVisualFlowChange({
-          ...visualFlow,
+        onUpdateVisualFlow((prev) => ({
+          ...prev,
           customPlaneItems: {
-            ...(visualFlow.customPlaneItems ?? {}),
-            [plane]: [...(visualFlow.customPlaneItems?.[plane] ?? []), todo],
+            ...(prev.customPlaneItems ?? {}),
+            [plane]: [...(prev.customPlaneItems?.[plane] ?? []), todo],
           },
-        });
+        }));
       }
     : plane === "main" ? onAddTodo : plane === "grazeland" ? onAddGrazelandItem : onAddBinItem;
 
@@ -1379,6 +1353,38 @@ function VisualFlowPanelInner({
         ? visualFlow.grazelandEdges
         : visualFlow.binEdges;
 
+  const handleExportForAI = useCallback(async () => {
+    const planeName = isCustomPlane
+      ? visualFlow.customPlanes?.find((p) => p.id === plane)?.name
+      : undefined;
+    const md = exportFlowAsMarkdown({
+      plane: plane as PlaneId,
+      planeName,
+      items: canvasItems,
+      edges: storedFlowEdges,
+      sectorColors: visualFlow.sectorColors,
+    });
+    try {
+      await navigator.clipboard.writeText(md);
+      setExportToast("Copied to clipboard");
+    } catch {
+      // Fallback: trigger a download so the user still gets the data
+      const blob = new Blob([md], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `shelf-flow-${plane}-${new Date().toISOString().slice(0, 10)}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setExportToast("Downloaded (clipboard unavailable)");
+    }
+    if (exportToastTimerRef.current !== null) window.clearTimeout(exportToastTimerRef.current);
+    exportToastTimerRef.current = window.setTimeout(() => {
+      setExportToast(null);
+      exportToastTimerRef.current = null;
+    }, 1900);
+  }, [canvasItems, isCustomPlane, plane, storedFlowEdges, visualFlow.customPlanes, visualFlow.sectorColors]);
+
   const flushCanvasToVisualFlow = useCallback(
     (targetPlane: VisualFlowPlane, nodeList: Node[], edgeList: Edge[]) => {
       const nodeIds = new Set(nodeList.map((node) => String(node.id)));
@@ -1395,49 +1401,13 @@ function VisualFlowPanelInner({
           ...(d?.muted && { muted: true }),
         };
       });
-      if (targetPlane === "main") {
-        onVisualFlowChange({
-          ...visualFlow,
-          nodePositions: positions,
-          edges: edgeData,
-        });
-      } else if (targetPlane === "grazeland") {
-        const nextSizes = pruneNodeSizes(nodeIds, visualFlow.grazelandNodeSizes);
-        const nextFlow: VisualFlowData = {
-          ...visualFlow,
-          grazelandNodePositions: positions,
-          grazelandEdges: edgeData,
-        };
-        if (nextSizes) nextFlow.grazelandNodeSizes = nextSizes;
-        else delete nextFlow.grazelandNodeSizes;
-        onVisualFlowChange({
-          ...nextFlow,
-        });
-      } else if (targetPlane === "bin") {
-        const nextSizes = pruneNodeSizes(nodeIds, visualFlow.binNodeSizes);
-        const nextFlow: VisualFlowData = {
-          ...visualFlow,
-          binNodePositions: positions,
-          binEdges: edgeData,
-        };
-        if (nextSizes) nextFlow.binNodeSizes = nextSizes;
-        else delete nextFlow.binNodeSizes;
-        onVisualFlowChange({ ...nextFlow });
-      } else {
-        // custom plane
-        const prevSizes = visualFlow.customPlaneNodeSizes?.[targetPlane];
-        const nextSizes = pruneNodeSizes(nodeIds, prevSizes);
-        onVisualFlowChange({
-          ...visualFlow,
-          customPlaneNodePositions: { ...(visualFlow.customPlaneNodePositions ?? {}), [targetPlane]: positions },
-          customPlaneEdges: { ...(visualFlow.customPlaneEdges ?? {}), [targetPlane]: edgeData },
-          ...(nextSizes
-            ? { customPlaneNodeSizes: { ...(visualFlow.customPlaneNodeSizes ?? {}), [targetPlane]: nextSizes } }
-            : {}),
-        });
-      }
+      onUpdateVisualFlow((prev) => {
+        const planeId = targetPlane as PlaneId;
+        const sizes = pruneNodeSizes(nodeIds, getPlaneSizes(prev, planeId));
+        return writePlane(prev, planeId, { positions, edges: edgeData, sizes });
+      });
     },
-    [onVisualFlowChange, visualFlow]
+    [onUpdateVisualFlow]
   );
 
   const handleEditCanvasItemWithLog = useCallback(
@@ -1501,23 +1471,23 @@ function VisualFlowPanelInner({
       if (prevSize?.width === nextSize.width && prevSize?.height === nextSize.height) return;
       hasInteracted.current = true;
       if (isCustomPlane) {
-        onVisualFlowChange({
-          ...visualFlow,
+        onUpdateVisualFlow((prev) => ({
+          ...prev,
           customPlaneNodeSizes: {
-            ...(visualFlow.customPlaneNodeSizes ?? {}),
-            [plane]: { ...(visualFlow.customPlaneNodeSizes?.[plane] ?? {}), [id]: nextSize },
+            ...(prev.customPlaneNodeSizes ?? {}),
+            [plane]: { ...(prev.customPlaneNodeSizes?.[plane] ?? {}), [id]: nextSize },
           },
-        });
+        }));
       } else if (plane === "grazeland") {
-        onVisualFlowChange({
-          ...visualFlow,
-          grazelandNodeSizes: { ...(visualFlow.grazelandNodeSizes ?? {}), [id]: nextSize },
-        });
+        onUpdateVisualFlow((prev) => ({
+          ...prev,
+          grazelandNodeSizes: { ...(prev.grazelandNodeSizes ?? {}), [id]: nextSize },
+        }));
       } else {
-        onVisualFlowChange({
-          ...visualFlow,
-          binNodeSizes: { ...(visualFlow.binNodeSizes ?? {}), [id]: nextSize },
-        });
+        onUpdateVisualFlow((prev) => ({
+          ...prev,
+          binNodeSizes: { ...(prev.binNodeSizes ?? {}), [id]: nextSize },
+        }));
       }
       const item = canvasItems.find((t) => t.id === id);
       if (item) {
@@ -1527,7 +1497,7 @@ function VisualFlowPanelInner({
         );
       }
     },
-    [canvasItems, onTodoLog, onVisualFlowChange, plane, visualFlow]
+    [canvasItems, isCustomPlane, onTodoLog, onUpdateVisualFlow, plane, visualFlow]
   );
 
   const initialNodes = useMemo(
@@ -1578,12 +1548,12 @@ function VisualFlowPanelInner({
   const switchPlane = useCallback(
     (next: VisualFlowPlane) => {
       if (next === plane) return;
-      // Save current viewport before leaving
+      // Save current viewport before leaving — pre-queued so the flush below sees it via prev.
       const vp = getViewport();
-      onVisualFlowChange({
-        ...visualFlow,
-        planeViewports: { ...(visualFlow.planeViewports ?? {}), [plane]: vp },
-      });
+      onUpdateVisualFlow((prev) => ({
+        ...prev,
+        planeViewports: { ...(prev.planeViewports ?? {}), [plane]: vp },
+      }));
       flushCanvasToVisualFlow(plane, nodes, edges);
       try {
         window.localStorage.setItem(VISUAL_FLOW_PLANE_LS_KEY, next);
@@ -1592,7 +1562,7 @@ function VisualFlowPanelInner({
       }
       setPlaneState(next);
     },
-    [flushCanvasToVisualFlow, getViewport, nodes, edges, plane, onVisualFlowChange, visualFlow]
+    [flushCanvasToVisualFlow, getViewport, nodes, edges, plane, onUpdateVisualFlow]
   );
 
   // Restore saved viewport when switching planes; fall back to fitView if none stored
@@ -1706,8 +1676,43 @@ function VisualFlowPanelInner({
   const onConnect = useCallback(
     (params: Connection) => {
       hasInteracted.current = true;
+      // Fan-out: if a multi-selection is active and the user drags a connection
+      // that touches the selection on exactly one side, create the same edge
+      // against every selected node on that side. Drags entirely within or
+      // entirely outside the selection fall through to a single edge.
+      const selectedIds = getNodes()
+        .filter((n) => n.selected)
+        .map((n) => String(n.id));
+      const selSet = new Set(selectedIds);
+      const sourceSelected = !!params.source && selSet.has(params.source);
+      const targetSelected = !!params.target && selSet.has(params.target);
+      const fanOut =
+        selectedIds.length > 1 &&
+        ((targetSelected && !sourceSelected) || (sourceSelected && !targetSelected));
+
       setEdges((eds) => {
-        const next = addEdge(params, eds);
+        let next = eds;
+        if (fanOut) {
+          // Iterate over every selected node and create one connection per node
+          // on the side that touched the selection.
+          for (const id of selectedIds) {
+            const p: Connection = targetSelected
+              ? { ...params, target: id }
+              : { ...params, source: id };
+            if (!p.source || !p.target || p.source === p.target) continue;
+            const exists = next.some(
+              (e) =>
+                e.source === p.source &&
+                e.target === p.target &&
+                (e.sourceHandle ?? null) === (p.sourceHandle ?? null) &&
+                (e.targetHandle ?? null) === (p.targetHandle ?? null)
+            );
+            if (exists) continue;
+            next = addEdge(p, next);
+          }
+        } else {
+          next = addEdge(params, eds);
+        }
         return next.map((e) =>
           e.type !== "todoFlow"
             ? { ...e, type: "todoFlow", data: { ...(e.data as object), arrow: false, doubled: false, muted: false } }
@@ -1715,7 +1720,7 @@ function VisualFlowPanelInner({
         );
       });
     },
-    [setEdges]
+    [getNodes, setEdges]
   );
 
   const persist = useCallback(
@@ -1735,27 +1740,13 @@ function VisualFlowPanelInner({
           ...(d?.muted && { muted: true }),
         };
       });
-      if (plane === "main") {
-        onVisualFlowChange({
-          ...visualFlow,
-          nodePositions: positions,
-          edges: edgeList,
-        });
-      } else {
-        const nextSizes = pruneNodeSizes(nodeIds, visualFlow.grazelandNodeSizes);
-        const nextFlow: VisualFlowData = {
-          ...visualFlow,
-          grazelandNodePositions: positions,
-          grazelandEdges: edgeList,
-        };
-        if (nextSizes) nextFlow.grazelandNodeSizes = nextSizes;
-        else delete nextFlow.grazelandNodeSizes;
-        onVisualFlowChange({
-          ...nextFlow,
-        });
-      }
+      onUpdateVisualFlow((prev) => {
+        const planeId = plane as PlaneId;
+        const sizes = pruneNodeSizes(nodeIds, getPlaneSizes(prev, planeId));
+        return writePlane(prev, planeId, { positions, edges: edgeList, sizes });
+      });
     },
-    [nodes, edges, onVisualFlowChange, visualFlow, plane]
+    [nodes, edges, onUpdateVisualFlow, plane]
   );
 
   useEffect(() => {
@@ -1967,10 +1958,10 @@ function VisualFlowPanelInner({
         done: false,
       };
       currentPlaneAdd(newTodo);
-      onVisualFlowChange({
-        ...visualFlow,
-        nodePositions: { ...(visualFlow.nodePositions ?? {}), [newTodo.id]: pos },
-      });
+      onUpdateVisualFlow((prev) => ({
+        ...prev,
+        nodePositions: { ...(prev.nodePositions ?? {}), [newTodo.id]: pos },
+      }));
       setPaneMenu(null);
       setEditNodeId(newTodo.id);
       onTodoLog?.(`Visual Flow: added new task "${newTodo.text}"`);
@@ -1984,29 +1975,30 @@ function VisualFlowPanelInner({
       grazelandHandleVisibility: createGrazelandHandleVisibility(false),
     };
     if (isCustomPlane) {
-      onVisualFlowChange({
-        ...visualFlow,
+      // Atomic: item + position in one updater so the writes can't clobber each other.
+      onUpdateVisualFlow((prev) => ({
+        ...prev,
         customPlaneItems: {
-          ...(visualFlow.customPlaneItems ?? {}),
-          [plane]: [...(visualFlow.customPlaneItems?.[plane] ?? []), newItem],
+          ...(prev.customPlaneItems ?? {}),
+          [plane]: [...(prev.customPlaneItems?.[plane] ?? []), newItem],
         },
         customPlaneNodePositions: {
-          ...(visualFlow.customPlaneNodePositions ?? {}),
-          [plane]: { ...(visualFlow.customPlaneNodePositions?.[plane] ?? {}), [newItem.id]: pos },
+          ...(prev.customPlaneNodePositions ?? {}),
+          [plane]: { ...(prev.customPlaneNodePositions?.[plane] ?? {}), [newItem.id]: pos },
         },
-      });
+      }));
     } else {
       currentPlaneAdd(newItem);
       if (plane === "grazeland") {
-        onVisualFlowChange({
-          ...visualFlow,
-          grazelandNodePositions: { ...(visualFlow.grazelandNodePositions ?? {}), [newItem.id]: pos },
-        });
+        onUpdateVisualFlow((prev) => ({
+          ...prev,
+          grazelandNodePositions: { ...(prev.grazelandNodePositions ?? {}), [newItem.id]: pos },
+        }));
       } else {
-        onVisualFlowChange({
-          ...visualFlow,
-          binNodePositions: { ...(visualFlow.binNodePositions ?? {}), [newItem.id]: pos },
-        });
+        onUpdateVisualFlow((prev) => ({
+          ...prev,
+          binNodePositions: { ...(prev.binNodePositions ?? {}), [newItem.id]: pos },
+        }));
       }
     }
     setPaneMenu(null);
@@ -2016,11 +2008,10 @@ function VisualFlowPanelInner({
     currentPlaneAdd,
     isCustomPlane,
     onTodoLog,
-    onVisualFlowChange,
+    onUpdateVisualFlow,
     paneMenu,
     plane,
     screenToFlowPosition,
-    visualFlow,
   ]);
 
   const handleOpenSectorManager = useCallback(() => {
@@ -2032,47 +2023,57 @@ function VisualFlowPanelInner({
     const trimmed = name.trim();
     if (!trimmed) return;
     const id = "custom-" + crypto.randomUUID();
-    // Flush current canvas state, then atomically add the new plane and switch
+    // Flush current canvas state, then add the new plane. Both use the functional
+    // updater so the second sees the first's result via `prev` — no clobber.
     flushCanvasToVisualFlow(plane, nodes, edges);
-    onVisualFlowChange({
-      ...visualFlow,
-      customPlanes: [...(visualFlow.customPlanes ?? []), { id, name: trimmed }],
-    });
+    onUpdateVisualFlow((prev) => ({
+      ...prev,
+      customPlanes: [...(prev.customPlanes ?? []), { id, name: trimmed }],
+    }));
     try { window.localStorage.setItem(VISUAL_FLOW_PLANE_LS_KEY, id); } catch { /* ignore */ }
     setPlaneState(id);
-  }, [flushCanvasToVisualFlow, nodes, edges, onVisualFlowChange, plane, visualFlow]);
+  }, [flushCanvasToVisualFlow, nodes, edges, onUpdateVisualFlow, plane]);
 
   const commitDeletePlane = useCallback((id: string) => {
     if (plane === id) {
       try { window.localStorage.setItem(VISUAL_FLOW_PLANE_LS_KEY, "main"); } catch { /* ignore */ }
       setPlaneState("main");
     }
-    onVisualFlowChange({
-      ...visualFlow,
-      customPlanes: (visualFlow.customPlanes ?? []).filter((p) => p.id !== id),
-      customPlaneItems: Object.fromEntries(
-        Object.entries(visualFlow.customPlaneItems ?? {}).filter(([k]) => k !== id)
-      ),
-      customPlaneNodePositions: Object.fromEntries(
-        Object.entries(visualFlow.customPlaneNodePositions ?? {}).filter(([k]) => k !== id)
-      ),
-      customPlaneEdges: Object.fromEntries(
-        Object.entries(visualFlow.customPlaneEdges ?? {}).filter(([k]) => k !== id)
-      ),
-      customPlaneNodeSizes: Object.fromEntries(
-        Object.entries(visualFlow.customPlaneNodeSizes ?? {}).filter(([k]) => k !== id)
-      ),
+    onUpdateVisualFlow((prev) => {
+      const next: VisualFlowData = {
+        ...prev,
+        customPlanes: (prev.customPlanes ?? []).filter((p) => p.id !== id),
+        customPlaneItems: Object.fromEntries(
+          Object.entries(prev.customPlaneItems ?? {}).filter(([k]) => k !== id)
+        ),
+        customPlaneNodePositions: Object.fromEntries(
+          Object.entries(prev.customPlaneNodePositions ?? {}).filter(([k]) => k !== id)
+        ),
+        customPlaneEdges: Object.fromEntries(
+          Object.entries(prev.customPlaneEdges ?? {}).filter(([k]) => k !== id)
+        ),
+        customPlaneNodeSizes: Object.fromEntries(
+          Object.entries(prev.customPlaneNodeSizes ?? {}).filter(([k]) => k !== id)
+        ),
+      };
+      // Drop the deleted plane's viewport entry too — previously orphaned.
+      if (prev.planeViewports && id in prev.planeViewports) {
+        next.planeViewports = Object.fromEntries(
+          Object.entries(prev.planeViewports).filter(([k]) => k !== id)
+        );
+      }
+      return next;
     });
-  }, [onVisualFlowChange, plane, visualFlow]);
+  }, [onUpdateVisualFlow, plane]);
 
   const commitRenamePlane = useCallback((id: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    onVisualFlowChange({
-      ...visualFlow,
-      customPlanes: (visualFlow.customPlanes ?? []).map((p) => p.id === id ? { ...p, name: trimmed } : p),
-    });
-  }, [onVisualFlowChange, visualFlow]);
+    onUpdateVisualFlow((prev) => ({
+      ...prev,
+      customPlanes: (prev.customPlanes ?? []).map((p) => p.id === id ? { ...p, name: trimmed } : p),
+    }));
+  }, [onUpdateVisualFlow]);
 
   // Create a new sub-task already connected to a parent node.
   // Plane-aware: writes to the right positions map + edges list for whichever
@@ -2151,22 +2152,22 @@ function VisualFlowPanelInner({
 
       if (plane === "main") {
         currentPlaneAdd(baseTodo);
-        onVisualFlowChange({
-          ...visualFlow,
-          nodePositions: { ...(visualFlow.nodePositions ?? {}), [baseTodo.id]: newPos },
-          edges: [...(visualFlow.edges ?? []), newEdge],
-        });
+        onUpdateVisualFlow((prev) => ({
+          ...prev,
+          nodePositions: { ...(prev.nodePositions ?? {}), [baseTodo.id]: newPos },
+          edges: [...(prev.edges ?? []), newEdge],
+        }));
       } else if (isGrazeland) {
         const parentItem = canvasItems.find((t) => t.id === parentId);
         const parentHv = parentItem?.grazelandHandleVisibility ?? createGrazelandHandleVisibility(false);
         const newParentHv = parentHv.right2 ? parentHv : { ...parentHv, right2: true };
         if (!parentHv.right2) currentPlaneEdit?.(parentId, { grazelandHandleVisibility: newParentHv });
         currentPlaneAdd(baseTodo);
-        onVisualFlowChange({
-          ...visualFlow,
-          grazelandNodePositions: { ...(visualFlow.grazelandNodePositions ?? {}), [baseTodo.id]: newPos },
-          grazelandEdges: [...(visualFlow.grazelandEdges ?? []), newEdge],
-        });
+        onUpdateVisualFlow((prev) => ({
+          ...prev,
+          grazelandNodePositions: { ...(prev.grazelandNodePositions ?? {}), [baseTodo.id]: newPos },
+          grazelandEdges: [...(prev.grazelandEdges ?? []), newEdge],
+        }));
         setNodes((ns) => ns.map((n) => n.id === parentId
           ? { ...n, data: { ...(n.data as object), grazelandHandleVisibility: newParentHv } }
           : n
@@ -2177,38 +2178,41 @@ function VisualFlowPanelInner({
         const newParentHv = parentHv.right2 ? parentHv : { ...parentHv, right2: true };
         if (!parentHv.right2) currentPlaneEdit?.(parentId, { grazelandHandleVisibility: newParentHv });
         currentPlaneAdd(baseTodo);
-        onVisualFlowChange({
-          ...visualFlow,
-          binNodePositions: { ...(visualFlow.binNodePositions ?? {}), [baseTodo.id]: newPos },
-          binEdges: [...(visualFlow.binEdges ?? []), newEdge],
-        });
+        onUpdateVisualFlow((prev) => ({
+          ...prev,
+          binNodePositions: { ...(prev.binNodePositions ?? {}), [baseTodo.id]: newPos },
+          binEdges: [...(prev.binEdges ?? []), newEdge],
+        }));
         setNodes((ns) => ns.map((n) => n.id === parentId
           ? { ...n, data: { ...(n.data as object), grazelandHandleVisibility: newParentHv } }
           : n
         ));
       } else {
-        // Custom plane: one atomic write — items + positions + edges + parent handle fix all together
+        // Custom plane: one atomic write — items + positions + edges + parent handle fix all together.
+        // Read parent state from prev so a concurrent edit can't be lost.
         const parentItem = customPlaneItems.find((t) => t.id === parentId);
         const parentHv = parentItem?.grazelandHandleVisibility ?? createGrazelandHandleVisibility(false);
         const newParentHv = parentItem ? (parentHv.right2 ? parentHv : { ...parentHv, right2: true }) : null;
-        const updatedItems = (visualFlow.customPlaneItems?.[plane] ?? []).map((t) => {
-          if (t.id !== parentId || !newParentHv) return t;
-          return { ...t, grazelandHandleVisibility: newParentHv };
-        });
-        onVisualFlowChange({
-          ...visualFlow,
-          customPlaneItems: {
-            ...(visualFlow.customPlaneItems ?? {}),
-            [plane]: [...updatedItems, baseTodo],
-          },
-          customPlaneNodePositions: {
-            ...(visualFlow.customPlaneNodePositions ?? {}),
-            [plane]: { ...(visualFlow.customPlaneNodePositions?.[plane] ?? {}), [baseTodo.id]: newPos },
-          },
-          customPlaneEdges: {
-            ...(visualFlow.customPlaneEdges ?? {}),
-            [plane]: [...(visualFlow.customPlaneEdges?.[plane] ?? []), newEdge],
-          },
+        onUpdateVisualFlow((prev) => {
+          const updatedItems = (prev.customPlaneItems?.[plane] ?? []).map((t) => {
+            if (t.id !== parentId || !newParentHv) return t;
+            return { ...t, grazelandHandleVisibility: newParentHv };
+          });
+          return {
+            ...prev,
+            customPlaneItems: {
+              ...(prev.customPlaneItems ?? {}),
+              [plane]: [...updatedItems, baseTodo],
+            },
+            customPlaneNodePositions: {
+              ...(prev.customPlaneNodePositions ?? {}),
+              [plane]: { ...(prev.customPlaneNodePositions?.[plane] ?? {}), [baseTodo.id]: newPos },
+            },
+            customPlaneEdges: {
+              ...(prev.customPlaneEdges ?? {}),
+              [plane]: [...(prev.customPlaneEdges?.[plane] ?? []), newEdge],
+            },
+          };
         });
         if (newParentHv) {
           setNodes((ns) => ns.map((n) => n.id === parentId
@@ -2230,7 +2234,7 @@ function VisualFlowPanelInner({
         }"`
       );
     },
-    [currentPlaneAdd, currentPlaneEdit, customPlaneItems, isCustomPlane, plane, visualFlow, onVisualFlowChange, onTodoLog, canvasItems, setNodes, setEdges]
+    [currentPlaneAdd, currentPlaneEdit, customPlaneItems, isCustomPlane, plane, onUpdateVisualFlow, onTodoLog, canvasItems, setNodes, setEdges]
   );
 
   const applySectorColorByName = useCallback(
@@ -2238,10 +2242,12 @@ function VisualFlowPanelInner({
       const trimmed = sectorName.trim();
       if (!trimmed) return;
       hasInteracted.current = true;
-      const nextMap = { ...(visualFlow.sectorColors ?? {}) };
-      if (color) nextMap[trimmed] = color;
-      else delete nextMap[trimmed];
-      onVisualFlowChange({ ...visualFlow, sectorColors: nextMap });
+      onUpdateVisualFlow((prev) => {
+        const nextMap = { ...(prev.sectorColors ?? {}) };
+        if (color) nextMap[trimmed] = color;
+        else delete nextMap[trimmed];
+        return { ...prev, sectorColors: nextMap };
+      });
       const patch = color ? { sectorColor: color } : { sectorColor: undefined };
       for (const t of todos) {
         if (t.sectorName?.trim() !== trimmed) continue;
@@ -2261,7 +2267,7 @@ function VisualFlowPanelInner({
           : `Visual Flow: cleared sector "${trimmed}" frame color (all matching canvas entries)`
       );
     },
-    [binItems, grazelandItems, onEditBinItem, onEditGrazelandItem, onEditTodo, onTodoLog, onVisualFlowChange, todos, visualFlow]
+    [binItems, grazelandItems, onEditBinItem, onEditGrazelandItem, onEditTodo, onTodoLog, onUpdateVisualFlow, todos]
   );
 
   const handleRenameSectorGroup = useCallback(
@@ -2270,13 +2276,15 @@ function VisualFlowPanelInner({
       if (next === null) return;
       const trimmed = next.trim();
       hasInteracted.current = true;
-      const nextSc = { ...(visualFlow.sectorColors ?? {}) };
-      if (nextSc[oldName] !== undefined) {
-        const c = nextSc[oldName];
-        delete nextSc[oldName];
-        if (trimmed) nextSc[trimmed] = c;
-      }
-      onVisualFlowChange({ ...visualFlow, sectorColors: nextSc });
+      onUpdateVisualFlow((prev) => {
+        const nextSc = { ...(prev.sectorColors ?? {}) };
+        if (nextSc[oldName] !== undefined) {
+          const c = nextSc[oldName];
+          delete nextSc[oldName];
+          if (trimmed) nextSc[trimmed] = c;
+        }
+        return { ...prev, sectorColors: nextSc };
+      });
       ids.forEach((id) => {
         currentPlaneEdit?.(id, { sectorName: trimmed || undefined });
       });
@@ -2285,7 +2293,7 @@ function VisualFlowPanelInner({
       const u = getVisualFlowPlaneCountLabel(plane, n);
       onTodoLog?.(`${label}: renamed sector "${oldName}" → "${trimmed || "—"}" (${n} ${u})`);
     },
-    [currentPlaneEdit, onTodoLog, onVisualFlowChange, plane, visualFlow]
+    [currentPlaneEdit, onTodoLog, onUpdateVisualFlow, plane]
   );
 
   const handleClearSectorGroup = useCallback(
@@ -2303,14 +2311,16 @@ function VisualFlowPanelInner({
       const willRemainElsewhere = [...todos, ...grazelandItems, ...binItems].some(
         (t) => t.sectorName?.trim() === name && !ids.includes(t.id)
       );
-      const nextSc = { ...(visualFlow.sectorColors ?? {}) };
-      if (!willRemainElsewhere) delete nextSc[name];
-      onVisualFlowChange({ ...visualFlow, sectorColors: nextSc });
+      onUpdateVisualFlow((prev) => {
+        const nextSc = { ...(prev.sectorColors ?? {}) };
+        if (!willRemainElsewhere) delete nextSc[name];
+        return { ...prev, sectorColors: nextSc };
+      });
       const label = getVisualFlowPlaneLogLabel(plane);
       onTodoLog?.(`${label}: removed sector "${name}" from ${ids.length} ${getVisualFlowPlaneCountLabel(plane, ids.length)}`);
       setSectorManagerOpen(false);
     },
-    [binItems, currentPlaneEdit, grazelandItems, onTodoLog, onVisualFlowChange, plane, todos, visualFlow]
+    [binItems, currentPlaneEdit, grazelandItems, onTodoLog, onUpdateVisualFlow, plane, todos]
   );
 
   const handleEdit = useCallback(
@@ -2581,7 +2591,7 @@ function VisualFlowPanelInner({
           <button
             type="button"
             onClick={handleExportForAI}
-            title="Copy a structured markdown of all todos + relationships to the clipboard, ready to paste into an AI for consolidation"
+            title="Copy a structured markdown of the current plane's tasks + relationships to the clipboard, ready to paste into an AI for consolidation"
             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] bg-[var(--surface)] px-2.5 py-1.5 text-[11.5px] font-medium text-[var(--fg-2)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)] transition-colors"
           >
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -2672,10 +2682,10 @@ function VisualFlowPanelInner({
                 multiSelectionKeyCode={["Shift"]}
                 selectionMode={SelectionMode.Partial}
                 onMoveEnd={(_, vp) => {
-                  onVisualFlowChange({
-                    ...visualFlow,
-                    planeViewports: { ...(visualFlow.planeViewports ?? {}), [plane]: vp },
-                  });
+                  onUpdateVisualFlow((prev) => ({
+                    ...prev,
+                    planeViewports: { ...(prev.planeViewports ?? {}), [plane]: vp },
+                  }));
                 }}
                 defaultEdgeOptions={{
                   type: "todoFlow",

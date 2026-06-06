@@ -130,6 +130,16 @@ function normalizeInventory(raw: unknown): InventoryItem[] {
     const o = r as Record<string, unknown>;
     if (typeof o.name !== "string" || !o.name.trim()) continue;
     const category = INV_CATS.includes(o.category as InvCategory) ? (o.category as InvCategory) : "Other";
+    const kids = Array.isArray(o.kids)
+      ? (o.kids as unknown[])
+          .filter((k): k is Record<string, unknown> => !!k && typeof k === "object")
+          .filter((k) => typeof k.name === "string" && (k.name as string).trim())
+          .map((k) => ({
+            id: typeof k.id === "string" && k.id ? (k.id as string) : crypto.randomUUID(),
+            name: k.name as string,
+            value: typeof k.value === "number" ? (k.value as number) : 0,
+          }))
+      : undefined;
     out.push({
       id: typeof o.id === "string" && o.id ? o.id : crypto.randomUUID(),
       name: o.name,
@@ -137,6 +147,8 @@ function normalizeInventory(raw: unknown): InventoryItem[] {
       estimatedValue: typeof o.estimatedValue === "number" ? o.estimatedValue : 0,
       notes: typeof o.notes === "string" ? o.notes : undefined,
       url: typeof o.url === "string" ? o.url : undefined,
+      sellUrl: typeof o.sellUrl === "string" ? (o.sellUrl as string) : undefined,
+      kids: kids && kids.length ? kids : undefined,
       addedAt: typeof o.addedAt === "string" ? o.addedAt : new Date().toISOString().slice(0, 10),
     });
   }
@@ -918,6 +930,55 @@ export function useShelfStorage() {
     });
   }, []);
 
+  const strategieSetSecondaryCurrency = useCallback((c: string | null) => {
+    setStrategieState((prev) => {
+      // Turning the secondary off should also clear the compare toggle.
+      const compareOn = c == null ? false : prev.compareCurrencyOn;
+      const next: StrategieState = { ...prev, secondaryCurrency: c, compareCurrencyOn: compareOn };
+      getStorage()?.set({ [STRATEGIE_KEY]: next });
+      return next;
+    });
+  }, []);
+
+  const strategieToggleCompareCurrency = useCallback(() => {
+    setStrategieState((prev) => {
+      if (!prev.secondaryCurrency) return prev;
+      const next: StrategieState = { ...prev, compareCurrencyOn: !prev.compareCurrencyOn };
+      getStorage()?.set({ [STRATEGIE_KEY]: next });
+      return next;
+    });
+  }, []);
+
+  const strategieSetRungAccounts = useCallback(
+    (rungId: number, rows: import("../types/grid").RungAccountRef[]) => {
+      setStrategieState((prev) => {
+        const nextRung = { ...prev.rungAccounts, [rungId]: rows };
+        const next: StrategieState = { ...prev, rungAccounts: nextRung };
+        getStorage()?.set({ [STRATEGIE_KEY]: next });
+        return next;
+      });
+    },
+    []
+  );
+
+  const strategieUpsertAccountDictEntry = useCallback(
+    (entry: import("../types/grid").AccountDictEntry) => {
+      const name = entry.name.trim();
+      if (!name) return;
+      setStrategieState((prev) => {
+        const idx = prev.accountsDirectory.findIndex((d) => d.name === name);
+        const cleaned = { name, tag: entry.tag, url: entry.url?.trim() || undefined };
+        const dir = [...prev.accountsDirectory];
+        if (idx >= 0) dir[idx] = cleaned;
+        else dir.push(cleaned);
+        const next: StrategieState = { ...prev, accountsDirectory: dir };
+        getStorage()?.set({ [STRATEGIE_KEY]: next });
+        return next;
+      });
+    },
+    []
+  );
+
   const saveGoals = useCallback((next: ShelfGoalMap) => {
     setGoals(next);
     getStorage()?.set({ [GOALS_KEY]: next });
@@ -978,6 +1039,22 @@ export function useShelfStorage() {
     setVisualFlowState(next);
     getStorage()?.set({ [VISUAL_FLOW_KEY]: next });
   }, []);
+
+  /**
+   * Functional-updater form of {@link setVisualFlow}. Use this for every write
+   * that derives from prior state — it reads React's latest committed state in
+   * the updater, so two updates in the same tick can't clobber each other.
+   */
+  const updateVisualFlow = useCallback(
+    (updater: (prev: VisualFlowData) => VisualFlowData) => {
+      setVisualFlowState((prev) => {
+        const next = updater(prev);
+        getStorage()?.set({ [VISUAL_FLOW_KEY]: next });
+        return next;
+      });
+    },
+    []
+  );
 
   const setLlmConsoleUrl = useCallback((next: string) => {
     const url = next.trim() || "https://example.org";
@@ -1287,6 +1364,7 @@ export function useShelfStorage() {
     setBookmarkSize,
     visualFlow,
     setVisualFlow,
+    updateVisualFlow,
     grazelandItems,
     setGrazelandItems,
     binItems,
@@ -1313,6 +1391,10 @@ export function useShelfStorage() {
     strategieSaveStatement,
     strategieAddPot,
     strategieSetCurrency,
+    strategieSetSecondaryCurrency,
+    strategieToggleCompareCurrency,
+    strategieSetRungAccounts,
+    strategieUpsertAccountDictEntry,
     llmConsoleUrl,
     setLlmConsoleUrl,
     showBothNavButtons,
