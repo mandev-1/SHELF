@@ -1,21 +1,38 @@
-import type { SaleItem, ShelfPillarTodoItem, VisualFlowData, VisualFlowEdge } from "../../types/grid";
+import type { SectorColorKey, ShelfPillarTodoItem, VisualFlowEdge } from "../../types/grid";
+import type { PlaneId } from "./visualFlowWriter";
 
 /**
- * Render the Visual Flow as a single markdown document optimised for pasting
- * into an LLM ("consolidate these todos for me", "find duplicates", etc.).
- *
- * The format is human-readable on purpose: a short intro paragraph that orients
- * the model, then per-plane sections with task lists + an explicit relationships
- * block using arrow notation. Stable short IDs let the model reference tasks
- * unambiguously.
+ * Render a single Visual Flow plane as a markdown document optimised for
+ * pasting into an LLM ("consolidate these todos for me", "find duplicates",
+ * etc.). Scope is the currently-viewed plane only — what the user sees is what
+ * the model gets.
  */
 
+const BUILT_IN_PLANE_META: Record<
+  "main" | "grazeland" | "bin",
+  { display: string; description: string }
+> = {
+  main: {
+    display: "Pillar",
+    description: "active todos shown in the sidebar; the working list.",
+  },
+  grazeland: {
+    display: "Grazeland",
+    description: "parking lot for ideas not yet committed to.",
+  },
+  bin: {
+    display: "Bin",
+    description: "archived / discarded items, kept for reference.",
+  },
+};
+
 export interface FlowExportInput {
-  pillarTodos: ShelfPillarTodoItem[];
-  grazelandItems: ShelfPillarTodoItem[];
-  binItems: ShelfPillarTodoItem[];
-  saleItems: SaleItem[];
-  visualFlow: VisualFlowData;
+  plane: PlaneId;
+  /** User-set name for custom planes; ignored for main/grazeland/bin. */
+  planeName?: string;
+  items: ShelfPillarTodoItem[];
+  edges?: VisualFlowEdge[];
+  sectorColors?: Record<string, SectorColorKey>;
 }
 
 /** Compact ID — first 8 chars of the UUID for human-readable references. */
@@ -86,67 +103,48 @@ function indexById(items: ShelfPillarTodoItem[]): Map<string, ShelfPillarTodoIte
   return m;
 }
 
-function renderSaleItems(items: SaleItem[]): string {
-  if (items.length === 0) return "_(none)_\n";
-  return items
-    .map((s) => {
-      const status = s.status === "sold" ? "✓ sold" : s.status === "reserved" ? "⏳ reserved" : "🟢 listed";
-      const price = `${s.price.toLocaleString("cs-CZ")} ${s.unit}`;
-      const meta: string[] = [`status: ${status}`, `price: ${price}`];
-      if (s.where) meta.push(`where: ${s.where}`);
-      if (s.soldAt) meta.push(`sold: ${s.soldAt.slice(0, 10)}`);
-      return `- **${s.name}** — ${meta.join(" · ")}`;
-    })
-    .join("\n");
-}
-
 export function exportFlowAsMarkdown(input: FlowExportInput): string {
-  const { pillarTodos, grazelandItems, binItems, saleItems, visualFlow } = input;
-  const pillarIx = indexById(pillarTodos);
-  const grazeIx = indexById(grazelandItems);
-  const binIx = indexById(binItems);
+  const { plane, items, edges, sectorColors } = input;
+  const isBuiltIn = plane === "main" || plane === "grazeland" || plane === "bin";
+  const builtInMeta = isBuiltIn ? BUILT_IN_PLANE_META[plane] : null;
+  const planeDisplay = builtInMeta?.display ?? input.planeName?.trim() ?? "Custom plane";
+  const planeDescription =
+    builtInMeta?.description ?? `user-created plane "${planeDisplay}".`;
 
-  const totalTasks = pillarTodos.length + grazelandItems.length + binItems.length;
-  const totalEdges =
-    (visualFlow.edges?.length ?? 0) +
-    (visualFlow.grazelandEdges?.length ?? 0) +
-    (visualFlow.binEdges?.length ?? 0);
-  const liveSales = saleItems.filter((s) => s.status !== "sold").length;
-  const soldSales = saleItems.length - liveSales;
+  const byId = indexById(items);
+  const totalTasks = items.length;
+  const totalEdges = edges?.length ?? 0;
 
-  const sectorEntries = Object.entries(visualFlow.sectorColors ?? {});
+  // Only sectors that actually appear in this plane's items.
+  const namesInPlane = new Set<string>();
+  for (const t of items) {
+    const s = t.sectorName?.trim();
+    if (s) namesInPlane.add(s);
+  }
+  const sectorEntries = Object.entries(sectorColors ?? {}).filter(([name]) =>
+    namesInPlane.has(name)
+  );
 
   const header =
-    `# ShELF Todo Network — Export for AI Consolidation\n\n` +
-    `This is a structured snapshot of my todos and their relationships, exported from ShELF (a personal task/bookmark tool). I'd like you to **consolidate this**: find duplicates, suggest merges, group by theme, surface stale items, and propose a cleaner structure. Each task has a stable short ID (e.g. \`#abc12345\`) — use those when you reference items.\n\n` +
-    `**Snapshot:** ${totalTasks} task${totalTasks === 1 ? "" : "s"} across 3 planes, ${totalEdges} relationship${totalEdges === 1 ? "" : "s"}` +
-    (saleItems.length > 0 ? `, ${liveSales} active listing${liveSales === 1 ? "" : "s"} + ${soldSales} sold` : "") + `.\n\n` +
-    `**Arrow notation in the relationship lists:**\n` +
+    `# ShELF — ${planeDisplay} Plane — Export for AI Consolidation\n\n` +
+    `This is a structured snapshot of the **${planeDisplay}** plane, exported from ShELF (a personal task/bookmark tool). I'd like you to **consolidate this**: find duplicates, suggest merges, group by theme, surface stale items, and propose a cleaner structure. Each task has a stable short ID (e.g. \`#abc12345\`) — use those when you reference items.\n\n` +
+    `**Snapshot:** ${totalTasks} task${totalTasks === 1 ? "" : "s"}, ${totalEdges} relationship${totalEdges === 1 ? "" : "s"} on this plane.\n\n` +
+    `**About this plane:** ${planeDescription}\n\n` +
+    `**Arrow notation in the relationship list:**\n` +
     `- \`A → B\` — directed link (A leads to / depends on / produces B)\n` +
     `- \`A ↔ B\` — bidirectional / mutual\n` +
     `- \`A ⤳ B\` — weak / muted link (less load-bearing)\n` +
-    `- \`A — B\` — undirected\n\n` +
-    `**Planes:**\n` +
-    `- **Pillar** — active todos shown in the sidebar; this is the working list.\n` +
-    `- **Grazeland** — parking lot for ideas not yet committed to.\n` +
-    `- **Bin** — archived / discarded items, kept for reference.\n`;
+    `- \`A — B\` — undirected\n`;
 
   const sectorBlock =
     sectorEntries.length > 0
-      ? `\n## Sectors / Epics\n\n` +
+      ? `\n## Sectors / Epics on this plane\n\n` +
         sectorEntries.map(([name, color]) => `- **${name}** (color: ${color})`).join("\n") +
         `\n`
       : "";
 
-  const sections = [
-    `\n---\n\n## Pillar — Active Tasks\n\n### Tasks\n\n${renderTasks(pillarTodos)}\n\n### Relationships\n\n${renderRelationships(visualFlow.edges, pillarIx)}\n`,
-    `\n---\n\n## Grazeland — Parking Lot\n\n### Tasks\n\n${renderTasks(grazelandItems)}\n\n### Relationships\n\n${renderRelationships(visualFlow.grazelandEdges, grazeIx)}\n`,
-    `\n---\n\n## Bin — Archive\n\n### Tasks\n\n${renderTasks(binItems)}\n\n### Relationships\n\n${renderRelationships(visualFlow.binEdges, binIx)}\n`,
-  ].join("");
+  const taskSection =
+    `\n---\n\n## ${planeDisplay} — Tasks\n\n${renderTasks(items)}\n\n### Relationships\n\n${renderRelationships(edges, byId)}\n`;
 
-  const sellingSection = saleItems.length > 0
-    ? `\n---\n\n## Selling Inventory\n\n${renderSaleItems(saleItems)}\n`
-    : "";
-
-  return header + sectorBlock + sections + sellingSection;
+  return header + sectorBlock + taskSection;
 }

@@ -1,17 +1,20 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { StrategieState, MonthStatement, CatKey, BuylistItem, MembershipRow } from "../../types/grid";
+import type { StrategieState, MonthStatement, BuylistItem, MembershipRow, AccountDictEntry, RungAccountRef } from "../../types/grid";
 import {
   daysInMonth as _daysInMonth,
   monthWeeks, weekOfDate,
-  monthLabel, monthAbbr, project, fmtMoney,
-  niceCeil, STMT_CATS, CAT_KEYS,
+  monthLabel, monthAbbr, project,
+  fmtMoney, STMT_CATS, CAT_KEYS,
   RETURN_SCENARIOS, DEFAULT_LADDER, DEFAULT_ALLOCATION, DEFAULT_PILLARS,
   DEFAULT_STATEMENTS, CURRENCIES,
 } from "./strategie";
 import type { LadderRung } from "./strategie";
-import { IcoCheck, IcoLock, IcoPlus, IcoFile, IcoHopper, IcoUpload, IcoFlip, IcoX, IcoChev,
-  IcoShield, IcoFlame, IcoGift, IcoVault, IcoGrowth, IcoTarget, IcoLeaf } from "./icons";
+import { IcoCheck, IcoLock, IcoPlus, IcoFile, IcoHopper, IcoUpload, IcoFlip, IcoChev } from "./icons";
 import { StatementEditor } from "./StatementEditor";
+import { totalIncome, totalExpenses, expensesByCat } from "./helpers";
+import { SpendingChart, ProjectionChart } from "./charts";
+import { LadderDetail } from "./LadderDetail";
+import { MonthCloseDiff } from "./MonthCloseDiff";
 
 void _daysInMonth;
 
@@ -28,231 +31,12 @@ interface StrategiePanelProps {
   ) => void;
   onAddPot: (name: string) => void;
   onSetCurrency: (c: string) => void;
+  onToggleCompareCurrency: () => void;
+  onSetRungAccounts: (rungId: number, rows: RungAccountRef[]) => void;
+  onUpsertAccountDictEntry: (entry: AccountDictEntry) => void;
   onToast?: (msg: string) => void;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function totalIncome(stmt: MonthStatement) {
-  return stmt.income.reduce((s, r) => s + r.amt, 0);
-}
-function totalExpenses(stmt: MonthStatement) {
-  return stmt.expenses.reduce((s, r) => s + r.amt, 0);
-}
-function expensesByCat(stmt: MonthStatement): Record<CatKey, number> {
-  const out = {} as Record<CatKey, number>;
-  for (const k of CAT_KEYS) out[k] = 0;
-  for (const e of stmt.expenses) out[e.cat] = (out[e.cat] ?? 0) + e.amt;
-  return out;
-}
-
-// ─── Rung icon ────────────────────────────────────────────────────────────────
-function RungIcon({ icon }: { icon?: string }) {
-  switch (icon) {
-    case "shield": return <IcoShield />;
-    case "flame":  return <IcoFlame />;
-    case "gift":   return <IcoGift />;
-    case "vault":  return <IcoVault />;
-    case "growth": return <IcoGrowth />;
-    case "leaf":   return <IcoLeaf />;
-    case "target": return <IcoTarget />;
-    default:       return null;
-  }
-}
-
-// ─── SpendingChart ────────────────────────────────────────────────────────────
-function SpendingChart({ series }: { series: { label: string; total: number }[] }) {
-  const W = 760; const H = 220;
-  const PAD = { top: 16, right: 20, bottom: 28, left: 52 };
-  const cw = W - PAD.left - PAD.right;
-  const ch = H - PAD.top - PAD.bottom;
-  if (series.length < 2) return <div style={{ padding: 20, fontSize: 12, color: "var(--faint)" }}>Not enough data.</div>;
-  const maxVal = Math.max(...series.map((s) => s.total), 1);
-  const avg = series.reduce((s, p) => s + p.total, 0) / series.length;
-  const yMax = niceCeil(maxVal);
-  const xOf = (i: number) => PAD.left + (i / (series.length - 1)) * cw;
-  const yOf = (v: number) => PAD.top + ch - (v / yMax) * ch;
-  const area: string[] = [];
-  const line: string[] = [];
-  series.forEach((p, i) => {
-    const x = xOf(i); const y = yOf(p.total);
-    if (i === 0) { area.push(`M${x},${yOf(0)}`); }
-    area.push(`L${x},${y}`);
-    line.push(i === 0 ? `M${x},${y}` : `L${x},${y}`);
-  });
-  area.push(`L${xOf(series.length - 1)},${yOf(0)}Z`);
-  const avgY = yOf(avg);
-  const yTicks = 4;
-  return (
-    <svg className="proj-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-      <g className="proj-grid">
-        {Array.from({ length: yTicks + 1 }, (_, i) => {
-          const v = (yMax / yTicks) * i;
-          return <line key={i} x1={PAD.left} y1={yOf(v)} x2={W - PAD.right} y2={yOf(v)} />;
-        })}
-      </g>
-      {Array.from({ length: yTicks + 1 }, (_, i) => {
-        const v = (yMax / yTicks) * i;
-        return <text key={i} className="proj-ylab" x={PAD.left - 6} y={yOf(v) + 4}>{v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}</text>;
-      })}
-      {series.map((p, i) => (
-        <text key={i} className="proj-xlab" x={xOf(i)} y={H - 4}>{p.label}</text>
-      ))}
-      <path className="spend-area" d={area.join(" ")} />
-      <path className="spend-line" d={line.join(" ")} />
-      <line className="spend-avgline" x1={PAD.left} y1={avgY} x2={W - PAD.right} y2={avgY} />
-      <text className="spend-avglab" x={PAD.left + 4} y={avgY - 5}>avg</text>
-      {series.map((p, i) => {
-        const x = xOf(i); const y = yOf(p.total);
-        return i === series.length - 1
-          ? <circle key={i} className="spend-dot-end" cx={x} cy={y} r={5} />
-          : <circle key={i} className="spend-dot" cx={x} cy={y} r={3} />;
-      })}
-    </svg>
-  );
-}
-
-// ─── LadderDetail modal ───────────────────────────────────────────────────────
-function LadderDetail({ rung, currency, onClose }: { rung: LadderRung; currency: string; onClose: () => void }) {
-  const statusClass = rung.status === "done" ? "ld-status--done" : rung.status === "active" ? "ld-status--active" : "ld-status--queued";
-  const statusLabel = rung.status === "done" ? "Complete" : rung.status === "active" ? "In progress" : "Queued";
-  return (
-    <div className="ld-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="ld-modal" style={{ ["--ld-hue" as string]: rung.hue ?? "var(--accent)" }}>
-        <div className="ld-hero">
-          <div className="ld-hero-wash" />
-          <div className="ld-hero-ghost"><RungIcon icon={rung.icon} /></div>
-          <button className="ld-close" onClick={onClose}><IcoX /></button>
-          <div className="ld-step-num">Step {rung.id}</div>
-          <div className="ld-title">{rung.title}</div>
-          <div className={`ld-status ${statusClass}`}>{statusLabel}</div>
-          {rung.status === "active" && typeof rung.pct === "number" && (
-            <div className="rung-bar" style={{ marginTop: 10, maxWidth: 200 }}>
-              <span style={{ width: `${rung.pct}%` }} />
-            </div>
-          )}
-        </div>
-        <div className="ld-body">
-          {rung.blurb && <p className="ld-blurb">{rung.blurb}</p>}
-          {(rung.accounts?.length ?? 0) > 0 && (
-            <div>
-              <div className="ld-section-head">Where the money sits</div>
-              <div className="ld-accounts">
-                {rung.accounts!.map((acc, i) => (
-                  <div key={i} className="ld-account-row">
-                    <div className="ld-account-name">{acc.name}</div>
-                    <div className="ld-account-tag">{acc.tag}</div>
-                    <div className="ld-account-bal">{fmtMoney(acc.balance, currency, { abbr: true })}</div>
-                    {acc.target && (
-                      <div style={{ flex: "0 0 60px" }}>
-                        <div className="ld-account-progress">
-                          <span style={{ width: `${Math.min(100, (acc.balance / acc.target) * 100)}%` }} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {(rung.history?.length ?? 0) > 0 && (
-            <div>
-              <div className="ld-section-head">History</div>
-              <div className="ld-history">
-                {[...rung.history!].reverse().map((h, i) => (
-                  <div key={i} className="ld-hist-row">
-                    <div className="ld-hist-dot" />
-                    <div className="ld-hist-date">{h.date}</div>
-                    <div className="ld-hist-label">{h.label}</div>
-                    {h.amt > 0 && <div className="ld-hist-amt">{fmtMoney(h.amt, currency, { abbr: true })}</div>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── ProjectionChart ─────────────────────────────────────────────────────────
-function ProjectionChart({
-  principal, monthly, scenarioRate, horizon,
-}: {
-  principal: number; monthly: number; scenarioRate: number; horizon: number;
-}) {
-  const W = 760; const H = 300;
-  const PAD = { top: 20, right: 20, bottom: 36, left: 60 };
-  const cw = W - PAD.left - PAD.right;
-  const ch = H - PAD.top - PAD.bottom;
-
-  const pts = project(principal, monthly, scenarioRate, horizon);
-  if (!pts.length) return null;
-
-  const maxBal = pts[pts.length - 1].bal;
-  const yMax = niceCeil(maxBal);
-
-  const xOf = (m: number) => PAD.left + ((m - 1) / Math.max(horizon - 1, 1)) * cw;
-  const yOf = (v: number) => PAD.top + ch - (v / yMax) * ch;
-
-  const areaTotal: string[] = [];
-  const lineTotal: string[] = [];
-  const areaContrib: string[] = [];
-  const lineContrib: string[] = [];
-
-  pts.forEach((p, i) => {
-    const x = xOf(p.m);
-    const yBal = yOf(p.bal);
-    const yCon = yOf(p.contrib);
-    if (i === 0) {
-      areaTotal.push(`M${x},${yOf(0)}`);
-      areaContrib.push(`M${x},${yOf(0)}`);
-    }
-    areaTotal.push(`L${x},${yBal}`);
-    lineTotal.push(i === 0 ? `M${x},${yBal}` : `L${x},${yBal}`);
-    areaContrib.push(`L${x},${yCon}`);
-    lineContrib.push(i === 0 ? `M${x},${yCon}` : `L${x},${yCon}`);
-  });
-  const lastX = xOf(pts[pts.length - 1].m);
-  areaTotal.push(`L${lastX},${yOf(0)}Z`);
-  areaContrib.push(`L${lastX},${yOf(0)}Z`);
-
-  const yTicks = 5;
-  const xTickCount = Math.min(horizon, 7);
-
-  return (
-    <svg className="proj-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-      <g className="proj-grid">
-        {Array.from({ length: yTicks + 1 }, (_, i) => {
-          const v = (yMax / yTicks) * i;
-          const y = yOf(v);
-          return <line key={i} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} />;
-        })}
-      </g>
-      {Array.from({ length: yTicks + 1 }, (_, i) => {
-        const v = (yMax / yTicks) * i;
-        return (
-          <text key={i} className="proj-ylab" x={PAD.left - 6} y={yOf(v) + 4}>
-            {v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
-          </text>
-        );
-      })}
-      {Array.from({ length: xTickCount }, (_, i) => {
-        const m = Math.round(1 + (i / Math.max(xTickCount - 1, 1)) * (horizon - 1));
-        return (
-          <text key={i} className="proj-xlab" x={xOf(m)} y={H - 6}>
-            {`Yr ${Math.round(m / 12)}`}
-          </text>
-        );
-      })}
-      <path className="proj-area-total"   d={areaTotal.join(" ")} />
-      <path className="proj-area-contrib" d={areaContrib.join(" ")} />
-      <path className="proj-line-contrib" d={lineContrib.join(" ")} />
-      <path className="proj-line-total"   d={lineTotal.join(" ")} />
-      <circle className="proj-dot" cx={xOf(pts[pts.length - 1].m)} cy={yOf(pts[pts.length - 1].bal)} r={4} />
-    </svg>
-  );
-}
 
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
@@ -263,6 +47,9 @@ export function StrategiePanel({
   onSaveStatement,
   onAddPot,
   onSetCurrency,
+  onToggleCompareCurrency,
+  onSetRungAccounts,
+  onUpsertAccountDictEntry,
   onToast,
 }: StrategiePanelProps) {
   const [editorOpen, setEditorOpen] = useState(false);
@@ -275,8 +62,10 @@ export function StrategiePanel({
   const [heroFace, setHeroFace] = useState<"grow" | "spend">("grow");
   const [detailRung, setDetailRung] = useState<LadderRung | null>(null);
 
-  const { statements, positions, pots, currency } = state;
+  const { statements, positions, pots, currency, secondaryCurrency, compareCurrencyOn } = state;
   const cur = currency;
+  const cur2 = secondaryCurrency;
+  const compareOn = compareCurrencyOn && !!cur2;
 
   const byMonth: Record<string, MonthStatement> =
     Object.keys(statements.byMonth).length > 0
@@ -287,6 +76,12 @@ export function StrategiePanel({
     ? statements.current
     : (statements.order[0] ?? "2026-04");
   const stmt = byMonth[activeKey] ?? { income: [], expenses: [] };
+
+  // The previous month (chronologically) — used by <MonthCloseDiff>.
+  const sortedKeys = Object.keys(byMonth).sort();
+  const activeIdx = sortedKeys.indexOf(activeKey);
+  const prevKey = activeIdx > 0 ? sortedKeys[activeIdx - 1] : undefined;
+  const prevStmt = prevKey ? byMonth[prevKey] : undefined;
 
   const inc = totalIncome(stmt);
   const exp = totalExpenses(stmt);
@@ -346,6 +141,16 @@ export function StrategiePanel({
               <button key={c} className={`seg-btn${cur === c ? " on" : ""}`} onClick={() => onSetCurrency(c)}>{c}</button>
             ))}
           </div>
+          {cur2 && (
+            <button
+              className={`ghost-btn cur-compare${compareOn ? " on" : ""}`}
+              onClick={onToggleCompareCurrency}
+              title={compareOn ? `Hide ${cur2} comparison` : `Show ${cur2} comparison`}
+            >
+              <span className="cur-compare-arr" aria-hidden="true">↔</span>
+              <span>{cur2}</span>
+            </button>
+          )}
           <button
             className={`ghost-btn${Object.keys(statements.byMonth).length > 0 ? " ok" : ""}`}
             onClick={() => setEditorOpen(true)}
@@ -363,16 +168,19 @@ export function StrategiePanel({
         <div className="kpi">
           <div className="kpi-lab">Net worth</div>
           <div className="kpi-val">{fmtMoney(netWorth, cur, { abbr: true })}</div>
+          {compareOn && cur2 && <div className="kpi-cmp">≈ {fmtMoney(netWorth, cur2, { abbr: true })}</div>}
           <div className="kpi-sub">Invested + emergency{extraAssets > 0 ? " + assets" : ""}</div>
         </div>
         <div className="kpi accent">
           <div className="kpi-lab">Monthly surplus</div>
           <div className="kpi-val">{fmtMoney(surplus, cur, { abbr: true })}</div>
+          {compareOn && cur2 && <div className="kpi-cmp">≈ {fmtMoney(surplus, cur2, { abbr: true })}</div>}
           <div className={`kpi-sub${surplus > 0 ? " up" : ""}`}>{surplus > 0 ? "Positive cashflow" : "Negative cashflow"}</div>
         </div>
         <div className="kpi">
           <div className="kpi-lab">Projected 5Y</div>
           <div className="kpi-val">{fmtMoney(project(positions.invested, monthly, RETURN_SCENARIOS[1].rate, 60).at(-1)?.bal ?? 0, cur, { abbr: true })}</div>
+          {compareOn && cur2 && <div className="kpi-cmp">≈ {fmtMoney(project(positions.invested, monthly, RETURN_SCENARIOS[1].rate, 60).at(-1)?.bal ?? 0, cur2, { abbr: true })}</div>}
           <div className="kpi-sub">At {RETURN_SCENARIOS[1].rate}% p.a.</div>
         </div>
         <div className="kpi">
@@ -483,35 +291,50 @@ export function StrategiePanel({
           </div>
         </div>
 
-        {/* priority ladder — span 4 */}
+        {/* order of operations — span 4 */}
         <div className="card span-4">
           <div className="card-head">
             <div>
-              <div className="card-eyebrow">Priority</div>
-              <div className="card-title">Financial ladder</div>
+              <div className="card-eyebrow">The method</div>
+              <div className="card-title">Order of operations</div>
             </div>
           </div>
-          <div style={{ paddingTop: 12 }}>
-            {DEFAULT_LADDER.map((rung, i) => (
-              <button key={rung.id} className={`rung rung--${rung.status} rung-hit`} onClick={() => setDetailRung(rung)}>
-                <div className="rung-mark">
-                  {rung.status === "done" ? <IcoCheck /> : rung.status === "active" ? <IcoLock /> : <span>{i + 1}</span>}
-                </div>
-                <div className="rung-body">
-                  <div className="rung-title">{rung.title}</div>
-                  <div className="rung-note">{rung.note}</div>
-                  {rung.status === "active" && typeof rung.pct === "number" && (
-                    <div className="rung-bar"><span style={{ width: `${rung.pct}%` }} /></div>
+          <ol className="ladder">
+            {DEFAULT_LADDER.map((rung) => (
+              <li key={rung.id} className={`rung rung--${rung.status}`}>
+                <button
+                  className="rung-hit"
+                  onClick={() => setDetailRung(rung)}
+                  aria-label={`Open ${rung.title} details`}
+                >
+                  <span className="rung-mark">
+                    {rung.status === "done" ? <IcoCheck /> : rung.status === "queued" ? <IcoLock /> : <span className="rung-i">{rung.id}</span>}
+                  </span>
+                  <span className="rung-body">
+                    <span className="rung-title">{rung.title}</span>
+                    <span className="rung-note">{rung.note}</span>
+                    {rung.status === "active" && typeof rung.pct === "number" && (
+                      <span className="rung-bar"><span style={{ width: `${rung.pct}%` }} /></span>
+                    )}
+                  </span>
+                  {rung.status === "active" && (
+                    <span className="rung-tag">{rung.pct === 100 ? "ongoing" : "focus"}</span>
                   )}
-                </div>
-                <span className="rung-tag">
-                  {rung.status === "done" ? "Done" : rung.status === "active" ? "Active" : "Queued"}
-                </span>
-                <span className="rung-chev"><IcoChev dir="right" /></span>
-              </button>
+                  <span className="rung-chev"><IcoChev dir="down" /></span>
+                </button>
+              </li>
             ))}
-          </div>
+          </ol>
         </div>
+
+        {/* month-close diff — span 4 */}
+        <MonthCloseDiff
+          prevKey={prevKey}
+          currKey={activeKey}
+          prevStmt={prevStmt}
+          currStmt={stmt}
+          currency={cur}
+        />
 
         {/* weekly spending — span 8 */}
         <div className="card span-8">
@@ -815,7 +638,16 @@ export function StrategiePanel({
 
       {/* ladder detail modal */}
       {detailRung && (
-        <LadderDetail rung={detailRung} currency={cur} onClose={() => setDetailRung(null)} />
+        <LadderDetail
+          rung={detailRung}
+          currency={cur}
+          totalSteps={DEFAULT_LADDER.length}
+          directory={state.accountsDirectory}
+          persistedRows={state.rungAccounts[detailRung.id]}
+          onSetRungAccounts={onSetRungAccounts}
+          onUpsertAccountDictEntry={onUpsertAccountDictEntry}
+          onClose={() => setDetailRung(null)}
+        />
       )}
     </div>
   );

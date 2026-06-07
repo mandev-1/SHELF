@@ -23,7 +23,6 @@ import { InventoryPanel } from "./components/Inventory/InventoryPanel";
 import { pickCelebrationPhrase } from "./utils/celebration";
 import type { ShelfPillarTodoItem } from "./types/grid";
 
-const DASHBOARD_OPEN_KEY = "shelf-dashboard-view";
 const DASHBOARD_LAST_TOOL_KEY = "shelf-dashboard-last-tool";
 
 type DashboardView = "shelf" | "visual-flow" | "buylist" | "strategie" | "inventory";
@@ -79,15 +78,9 @@ export default function FullApp() {
   }, []);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [dashboardView, setDashboardView] = useState<DashboardView>(() => {
-    try {
-      const v = window.localStorage.getItem(DASHBOARD_OPEN_KEY);
-      if (v === "visual-flow" || v === "buylist" || v === "strategie" || v === "inventory") return v;
-      return "shelf";
-    } catch {
-      return "shelf";
-    }
-  });
+  // Every new tab opens to Shelf — the last view is intentionally NOT restored
+  // so the bookmark grid is always the landing surface.
+  const [dashboardView, setDashboardView] = useState<DashboardView>("shelf");
   const [lastTool, setLastTool] = useState<LastTool>(() => {
     try {
       const v = window.localStorage.getItem(DASHBOARD_LAST_TOOL_KEY);
@@ -106,7 +99,7 @@ export default function FullApp() {
     pillarTodos,
     showTodoDates,
     visualFlow,
-    setVisualFlow,
+    updateVisualFlow,
     prompts,
     savePrompts,
     updatePrompt,
@@ -145,7 +138,25 @@ export default function FullApp() {
     strategieSaveStatement,
     strategieAddPot,
     strategieSetCurrency,
+    strategieToggleCompareCurrency,
+    strategieSetRungAccounts,
+    strategieUpsertAccountDictEntry,
+    showStrategieTab,
+    showHopperTab,
+    showInventoryTab,
   } = useShelfStorage();
+
+  // If the user disables the tab they're currently looking at via the settings
+  // panel, bounce them back to Shelf so they don't get stranded on a hidden view.
+  useEffect(() => {
+    if (
+      (dashboardView === "strategie" && !showStrategieTab) ||
+      (dashboardView === "buylist"   && !showHopperTab)    ||
+      (dashboardView === "inventory" && !showInventoryTab)
+    ) {
+      setDashboardView("shelf");
+    }
+  }, [dashboardView, showStrategieTab, showHopperTab, showInventoryTab]);
   const [editingName, setEditingName] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -268,7 +279,6 @@ export default function FullApp() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(DASHBOARD_OPEN_KEY, dashboardView);
       if (dashboardView === "visual-flow") {
         window.localStorage.setItem(DASHBOARD_LAST_TOOL_KEY, dashboardView);
       }
@@ -526,13 +536,13 @@ export default function FullApp() {
               )}
             </div>
             <nav className="nav">
-              {([
-                { id: "shelf",       label: "Shelf"       },
-                { id: "visual-flow", label: "Visual Flow" },
-                { id: "strategie",   label: "Strategie"   },
-                { id: "buylist",     label: "Hopper"      },
-                { id: "inventory",   label: "Inventory"   },
-              ] as const).map((tab) => {
+              {(([
+                { id: "shelf",       label: "Shelf",       visible: true              },
+                { id: "visual-flow", label: "Visual Flow", visible: true              },
+                { id: "strategie",   label: "Strategie",   visible: showStrategieTab  },
+                { id: "buylist",     label: "Hopper",      visible: showHopperTab     },
+                { id: "inventory",   label: "Inventory",   visible: showInventoryTab  },
+              ] as const).filter((t) => t.visible)).map((tab) => {
                 const isActive = dashboardView === tab.id;
                 const isVF = tab.id === "visual-flow";
                 return (
@@ -581,6 +591,9 @@ export default function FullApp() {
                 onSaveStatement={strategieSaveStatement}
                 onAddPot={strategieAddPot}
                 onSetCurrency={strategieSetCurrency}
+                onToggleCompareCurrency={strategieToggleCompareCurrency}
+                onSetRungAccounts={strategieSetRungAccounts}
+                onUpsertAccountDictEntry={strategieUpsertAccountDictEntry}
               />
             </div>
           ) : dashboardView === "buylist" ? (
@@ -603,6 +616,21 @@ export default function FullApp() {
                 onAdd={inventoryAdd}
                 onUpdate={inventoryUpdate}
                 onRemove={inventoryRemove}
+                onSell={(it) => {
+                  const now = new Date().toISOString();
+                  saleItemAdd({
+                    name: it.name,
+                    where: "resale",
+                    price: it.estimatedValue,
+                    unit: "Kč",
+                    status: "listed",
+                    url: it.sellUrl,
+                    createdAt: now,
+                    updatedAt: now,
+                    soldAt: null,
+                    history: [{ at: now, text: "Moved from inventory" }],
+                  });
+                }}
               />
             </div>
           ) : dashboardView === "visual-flow" ? (
@@ -612,10 +640,9 @@ export default function FullApp() {
                 todos={pillarTodos}
                 grazelandItems={grazelandItems}
                 binItems={binItems}
-                saleItems={saleItems}
                 showTodoDates={showTodoDates}
                 visualFlow={visualFlow}
-                onVisualFlowChange={setVisualFlow}
+                onUpdateVisualFlow={updateVisualFlow}
                 focusDesynced={focusDesynced}
                 setPillarTodoPins={setPillarTodoPins}
                 onEditTodo={handleVisualFlowEditTodo}
