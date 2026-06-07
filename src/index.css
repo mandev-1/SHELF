@@ -4483,6 +4483,13 @@ body {
   border: 1px solid color-mix(in srgb, var(--hue-orange) 28%, transparent);
 }
 .si-warn b { color: var(--fg-2); font-weight: 600; }
+.si-loading { display: inline-flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--muted); padding: 2px; }
+.si-spinner {
+  width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+  border: 2px solid var(--line-strong); border-top-color: var(--accent);
+  animation: si-spin 0.7s linear infinite;
+}
+@keyframes si-spin { to { transform: rotate(360deg); } }
 
 /* meta banner */
 .si-meta {
