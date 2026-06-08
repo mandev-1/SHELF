@@ -941,6 +941,15 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
     setFocusDesynced,
     lowPerformanceMode,
     setLowPerformanceMode,
+    showStrategieTab,
+    setShowStrategieTab,
+    showHopperTab,
+    setShowHopperTab,
+    showInventoryTab,
+    setShowInventoryTab,
+    strategieState,
+    strategieSetCurrency,
+    strategieSetSecondaryCurrency,
   } = useShelfStorage();
   const gridRef = useRef<HTMLDivElement>(null);
   const gridInstanceRef = useRef<GridStack | null>(null);
@@ -1195,6 +1204,74 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
+              <div className="mb-1.5 text-xs font-medium text-emerald-200">Default currency</div>
+              <div className="flex flex-wrap gap-1.5">
+                {(["USD", "EUR", "CZK"] as const).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => strategieSetCurrency(c)}
+                    className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-medium transition ${
+                      strategieState.currency === c
+                        ? "bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40"
+                        : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 mb-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500">Compare against</div>
+              <div className="flex flex-wrap gap-1.5">
+                {([null, "USD", "EUR", "CZK"] as const).map((c) => {
+                  const label = c == null ? "None" : c;
+                  const active = strategieState.secondaryCurrency === c;
+                  const disabled = c != null && c === strategieState.currency;
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => strategieSetSecondaryCurrency(c)}
+                      className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-medium transition ${
+                        active
+                          ? "bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40"
+                          : disabled
+                          ? "bg-white/5 text-zinc-600 cursor-not-allowed"
+                          : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-1 text-[10px] text-zinc-500">
+                When set, a small ↔ toggle appears in Strategie to show values in both currencies.
+              </div>
+            </div>
+            <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
+              <div className="mb-1.5 text-xs font-medium text-emerald-200">Visible tabs</div>
+              <div className="mb-1 text-[10px] text-zinc-500">Shelf and Visual Flow are always on.</div>
+              {([
+                { id: "strategie", label: "Strategie", on: showStrategieTab, set: setShowStrategieTab },
+                { id: "hopper",    label: "Hopper",    on: showHopperTab,    set: setShowHopperTab    },
+                { id: "inventory", label: "Inventory", on: showInventoryTab, set: setShowInventoryTab },
+              ] as const).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => t.set(!t.on)}
+                  className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[12px] text-zinc-200 hover:bg-white/5"
+                >
+                  <span>{t.label}</span>
+                  <span className={`text-xs ${t.on ? "text-emerald-300" : "text-zinc-500"}`}>
+                    {t.on ? "Shown" : "Hidden"}
+                  </span>
+                </button>
+              ))}
             </div>
             <button
               type="button"

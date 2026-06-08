@@ -243,6 +243,11 @@ export interface SaleItem {
 }
 
 export type InvCategory = "Tech" | "Music" | "Photo" | "Sport" | "Home" | "Gear" | "Other";
+export interface InvAccessory {
+  id: string;
+  name: string;
+  value: number;
+}
 export interface InventoryItem {
   id: string;
   name: string;
@@ -250,6 +255,10 @@ export interface InventoryItem {
   estimatedValue: number;
   notes?: string;
   url?: string;
+  /** Quick link to a marketplace / resale page. */
+  sellUrl?: string;
+  /** Accessories & extras that travel with this item — folded into its total value. */
+  kids?: InvAccessory[];
   addedAt: string;
 }
 
@@ -305,12 +314,31 @@ export interface MembershipRow {
   paused?: boolean;
 }
 
+export interface AccountDictEntry {
+  /** Primary key. Renaming = delete + re-add. */
+  name: string;
+  tag: string;
+  url?: string;
+}
+export interface RungAccountRef {
+  accountRef: string;
+  balance: number;
+}
+
 export interface StrategieState {
   statements: { current: string; order: string[]; byMonth: Record<string, MonthStatement>; };
   positions: { invested: number; emergencySaved: number; emergencyTarget: number; };
   pots: { id: string; name: string; target: number; saved: number; monthly: number; fromHopper: boolean; }[];
   memberships: MembershipRow[];
   currency: string;
+  /** Optional secondary currency for side-by-side comparison. null = unset. */
+  secondaryCurrency: string | null;
+  /** Quick toggle: when true and `secondaryCurrency` is set, KPI values render a secondary subtitle. */
+  compareCurrencyOn: boolean;
+  /** Top-level autocomplete dictionary — identity only (name + tag + optional URL). */
+  accountsDirectory: AccountDictEntry[];
+  /** Per-rung overrides. When unset for a rung, fall back to DEFAULT_LADDER seed. */
+  rungAccounts: Record<number, RungAccountRef[]>;
 }
 
 function _defaultStrategie(): StrategieState {
@@ -334,6 +362,10 @@ function _defaultStrategie(): StrategieState {
       { id: "m_not", name: "Notion",          plan: "Plus",       price: 8,  color: "#8E8E93", mono: "No" },
     ],
     currency: "CZK",
+    secondaryCurrency: null,
+    compareCurrencyOn: false,
+    accountsDirectory: [],
+    rungAccounts: {},
   };
 }
 
@@ -442,8 +474,47 @@ export function normalizeStrategie(raw: unknown): StrategieState {
   }
 
   const currency = typeof r["currency"] === "string" ? r["currency"] : "CZK";
+  const secondaryCurrency = typeof r["secondaryCurrency"] === "string"
+    ? r["secondaryCurrency"]
+    : null;
+  const compareCurrencyOn = Boolean(r["compareCurrencyOn"]);
 
-  return { statements, positions, pots, memberships, currency };
+  // accounts directory
+  let accountsDirectory: AccountDictEntry[] = [];
+  if (Array.isArray(r["accountsDirectory"])) {
+    const seen = new Set<string>();
+    accountsDirectory = (r["accountsDirectory"] as unknown[])
+      .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+      .map((o) => ({
+        name: typeof o["name"] === "string" ? o["name"] : "",
+        tag:  typeof o["tag"]  === "string" ? o["tag"]  : "",
+        url:  typeof o["url"]  === "string" ? o["url"]  : undefined,
+      }))
+      .filter((e) => {
+        if (!e.name || seen.has(e.name)) return false;
+        seen.add(e.name);
+        return true;
+      });
+  }
+
+  // per-rung account overrides
+  let rungAccounts: Record<number, RungAccountRef[]> = {};
+  const ra = r["rungAccounts"];
+  if (ra && typeof ra === "object" && !Array.isArray(ra)) {
+    for (const [k, v] of Object.entries(ra as Record<string, unknown>)) {
+      const id = Number(k);
+      if (!Number.isFinite(id) || !Array.isArray(v)) continue;
+      rungAccounts[id] = (v as unknown[])
+        .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+        .map((o) => ({
+          accountRef: typeof o["accountRef"] === "string" ? o["accountRef"] : "",
+          balance:    typeof o["balance"]    === "number" ? o["balance"]    : 0,
+        }))
+        .filter((e) => e.accountRef);
+    }
+  }
+
+  return { statements, positions, pots, memberships, currency, secondaryCurrency, compareCurrencyOn, accountsDirectory, rungAccounts };
 }
 
 export const ACCENT_COLORS = [

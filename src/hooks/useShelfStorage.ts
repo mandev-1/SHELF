@@ -71,6 +71,9 @@ const SHOW_BOTH_NAV_BUTTONS_KEY = "shelf-show-both-nav-buttons";
 const PILLAR_TODO_PINS_KEY = "shelf-pillar-todo-pins";
 const FOCUS_DESYNCED_KEY = "shelf-focus-desynced";
 export const LOW_PERFORMANCE_MODE_KEY = "shelf-low-performance-mode";
+const SHOW_STRATEGIE_TAB_KEY = "shelf-show-strategie-tab";
+const SHOW_HOPPER_TAB_KEY    = "shelf-show-hopper-tab";
+const SHOW_INVENTORY_TAB_KEY = "shelf-show-inventory-tab";
 const BUYLIST_KEY = "shelf-buylist";
 const SALE_ITEMS_KEY = "shelf-sale-items";
 const INVENTORY_KEY = "shelf-inventory";
@@ -130,6 +133,16 @@ function normalizeInventory(raw: unknown): InventoryItem[] {
     const o = r as Record<string, unknown>;
     if (typeof o.name !== "string" || !o.name.trim()) continue;
     const category = INV_CATS.includes(o.category as InvCategory) ? (o.category as InvCategory) : "Other";
+    const kids = Array.isArray(o.kids)
+      ? (o.kids as unknown[])
+          .filter((k): k is Record<string, unknown> => !!k && typeof k === "object")
+          .filter((k) => typeof k.name === "string" && (k.name as string).trim())
+          .map((k) => ({
+            id: typeof k.id === "string" && k.id ? (k.id as string) : crypto.randomUUID(),
+            name: k.name as string,
+            value: typeof k.value === "number" ? (k.value as number) : 0,
+          }))
+      : undefined;
     out.push({
       id: typeof o.id === "string" && o.id ? o.id : crypto.randomUUID(),
       name: o.name,
@@ -137,6 +150,8 @@ function normalizeInventory(raw: unknown): InventoryItem[] {
       estimatedValue: typeof o.estimatedValue === "number" ? o.estimatedValue : 0,
       notes: typeof o.notes === "string" ? o.notes : undefined,
       url: typeof o.url === "string" ? o.url : undefined,
+      sellUrl: typeof o.sellUrl === "string" ? (o.sellUrl as string) : undefined,
+      kids: kids && kids.length ? kids : undefined,
       addedAt: typeof o.addedAt === "string" ? o.addedAt : new Date().toISOString().slice(0, 10),
     });
   }
@@ -335,6 +350,9 @@ export function useShelfStorage() {
   const [pillarTodoPins, setPillarTodoPinsState] = useState<string[]>([]);
   const [focusDesynced, setFocusDesyncedState] = useState(false);
   const [lowPerformanceMode, setLowPerformanceModeState] = useState(false);
+  const [showStrategieTab, setShowStrategieTabState] = useState(true);
+  const [showHopperTab,    setShowHopperTabState]    = useState(true);
+  const [showInventoryTab, setShowInventoryTabState] = useState(true);
   const [buylist, setBuylistState] = useState<BuylistItem[]>([]);
   const [saleItems, setSaleItemsState] = useState<SaleItem[]>([]);
   const [inventoryItems, setInventoryItemsState] = useState<InventoryItem[]>([]);
@@ -379,6 +397,9 @@ export function useShelfStorage() {
         PILLAR_TODO_PINS_KEY,
         FOCUS_DESYNCED_KEY,
         LOW_PERFORMANCE_MODE_KEY,
+        SHOW_STRATEGIE_TAB_KEY,
+        SHOW_HOPPER_TAB_KEY,
+        SHOW_INVENTORY_TAB_KEY,
         BUYLIST_KEY,
         SALE_ITEMS_KEY,
         INVENTORY_KEY,
@@ -505,6 +526,9 @@ export function useShelfStorage() {
       );
       setFocusDesyncedState(result[FOCUS_DESYNCED_KEY] === true);
       setLowPerformanceModeState(result[LOW_PERFORMANCE_MODE_KEY] === true);
+      setShowStrategieTabState(result[SHOW_STRATEGIE_TAB_KEY] !== false);
+      setShowHopperTabState   (result[SHOW_HOPPER_TAB_KEY]    !== false);
+      setShowInventoryTabState(result[SHOW_INVENTORY_TAB_KEY] !== false);
       setBuylistState(normalizeBuylist(result[BUYLIST_KEY]));
       setSaleItemsState(normalizeSaleItems(result[SALE_ITEMS_KEY]));
       setInventoryItemsState(normalizeInventory(result[INVENTORY_KEY]));
@@ -918,6 +942,55 @@ export function useShelfStorage() {
     });
   }, []);
 
+  const strategieSetSecondaryCurrency = useCallback((c: string | null) => {
+    setStrategieState((prev) => {
+      // Turning the secondary off should also clear the compare toggle.
+      const compareOn = c == null ? false : prev.compareCurrencyOn;
+      const next: StrategieState = { ...prev, secondaryCurrency: c, compareCurrencyOn: compareOn };
+      getStorage()?.set({ [STRATEGIE_KEY]: next });
+      return next;
+    });
+  }, []);
+
+  const strategieToggleCompareCurrency = useCallback(() => {
+    setStrategieState((prev) => {
+      if (!prev.secondaryCurrency) return prev;
+      const next: StrategieState = { ...prev, compareCurrencyOn: !prev.compareCurrencyOn };
+      getStorage()?.set({ [STRATEGIE_KEY]: next });
+      return next;
+    });
+  }, []);
+
+  const strategieSetRungAccounts = useCallback(
+    (rungId: number, rows: import("../types/grid").RungAccountRef[]) => {
+      setStrategieState((prev) => {
+        const nextRung = { ...prev.rungAccounts, [rungId]: rows };
+        const next: StrategieState = { ...prev, rungAccounts: nextRung };
+        getStorage()?.set({ [STRATEGIE_KEY]: next });
+        return next;
+      });
+    },
+    []
+  );
+
+  const strategieUpsertAccountDictEntry = useCallback(
+    (entry: import("../types/grid").AccountDictEntry) => {
+      const name = entry.name.trim();
+      if (!name) return;
+      setStrategieState((prev) => {
+        const idx = prev.accountsDirectory.findIndex((d) => d.name === name);
+        const cleaned = { name, tag: entry.tag, url: entry.url?.trim() || undefined };
+        const dir = [...prev.accountsDirectory];
+        if (idx >= 0) dir[idx] = cleaned;
+        else dir.push(cleaned);
+        const next: StrategieState = { ...prev, accountsDirectory: dir };
+        getStorage()?.set({ [STRATEGIE_KEY]: next });
+        return next;
+      });
+    },
+    []
+  );
+
   const saveGoals = useCallback((next: ShelfGoalMap) => {
     setGoals(next);
     getStorage()?.set({ [GOALS_KEY]: next });
@@ -979,6 +1052,22 @@ export function useShelfStorage() {
     getStorage()?.set({ [VISUAL_FLOW_KEY]: next });
   }, []);
 
+  /**
+   * Functional-updater form of {@link setVisualFlow}. Use this for every write
+   * that derives from prior state — it reads React's latest committed state in
+   * the updater, so two updates in the same tick can't clobber each other.
+   */
+  const updateVisualFlow = useCallback(
+    (updater: (prev: VisualFlowData) => VisualFlowData) => {
+      setVisualFlowState((prev) => {
+        const next = updater(prev);
+        getStorage()?.set({ [VISUAL_FLOW_KEY]: next });
+        return next;
+      });
+    },
+    []
+  );
+
   const setLlmConsoleUrl = useCallback((next: string) => {
     const url = next.trim() || "https://example.org";
     setLlmConsoleUrlState(url);
@@ -1007,6 +1096,19 @@ export function useShelfStorage() {
   const setLowPerformanceMode = useCallback((next: boolean) => {
     setLowPerformanceModeState(next);
     getStorage()?.set({ [LOW_PERFORMANCE_MODE_KEY]: next });
+  }, []);
+
+  const setShowStrategieTab = useCallback((next: boolean) => {
+    setShowStrategieTabState(next);
+    getStorage()?.set({ [SHOW_STRATEGIE_TAB_KEY]: next });
+  }, []);
+  const setShowHopperTab = useCallback((next: boolean) => {
+    setShowHopperTabState(next);
+    getStorage()?.set({ [SHOW_HOPPER_TAB_KEY]: next });
+  }, []);
+  const setShowInventoryTab = useCallback((next: boolean) => {
+    setShowInventoryTabState(next);
+    getStorage()?.set({ [SHOW_INVENTORY_TAB_KEY]: next });
   }, []);
 
   const setPromptRowsState = useCallback((next: 1 | 2) => {
@@ -1249,6 +1351,12 @@ export function useShelfStorage() {
     setFocusDesynced,
     lowPerformanceMode,
     setLowPerformanceMode,
+    showStrategieTab,
+    setShowStrategieTab,
+    showHopperTab,
+    setShowHopperTab,
+    showInventoryTab,
+    setShowInventoryTab,
     obsidianLog,
     setObsidianLogConfig,
     logToObsidian,
@@ -1287,6 +1395,7 @@ export function useShelfStorage() {
     setBookmarkSize,
     visualFlow,
     setVisualFlow,
+    updateVisualFlow,
     grazelandItems,
     setGrazelandItems,
     binItems,
@@ -1313,6 +1422,10 @@ export function useShelfStorage() {
     strategieSaveStatement,
     strategieAddPot,
     strategieSetCurrency,
+    strategieSetSecondaryCurrency,
+    strategieToggleCompareCurrency,
+    strategieSetRungAccounts,
+    strategieUpsertAccountDictEntry,
     llmConsoleUrl,
     setLlmConsoleUrl,
     showBothNavButtons,

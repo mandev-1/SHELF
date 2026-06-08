@@ -69,6 +69,8 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
   const [dragOver, setDragOver] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [encoding, setEncoding] = useState<"utf-8" | "windows-1250">("utf-8");
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const bytesRef = useRef<ArrayBuffer | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -120,10 +122,28 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
   }, []);
 
   const handleFile = useCallback(async (file: File) => {
+    setOverride({});
+    setFileName(file.name);
+    setLoadError(null);
+    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+    if (isPdf) {
+      bytesRef.current = null; // a PDF can't be re-decoded as text by the encoding toggle
+      setLoading(true);
+      try {
+        const { extractPdfText } = await import("./pdfText"); // lazy — pdfjs only loads for PDFs
+        const text = await extractPdfText(file);
+        setRawText(text);
+        if (!text.trim()) setLoadError("This PDF has no extractable text — it may be a scan. Export CSV from your bank, or paste the text.");
+      } catch {
+        setRawText("");
+        setLoadError("Couldn't read this PDF. Export a CSV from your bank, or paste the statement text instead.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
     const buf = await file.arrayBuffer();
     bytesRef.current = buf;
-    setFileName(file.name);
-    setOverride({});
     setEncoding("utf-8");
     setRawText(decodeBytes(buf, "utf-8"));
   }, [decodeBytes]);
@@ -141,6 +161,8 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
     setResult(null);
     setRows([]);
     setShowCols(false);
+    setLoadError(null);
+    setLoading(false);
   };
 
   const setRow = (key: string, patch: Partial<ReviewRow>) =>
@@ -182,8 +204,8 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
             <div className="se-eyebrow"><IcoUpload /> Import</div>
             <h2 className="se-title">Bring in a bank statement</h2>
             <p className="se-lede">
-              Paste your statement or drop a <code>.csv</code>/<code>.txt</code> export. It's parsed
-              right here on your device — nothing is uploaded, and nothing is saved until you hit Import.
+              Paste your statement or drop a <code>.csv</code>/<code>.txt</code>/<code>.pdf</code> export.
+              It's parsed right here on your device — nothing is uploaded, and nothing is saved until you hit Import.
             </p>
           </div>
           <button className="se-close" onClick={onClose} aria-label="Close"><IcoX /></button>
@@ -210,26 +232,32 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
                 spellCheck={false}
               />
               <div className="si-drop-foot">
-                <button className="si-filebtn" onClick={() => fileRef.current?.click()}>
-                  <IcoFile /> Choose .csv / .txt file
+                <button className="si-filebtn" onClick={() => fileRef.current?.click()} disabled={loading}>
+                  <IcoFile /> Choose .csv / .txt / .pdf file
                 </button>
                 {fileName && (
                   <span className="si-filename">
                     {fileName}
-                    <button
-                      className="si-enc"
-                      title="Toggle text encoding if Czech characters look garbled"
-                      onClick={() => setEncoding((e) => e === "utf-8" ? "windows-1250" : "utf-8")}
-                    >
-                      {encoding === "utf-8" ? "UTF-8" : "CP1250"}
-                    </button>
+                    {bytesRef.current && (
+                      <button
+                        className="si-enc"
+                        title="Toggle text encoding if Czech characters look garbled"
+                        onClick={() => setEncoding((e) => e === "utf-8" ? "windows-1250" : "utf-8")}
+                      >
+                        {encoding === "utf-8" ? "UTF-8" : "CP1250"}
+                      </button>
+                    )}
                   </span>
                 )}
                 <span className="si-privacy">
                   <LockGlyph /> Stays on your device
                 </span>
               </div>
-              {parsedEmpty && (
+              {loading && (
+                <div className="si-loading"><span className="si-spinner" /> Reading PDF on your device…</div>
+              )}
+              {loadError && <div className="si-warn">{loadError}</div>}
+              {parsedEmpty && !loadError && (
                 <div className="si-warn">
                   Couldn't find any transactions. Check that rows have a date and an amount,
                   or use <b>Columns</b> after pasting to map them manually.
@@ -394,7 +422,7 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
         <input
           ref={fileRef}
           type="file"
-          accept=".csv,.txt,text/csv,text/plain"
+          accept=".csv,.txt,.pdf,text/csv,text/plain,application/pdf"
           className="si-fileinput"
           onChange={(e) => {
             const f = e.target.files?.[0];
