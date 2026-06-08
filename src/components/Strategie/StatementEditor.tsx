@@ -9,8 +9,9 @@ import {
 import { brandMatch, BrandMark, BRAND_COLORS } from "./brandLogos";
 import {
   IcoX, IcoChev, IcoPlus, IcoTrash, IcoIn, IcoOut,
-  IcoFile, IcoCheck, IcoRepeat, IcoPencil,
+  IcoFile, IcoCheck, IcoRepeat, IcoPencil, IcoUpload,
 } from "./icons";
+import { StatementImport } from "./StatementImport";
 
 const MEM_PALETTE = [
   "#E50914", "#FF6B2C", "#F59E0B", "#1DB954", "#10A37F",
@@ -72,6 +73,7 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
   const [gran, setGran] = useState<"month" | "week">("month");
   const [weekIdx, setWeekIdx] = useState(1);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
   const [members, setMembers] = useState<MembershipRow[]>(() => memberships.map((m) => ({ ...m })));
@@ -94,12 +96,13 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      if (importOpen) return; // StatementImport owns Escape while open
       if (pickerOpen) setPickerOpen(false);
       else onClose();
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [pickerOpen, onClose]);
+  }, [pickerOpen, onClose, importOpen]);
 
   const cm: MonthStatement = draft[viewKey] ?? { income: [], expenses: [] };
   const incomeBase = cm.income.reduce((a, r) => a + (r.amt || 0), 0);
@@ -219,6 +222,34 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
     onClose();
   };
 
+  // Merge parsed bank-statement rows into the draft (one month-key per row's
+  // month, created on demand). Nothing persists until the user hits Save.
+  const handleImport = (additions: Record<string, MonthStatement>) => {
+    const added = Object.keys(additions).filter(
+      (k) => additions[k].income.length + additions[k].expenses.length > 0
+    );
+    if (added.length === 0) { setImportOpen(false); return; }
+    setDraft((d) => {
+      const next = { ...d };
+      for (const mk of added) {
+        const ex = next[mk] ?? { income: [], expenses: [] };
+        next[mk] = {
+          income: [...ex.income, ...additions[mk].income],
+          expenses: [...ex.expenses, ...additions[mk].expenses],
+        };
+      }
+      return next;
+    });
+    setKeys((k) => {
+      const set = new Set(k);
+      added.forEach((mk) => set.add(mk));
+      return [...set].sort();
+    });
+    setViewKey([...added].sort()[0]);
+    setGran("month");
+    setImportOpen(false);
+  };
+
   const renderAmt = (side: "income" | "expenses", r: IncomeRow | ExpenseRow) => (
     <div className="se-amt">
       <span className="se-cur">{sym}</span>
@@ -282,6 +313,7 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
     : "?";
 
   return (
+    <>
     <div className="se-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="se-modal" role="dialog" aria-modal="true" aria-label="Edit statement">
         <div className="se-head">
@@ -293,6 +325,9 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
               savings rate and 5-year projection — live.
             </p>
           </div>
+          <button className="se-import" onClick={() => setImportOpen(true)}>
+            <IcoUpload /> Import statement
+          </button>
           <button className="se-close" onClick={onClose} aria-label="Close"><IcoX /></button>
         </div>
 
@@ -655,5 +690,13 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
         </div>
       </div>
     </div>
+    {importOpen && (
+      <StatementImport
+        currency={currency}
+        onClose={() => setImportOpen(false)}
+        onImport={handleImport}
+      />
+    )}
+    </>
   );
 }
