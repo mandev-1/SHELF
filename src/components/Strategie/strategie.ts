@@ -168,11 +168,12 @@ export const STMT_CATS: Record<CatKey, { label: string; hue: string }> = {
   fun:       { label: "Fun",        hue: "#ec4899" },
   health:    { label: "Health",     hue: "#22c55e" },
   shopping:  { label: "Shopping",   hue: "#f97316" },
+  fees:      { label: "Fees",       hue: "#ef4444" },
   other:     { label: "Other",      hue: "#94a3b8" },
 };
 
 export const CAT_KEYS: CatKey[] = [
-  "housing", "food", "transport", "home", "fun", "health", "shopping", "other",
+  "housing", "food", "transport", "home", "fun", "health", "shopping", "fees", "other",
 ];
 
 // ─── Scenarios / constants ───────────────────────────────────────────────────

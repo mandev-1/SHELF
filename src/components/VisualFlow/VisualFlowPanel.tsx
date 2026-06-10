@@ -321,6 +321,52 @@ function NodeEditCard({
     requestClose();
   }, [text, note, potentialValue, tag, subtitle, blockStatus, date, sectorName, sectorColor, onSave, requestClose]);
 
+  const handleNoteKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    const el = e.currentTarget;
+    const { selectionStart, selectionEnd, value } = el;
+    if (selectionStart !== selectionEnd) return;
+    const lineStart = value.lastIndexOf("\n", selectionStart - 1) + 1;
+    const line = value.slice(lineStart, selectionStart);
+
+    // ordered (1. / 1)), unordered (- / *), or quote (>) markers
+    const ordered = line.match(/^(\s*)(\d+)([.)])(\s+)(.*)$/);
+    const unordered = line.match(/^(\s*)([-*])(\s+)(.*)$/);
+    const quote = line.match(/^(\s*)(>)(\s+)(.*)$/);
+    const match = ordered ?? unordered ?? quote;
+    if (!match) return;
+
+    const indent = match[1];
+    const content = match[match.length - 1];
+
+    e.preventDefault();
+
+    let nextValue: string;
+    let nextCaret: number;
+    if (content.trim() === "") {
+      // empty list item -> exit the list, clearing the marker on this line
+      nextValue = value.slice(0, lineStart) + indent + value.slice(selectionStart);
+      nextCaret = lineStart + indent.length;
+    } else {
+      let marker: string;
+      if (ordered) {
+        marker = `${indent}${Number(ordered[2]) + 1}${ordered[3]}${ordered[4]}`;
+      } else if (unordered) {
+        marker = `${indent}${unordered[2]}${unordered[3]}`;
+      } else {
+        marker = `${indent}${quote![2]}${quote![3]}`;
+      }
+      const insert = `\n${marker}`;
+      nextValue = value.slice(0, selectionStart) + insert + value.slice(selectionEnd);
+      nextCaret = selectionStart + insert.length;
+    }
+
+    setNote(nextValue);
+    requestAnimationFrame(() => {
+      el.selectionStart = el.selectionEnd = nextCaret;
+    });
+  }, []);
+
   useEffect(() => {
     const close = (e: MouseEvent) => {
       const target = e.target;
@@ -413,6 +459,7 @@ function NodeEditCard({
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
+            onKeyDown={handleNoteKeyDown}
             placeholder={showBinInfoFields ? "Why does this belong in the bin?" : "Note (optional)"}
             className="shelf-note-popover-textarea min-h-[60px] max-h-64 w-full resize-y rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
             rows={2}

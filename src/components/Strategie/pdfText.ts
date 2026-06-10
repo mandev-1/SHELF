@@ -15,6 +15,7 @@
 import * as pdfjs from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { reconstructPage, type PdfTextItem } from "./pdfReconstruct";
+import { extractAirBankText } from "./airbankParse";
 
 // Bundled, same-origin extension asset — satisfies MV3 CSP (script-src 'self').
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -28,14 +29,19 @@ export async function extractPdfText(file: File): Promise<string> {
     disableStream: true,
   }).promise;
   try {
-    const pages: string[] = [];
+    const rawPages: PdfTextItem[][] = [];
     for (let p = 1; p <= doc.numPages; p++) {
       const page = await doc.getPage(p);
       const content = await page.getTextContent();
-      pages.push(reconstructPage(content.items as PdfTextItem[]));
+      rawPages.push(content.items as PdfTextItem[]);
       page.cleanup();
     }
-    return pages.join("\n");
+    // Try format-specific extractors first (Air Bank packs transactions across
+    // 2–3 lines under a stacked header — generic whitespace reconstruction
+    // would break each transaction into multiple fake rows).
+    const airBank = extractAirBankText(rawPages);
+    if (airBank) return airBank;
+    return rawPages.map(reconstructPage).join("\n");
   } finally {
     await doc.destroy();
   }

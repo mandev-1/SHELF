@@ -31,6 +31,7 @@ import {
   type InventoryItem,
   type InvCategory,
   normalizeStrategie,
+  SAVINGS_PLAN_HUES,
 } from "../types/grid";
 void (undefined as unknown as SaleStatus);
 void (undefined as unknown as InvCategory);
@@ -991,6 +992,62 @@ export function useShelfStorage() {
     []
   );
 
+  const strategieAddSavingsPlan = useCallback(
+    (name: string, kind: import("../types/grid").SavingsPlanKind) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      setStrategieState((prev) => {
+        const hue = SAVINGS_PLAN_HUES[prev.savingsPlans.length % SAVINGS_PLAN_HUES.length];
+        const next: StrategieState = {
+          ...prev,
+          savingsPlans: [
+            ...prev.savingsPlans,
+            { id: crypto.randomUUID(), name: trimmed, kind, hue, monthly: 0, target: 0 },
+          ],
+        };
+        getStorage()?.set({ [STRATEGIE_KEY]: next });
+        return next;
+      });
+    },
+    []
+  );
+
+  const strategieUpdateSavingsPlan = useCallback(
+    (id: string, patch: Partial<import("../types/grid").SavingsPlan>) => {
+      setStrategieState((prev) => {
+        const next: StrategieState = {
+          ...prev,
+          savingsPlans: prev.savingsPlans.map((p) => (p.id === id ? { ...p, ...patch, id: p.id } : p)),
+        };
+        getStorage()?.set({ [STRATEGIE_KEY]: next });
+        return next;
+      });
+    },
+    []
+  );
+
+  const strategieRemoveSavingsPlan = useCallback((id: string) => {
+    setStrategieState((prev) => {
+      // strip the tag from every expense row so nothing dangles
+      const byMonth: Record<string, MonthStatement> = {};
+      for (const [k, mo] of Object.entries(prev.statements.byMonth)) {
+        byMonth[k] = {
+          income: mo.income,
+          expenses: mo.expenses.map((e) =>
+            e.savingsPlanId === id ? { ...e, savingsPlanId: undefined } : e
+          ),
+        };
+      }
+      const next: StrategieState = {
+        ...prev,
+        statements: { ...prev.statements, byMonth },
+        savingsPlans: prev.savingsPlans.filter((p) => p.id !== id),
+      };
+      getStorage()?.set({ [STRATEGIE_KEY]: next });
+      return next;
+    });
+  }, []);
+
   const saveGoals = useCallback((next: ShelfGoalMap) => {
     setGoals(next);
     getStorage()?.set({ [GOALS_KEY]: next });
@@ -1426,6 +1483,9 @@ export function useShelfStorage() {
     strategieToggleCompareCurrency,
     strategieSetRungAccounts,
     strategieUpsertAccountDictEntry,
+    strategieAddSavingsPlan,
+    strategieUpdateSavingsPlan,
+    strategieRemoveSavingsPlan,
     llmConsoleUrl,
     setLlmConsoleUrl,
     showBothNavButtons,

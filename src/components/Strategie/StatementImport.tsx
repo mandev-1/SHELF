@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import type { CatKey, MonthStatement, IncomeRow, ExpenseRow } from "../../types/grid";
+import { Fragment, useState, useEffect, useMemo, useRef, useCallback } from "react";
+import type { CatKey, MonthStatement, IncomeRow, ExpenseRow, SavingsPlan } from "../../types/grid";
 import { CURRENCIES, STMT_CATS, CAT_KEYS } from "./strategie";
 import {
-  parseStatement, toBaseAmount,
+  parseStatement, toBaseAmount, foldAscii,
   type StatementParseResult, type ColumnMap, type TxnKind,
 } from "./statementParse";
 import {
@@ -11,6 +11,10 @@ import {
 
 export interface StatementImportProps {
   currency: string;
+  /** Current statement book (editor draft) — used to flag re-imported duplicates. */
+  existing?: Record<string, MonthStatement>;
+  /** Savings programs rows can be tagged as contributions to. */
+  savingsPlans?: SavingsPlan[];
   onClose: () => void;
   onImport: (additions: Record<string, MonthStatement>) => void;
 }
@@ -26,7 +30,23 @@ interface ReviewRow {
   cat: CatKey;
   magnitude: number;     // abs display value
   currencyCode: string;
+  dup: boolean;          // duplicate of an existing/earlier row — excluded by default
+  savingsPlanId?: string; // tagged as a contribution to a savings program
 }
+
+// faint statement-text fragments scattered around the drop zone (decoration)
+const ALTAR_FRAGMENTS: { left: string; top: string; text: string; em?: boolean }[] = [
+  { left: "5%",  top: "14%", text: "−1 234,56" },
+  { left: "84%", top: "10%", text: "CZK" },
+  { left: "88%", top: "42%", text: "Datum;Částka" },
+  { left: "3%",  top: "58%", text: "01.05.2026" },
+  { left: "79%", top: "80%", text: "+42 000,00", em: true },
+  { left: "9%",  top: "86%", text: "Protistrana" },
+  { left: "56%", top: "4%",  text: "Měna" },
+  { left: "32%", top: "92%", text: "Výpis 05/2026" },
+];
+
+const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform ?? "");
 
 function newId(): string {
   try {
@@ -52,6 +72,12 @@ function monthLabel(key: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
+// resizable review-table columns (px) — "What" stays fluid and absorbs the rest
+type ResizableCol = "date" | "dir" | "cpty" | "cat" | "amt";
+const COL_DEFAULTS: Record<ResizableCol, number> = { date: 100, dir: 80, cpty: 130, cat: 160, amt: 140 };
+const COL_MIN: Record<ResizableCol, number> = { date: 64, dir: 56, cpty: 72, cat: 96, amt: 84 };
+const COL_MAX = 520;
+
 const ROLE_FIELDS: { key: keyof ColumnMap; label: string }[] = [
   { key: "date", label: "Date" },
   { key: "amount", label: "Amount" },
@@ -60,7 +86,7 @@ const ROLE_FIELDS: { key: keyof ColumnMap; label: string }[] = [
   { key: "currency", label: "Currency" },
 ];
 
-export function StatementImport({ currency, onClose, onImport }: StatementImportProps) {
+export function StatementImport({ currency, existing, savingsPlans = [], onClose, onImport }: StatementImportProps) {
   const [rawText, setRawText] = useState("");
   const [result, setResult] = useState<StatementParseResult | null>(null);
   const [rows, setRows] = useState<ReviewRow[]>([]);
@@ -71,9 +97,48 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
   const [encoding, setEncoding] = useState<"utf-8" | "windows-1250">("utf-8");
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [showManual, setShowManual] = useState(false);
+  const [sort, setSort] = useState<{ key: "date" | "amount"; dir: 1 | -1 } | null>(null);
+  const [colW, setColW] = useState<Record<ResizableCol, number>>({ ...COL_DEFAULTS });
+
+  const startResize = useCallback((key: ResizableCol) => (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = colW[key];
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const move = (ev: PointerEvent) => {
+      const w = Math.max(COL_MIN[key], Math.min(COL_MAX, startW + (ev.clientX - startX)));
+      setColW((c) => ({ ...c, [key]: w }));
+    };
+    const up = () => {
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }, [colW]);
+
+  const resetCol = (key: ResizableCol) => setColW((c) => ({ ...c, [key]: COL_DEFAULTS[key] }));
 
   const bytesRef = useRef<ArrayBuffer | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // identity keys of rows already in the statement book — re-imports match these
+  const existingKeys = useMemo(() => {
+    const set = new Set<string>();
+    if (!existing) return set;
+    for (const mk of Object.keys(existing)) {
+      for (const e of existing[mk].expenses) set.add(`e|${e.date}|${Math.round(e.amt * 100)}|${foldAscii(e.label)}`);
+      for (const inc of existing[mk].income) set.add(`i|${Math.round(inc.amt * 100)}|${foldAscii(inc.label)}`);
+    }
+    return set;
+  }, [existing]);
 
   const runParse = useCallback((text: string, ov: Partial<ColumnMap>) => {
     const res = parseStatement(text, { currencyHint: currency, columnMap: ov });
@@ -84,24 +149,42 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
     setRows((prev) => {
       const idOf = (iso: string, mag: number) => `${iso}|${Math.round(mag * 100)}`;
       const prevByKey = new Map(prev.map((r) => [idOf(r.isoDate, r.magnitude), r]));
+      const seen = new Set<string>();
       return res.transactions.map((t, i) => {
         const mag = Math.abs(t.amount);
         const prevR = prevByKey.get(idOf(t.isoDate, mag));
+        const label = prevR ? prevR.label : (t.description || t.counterparty || "");
+        // duplicate = same (date, amount, label) seen earlier in this paste,
+        // or already sitting in the statement book (matched in base currency)
+        const innerKey = `${t.isoDate}|${Math.round(mag * 100)}|${foldAscii(label)}`;
+        const baseCents = Math.round(toBaseAmount(mag, t.currencyCode) * 100);
+        const bookKey = t.kind === "expense" || (prevR && prevR.kind === "expense")
+          ? `e|${t.isoDate}|${baseCents}|${foldAscii(label)}`
+          : `i|${baseCents}|${foldAscii(label)}`;
+        const dup = seen.has(innerKey) || existingKeys.has(bookKey);
+        seen.add(innerKey);
+        // best-effort auto-tag: plan name appearing in the row's text
+        const hay = foldAscii(`${t.description} ${t.counterparty}`);
+        const planAuto = t.kind === "expense"
+          ? savingsPlans.find((p) => hay.includes(foldAscii(p.name)))?.id
+          : undefined;
         return {
           key: `${i}-${t.isoDate}-${t.amount}-${t.description.slice(0, 8)}`,
-          include: prevR ? prevR.include : true,
+          include: prevR ? prevR.include : !dup,
           isoDate: t.isoDate,
           monthKey: t.monthKey,
-          label: prevR ? prevR.label : (t.description || t.counterparty || ""),
+          label,
           counterparty: t.counterparty,
           kind: prevR ? prevR.kind : t.kind,
           cat: prevR ? prevR.cat : t.cat,
           magnitude: mag,
           currencyCode: t.currencyCode,
+          dup,
+          savingsPlanId: prevR ? prevR.savingsPlanId : planAuto,
         };
       });
     });
-  }, [currency]);
+  }, [currency, existingKeys, savingsPlans]);
 
   // single re-parse path: whenever the raw text or column override changes
   useEffect(() => {
@@ -115,6 +198,21 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
     window.addEventListener("keydown", h, true);
     return () => window.removeEventListener("keydown", h, true);
   }, [onClose]);
+
+  // "paste anywhere" — while the modal is in its empty state, a global ⌘V/Ctrl+V
+  // drops the clipboard text straight into the parser (unless the user is
+  // pasting into the manual textarea, which handles itself).
+  useEffect(() => {
+    if (rows.length > 0) return;
+    const h = (e: ClipboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
+      const text = e.clipboardData?.getData("text") ?? "";
+      if (text.trim()) { bytesRef.current = null; setFileName(null); setRawText(text); }
+    };
+    window.addEventListener("paste", h);
+    return () => window.removeEventListener("paste", h);
+  }, [rows.length]);
 
   const decodeBytes = useCallback((buf: ArrayBuffer, enc: string) => {
     try { return new TextDecoder(enc).decode(buf); }
@@ -154,6 +252,8 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
   }, [encoding, decodeBytes]);
 
   const startOver = () => {
+    const edits = rows.length > 0 || rawText.trim() !== "";
+    if (edits && !window.confirm(`Start over? This discards the ${rows.length} parsed row${rows.length === 1 ? "" : "s"} and any edits you've made here.`)) return;
     bytesRef.current = null;
     setFileName(null);
     setRawText("");
@@ -163,6 +263,8 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
     setShowCols(false);
     setLoadError(null);
     setLoading(false);
+    setSort(null);
+    setShowManual(false);
   };
 
   const setRow = (key: string, patch: Partial<ReviewRow>) =>
@@ -173,8 +275,30 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
   const expRows = included.filter((r) => r.kind === "expense");
   const incSum = incRows.reduce((a, r) => a + r.magnitude, 0);
   const expSum = expRows.reduce((a, r) => a + r.magnitude, 0);
+  const netSum = incSum - expSum;
   const months = [...new Set(included.map((r) => r.monthKey))].sort();
   const curCode = result?.meta.currency ?? currency;
+
+  const allOn = rows.length > 0 && rows.every((r) => r.include);
+  const toggleAll = () => setRows((rs) => rs.map((r) => ({ ...r, include: !allOn })));
+
+  const cycleSort = (key: "date" | "amount") =>
+    setSort((s) => (s?.key !== key ? { key, dir: 1 } : s.dir === 1 ? { key, dir: -1 } : null));
+  const sortGlyph = (key: "date" | "amount") => (sort?.key === key ? (sort.dir === 1 ? " ↑" : " ↓") : "");
+
+  const displayRows = sort
+    ? [...rows].sort((a, b) => {
+        const v = sort.key === "date"
+          ? a.isoDate.localeCompare(b.isoDate)
+          : a.magnitude - b.magnitude;
+        return v * sort.dir;
+      })
+    : rows;
+
+  const hasCpty = rows.some((r) => r.counterparty.trim() !== "");
+  const dupCount = rows.filter((r) => r.dup).length;
+  // month dividers only make sense in chronological-ish order
+  const showDividers = months.length > 1 && (!sort || sort.key === "date");
 
   const doImport = () => {
     const additions: Record<string, MonthStatement> = {};
@@ -186,7 +310,10 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
         const row: IncomeRow = { id: newId(), label: r.label || r.counterparty || "Income", amt, kind: "other" };
         additions[r.monthKey].income.push(row);
       } else {
-        const row: ExpenseRow = { id: newId(), label: r.label || r.counterparty || "Expense", amt, cat: r.cat, date: r.isoDate };
+        const row: ExpenseRow = {
+          id: newId(), label: r.label || r.counterparty || "Expense", amt, cat: r.cat, date: r.isoDate,
+          savingsPlanId: r.savingsPlanId || undefined,
+        };
         additions[r.monthKey].expenses.push(row);
       }
     }
@@ -196,9 +323,10 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
   const hasRows = rows.length > 0;
   const parsedEmpty = !!result && rows.length === 0 && rawText.trim().length > 0;
 
+  // Blocking modal: backdrop clicks are inert — only Cancel / Import / X / Esc close it.
   return (
-    <div className="se-backdrop si-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="se-modal si-modal" role="dialog" aria-modal="true" aria-label="Import bank statement">
+    <div className="se-backdrop si-backdrop">
+      <div className={"se-modal si-modal" + (hasRows ? " si-modal--review" : "")} role="dialog" aria-modal="true" aria-label="Import bank statement">
         <div className="se-head">
           <div className="se-head-l">
             <div className="se-eyebrow"><IcoUpload /> Import</div>
@@ -214,7 +342,7 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
         <div className="se-body si-body">
           {!hasRows && (
             <div
-              className={"si-drop" + (dragOver ? " si-drop--over" : "")}
+              className="si-stage"
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={(e) => {
@@ -223,44 +351,93 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
                 if (f) handleFile(f);
               }}
             >
-              <textarea
-                className="si-textarea"
-                aria-label="Paste bank-statement transactions"
-                placeholder={"Paste your transactions here…\n\nExample:\nDatum;Protistrana;Detaily;Částka;Měna\n01.05.2026;Albert;Nákup;-1 234,56;CZK\n03.05.2026;Mzda;Výplata;42 000,00;CZK"}
-                value={rawText}
-                onChange={(e) => { bytesRef.current = null; setFileName(null); setRawText(e.target.value); }}
-                spellCheck={false}
-              />
-              <div className="si-drop-foot">
-                <button className="si-filebtn" onClick={() => fileRef.current?.click()} disabled={loading}>
-                  <IcoFile /> Choose .csv / .txt / .pdf file
-                </button>
-                {fileName && (
-                  <span className="si-filename">
-                    {fileName}
-                    {bytesRef.current && (
-                      <button
-                        className="si-enc"
-                        title="Toggle text encoding if Czech characters look garbled"
-                        onClick={() => setEncoding((e) => e === "utf-8" ? "windows-1250" : "utf-8")}
-                      >
-                        {encoding === "utf-8" ? "UTF-8" : "CP1250"}
-                      </button>
-                    )}
-                  </span>
-                )}
-                <span className="si-privacy">
-                  <LockGlyph /> Stays on your device
+              {ALTAR_FRAGMENTS.map((f, i) => (
+                <span
+                  key={i}
+                  className={"si-frag" + (f.em ? " si-frag--em" : "")}
+                  style={{ left: f.left, top: f.top }}
+                  aria-hidden="true"
+                >
+                  {f.text}
                 </span>
-              </div>
-              {loading && (
-                <div className="si-loading"><span className="si-spinner" /> Reading PDF on your device…</div>
+              ))}
+
+              {loading ? (
+                <div className="si-parsing" role="status" aria-label="Parsing statement">
+                  <div className="si-parsebar"><span /></div>
+                  <div className="si-skel-rows">
+                    <span className="si-skel" style={{ width: 34 }} /><span className="si-skel" style={{ width: "72%" }} /><span className="si-skel" style={{ width: 52 }} />
+                    <span className="si-skel" style={{ width: 34 }} /><span className="si-skel" style={{ width: "57%" }} /><span className="si-skel" style={{ width: 52 }} />
+                    <span className="si-skel" style={{ width: 34 }} /><span className="si-skel" style={{ width: "84%" }} /><span className="si-skel" style={{ width: 52 }} />
+                    <span className="si-skel" style={{ width: 34 }} /><span className="si-skel" style={{ width: "63%" }} /><span className="si-skel" style={{ width: 52 }} />
+                  </div>
+                  <div className="si-parsing-cap">reading your statement on device…</div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className={"si-altar" + (dragOver ? " si-altar--over" : "")}
+                  onClick={() => fileRef.current?.click()}
+                  aria-label="Drop, paste, or choose a statement file"
+                >
+                  <span className="si-tick si-tick--tl" aria-hidden="true" />
+                  <span className="si-tick si-tick--tr" aria-hidden="true" />
+                  <span className="si-tick si-tick--bl" aria-hidden="true" />
+                  <span className="si-tick si-tick--br" aria-hidden="true" />
+                  <span className="si-orb"><IcoUpload /></span>
+                  <span className="si-altar-title">{dragOver ? "Release to parse" : "Drop your statement"}</span>
+                  <span className="si-altar-sub">
+                    or paste anywhere — <kbd className="si-kbd">{IS_MAC ? "⌘V" : "Ctrl+V"}</kbd> · click to browse
+                  </span>
+                  <span className="si-ftypes">
+                    <span className="si-ftype">.csv</span>
+                    <span className="si-ftype">.txt</span>
+                    <span className="si-ftype">.pdf</span>
+                  </span>
+                </button>
               )}
+
+              <div className="si-trust">
+                <LockGlyph /> parsed on device <i>·</i> nothing uploaded <i>·</i> review before saving
+              </div>
+
+              {fileName && !loading && (
+                <div className="si-filename">
+                  <IcoFile /> {fileName}
+                  {bytesRef.current && (
+                    <button
+                      className="si-enc"
+                      title="Toggle text encoding if Czech characters look garbled"
+                      onClick={() => setEncoding((e) => e === "utf-8" ? "windows-1250" : "utf-8")}
+                    >
+                      {encoding === "utf-8" ? "UTF-8" : "CP1250"}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {!loading && (
+                <button className="si-link si-manual-link" onClick={() => setShowManual((v) => !v)}>
+                  <IcoChev dir={showManual ? "down" : "right"} /> type or edit as text
+                </button>
+              )}
+              {showManual && !loading && (
+                <textarea
+                  className="si-textarea"
+                  aria-label="Paste bank-statement transactions"
+                  placeholder={"Paste your transactions here…\n\nExample:\nDatum;Protistrana;Detaily;Částka;Měna\n01.05.2026;Albert;Nákup;-1 234,56;CZK\n03.05.2026;Mzda;Výplata;42 000,00;CZK"}
+                  value={rawText}
+                  onChange={(e) => { bytesRef.current = null; setFileName(null); setRawText(e.target.value); }}
+                  spellCheck={false}
+                  autoFocus
+                />
+              )}
+
               {loadError && <div className="si-warn">{loadError}</div>}
               {parsedEmpty && !loadError && (
                 <div className="si-warn">
                   Couldn't find any transactions. Check that rows have a date and an amount,
-                  or use <b>Columns</b> after pasting to map them manually.
+                  or open <b>type or edit as text</b> to fix the input manually.
                 </div>
               )}
             </div>
@@ -274,10 +451,15 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
                   {result.meta.periodStart && result.meta.periodEnd && (
                     <span className="si-chip">{result.meta.periodStart} → {result.meta.periodEnd}</span>
                   )}
-                  <span className="si-chip si-chip--dim">
-                    {result.meta.rowsParsed} found
-                    {result.meta.rowsSkipped > 0 ? ` · ${result.meta.rowsSkipped} skipped` : ""}
-                  </span>
+                  <span className="si-chip si-chip--ok"><IcoCheck /> {rows.length} recognized</span>
+                  {dupCount > 0 && (
+                    <span className="si-chip" title="Same date, amount and description as an existing or earlier row — excluded by default">
+                      {dupCount} duplicate{dupCount === 1 ? "" : "s"}
+                    </span>
+                  )}
+                  {result.meta.rowsSkipped > 0 && (
+                    <span className="si-chip si-chip--warn">{result.meta.rowsSkipped} skipped</span>
+                  )}
                   <span className="si-chip si-chip--dim">{result.meta.mode}</span>
                 </div>
                 <div className="si-meta-right">
@@ -336,67 +518,166 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
                   <span className="si-sum-lab"><span className="se-pill se-pill--out"><IcoOut /></span> {expRows.length} spending</span>
                   <b>{fmtCur(expSum, curCode)}</b>
                 </div>
+                <div className="si-sum si-sum--bal">
+                  <span className="si-sum-lab">Net</span>
+                  <b className={netSum >= 0 ? "pos" : "neg"}>
+                    {netSum >= 0 ? "+" : "−"}{fmtCur(Math.abs(netSum), curCode)}
+                  </b>
+                </div>
                 <div className="si-sum si-sum--net">
                   <span className="si-sum-lab">{months.length} month{months.length === 1 ? "" : "s"}</span>
                   <b className="si-months">{months.map(monthLabel).join(", ") || "—"}</b>
                 </div>
               </div>
 
-              <div className="si-table" role="table">
+              <div
+                className={"si-table" + (hasCpty ? " si-table--cpty" : "")}
+                role="table"
+                style={{
+                  "--si-c-date": `${colW.date}px`,
+                  "--si-c-dir": `${colW.dir}px`,
+                  "--si-c-cpty": `${colW.cpty}px`,
+                  "--si-c-cat": `${colW.cat}px`,
+                  "--si-c-amt": `${colW.amt}px`,
+                } as React.CSSProperties}
+              >
                 <div className="si-thead" role="row">
-                  <span className="si-th si-th--chk" role="columnheader"></span>
-                  <span className="si-th si-th--date" role="columnheader">Date</span>
-                  <span className="si-th si-th--dir" role="columnheader">In/Out</span>
+                  <span className="si-th si-th--chk" role="columnheader">
+                    <button
+                      className={"si-chk si-chk--all" + (allOn ? " on" : "")}
+                      onClick={toggleAll}
+                      aria-pressed={allOn}
+                      aria-label={allOn ? "Exclude all rows" : "Include all rows"}
+                      title={allOn ? "Exclude all" : "Include all"}
+                    >
+                      {allOn ? <IcoCheck /> : null}
+                    </button>
+                  </span>
+                  <span className="si-th si-th--date" role="columnheader">
+                    <button className="si-th-sort" onClick={() => cycleSort("date")} title="Sort by date">
+                      Date{sortGlyph("date")}
+                    </button>
+                    <ResizeHandle onPointerDown={startResize("date")} onDoubleClick={() => resetCol("date")} />
+                  </span>
+                  <span className="si-th si-th--dir" role="columnheader">
+                    In/Out
+                    <ResizeHandle onPointerDown={startResize("dir")} onDoubleClick={() => resetCol("dir")} />
+                  </span>
                   <span className="si-th si-th--label" role="columnheader">What</span>
-                  <span className="si-th si-th--cat" role="columnheader">Category</span>
-                  <span className="si-th si-th--amt" role="columnheader">Amount</span>
+                  {hasCpty && (
+                    <span className="si-th si-th--cpty" role="columnheader">
+                      Who
+                      <ResizeHandle onPointerDown={startResize("cpty")} onDoubleClick={() => resetCol("cpty")} />
+                    </span>
+                  )}
+                  <span className="si-th si-th--cat" role="columnheader">
+                    Category
+                    <ResizeHandle onPointerDown={startResize("cat")} onDoubleClick={() => resetCol("cat")} />
+                  </span>
+                  <span className="si-th si-th--amt" role="columnheader">
+                    <button className="si-th-sort" onClick={() => cycleSort("amount")} title="Sort by amount">
+                      Amount{sortGlyph("amount")}
+                    </button>
+                    <ResizeHandle onPointerDown={startResize("amt")} onDoubleClick={() => resetCol("amt")} />
+                  </span>
                 </div>
-                {rows.map((r) => (
-                  <div className={"si-trow" + (r.include ? "" : " si-trow--off")} role="row" key={r.key}>
-                    <span className="si-td si-td--chk" role="cell">
-                      <button
-                        className={"si-chk" + (r.include ? " on" : "")}
-                        onClick={() => setRow(r.key, { include: !r.include })}
-                        aria-pressed={r.include} aria-label={r.include ? "Exclude row" : "Include row"}
-                      >
-                        {r.include ? <IcoCheck /> : null}
-                      </button>
-                    </span>
-                    <span className="si-td si-td--date" role="cell" title={r.monthKey}>{r.isoDate}</span>
-                    <span className="si-td si-td--dir" role="cell">
-                      <button
-                        className={"si-dir si-dir--" + r.kind}
-                        onClick={() => setRow(r.key, { kind: r.kind === "income" ? "expense" : "income" })}
-                        title="Toggle income / spending"
-                      >
-                        {r.kind === "income" ? <><IcoIn /> In</> : <><IcoOut /> Out</>}
-                      </button>
-                    </span>
-                    <span className="si-td si-td--label" role="cell">
-                      <input
-                        className="se-label si-label"
-                        value={r.label}
-                        placeholder={r.counterparty || "Description"}
-                        onChange={(e) => setRow(r.key, { label: e.target.value })}
-                      />
-                    </span>
-                    <span className="si-td si-td--cat" role="cell">
-                      {r.kind === "expense" ? (
-                        <select
-                          className="se-cat si-cat"
-                          value={r.cat}
-                          onChange={(e) => setRow(r.key, { cat: e.target.value as CatKey })}
-                        >
-                          {CAT_KEYS.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
-                        </select>
-                      ) : <span className="si-dash">—</span>}
-                    </span>
-                    <span role="cell" className={"si-td si-td--amt " + (r.kind === "income" ? "si-pos" : "si-neg")}>
-                      {r.kind === "income" ? "+" : "−"}{fmtCur(r.magnitude, r.currencyCode)}
-                    </span>
-                  </div>
-                ))}
+                {displayRows.map((r, i) => {
+                  const prev = displayRows[i - 1];
+                  const divider = showDividers && (!prev || prev.monthKey !== r.monthKey);
+                  return (
+                    <Fragment key={r.key}>
+                      {divider && <div className="si-mdiv" role="presentation">{monthLabel(r.monthKey)}</div>}
+                      <div className={"si-trow" + (r.include ? "" : " si-trow--off") + (r.dup ? " si-trow--dup" : "")} role="row">
+                        <span className="si-td si-td--chk" role="cell">
+                          <button
+                            className={"si-chk" + (r.include ? " on" : "")}
+                            onClick={() => setRow(r.key, { include: !r.include })}
+                            aria-pressed={r.include} aria-label={r.include ? "Exclude row" : "Include row"}
+                          >
+                            {r.include ? <IcoCheck /> : null}
+                          </button>
+                        </span>
+                        <span className="si-td si-td--date" role="cell" title={r.monthKey}>
+                          {r.isoDate}
+                          {r.dup && <em className="si-dupbadge" title="Same date, amount and description as an existing or earlier row">dup</em>}
+                        </span>
+                        <span className="si-td si-td--dir" role="cell">
+                          <button
+                            className={"si-dir si-dir--" + r.kind}
+                            onClick={() => setRow(r.key, { kind: r.kind === "income" ? "expense" : "income" })}
+                            title="Toggle income / spending"
+                          >
+                            {r.kind === "income" ? <><IcoIn /> In</> : <><IcoOut /> Out</>}
+                          </button>
+                        </span>
+                        <span className="si-td si-td--label" role="cell">
+                          <input
+                            className="se-label si-label"
+                            value={r.label}
+                            placeholder={r.counterparty || "Description"}
+                            onChange={(e) => setRow(r.key, { label: e.target.value })}
+                          />
+                        </span>
+                        {hasCpty && (
+                          <span className="si-td si-td--cpty" role="cell" title={r.counterparty}>
+                            {r.counterparty || <span className="si-dash">—</span>}
+                          </span>
+                        )}
+                        <span className="si-td si-td--cat" role="cell">
+                          {r.kind === "expense" ? (
+                            <>
+                              <span
+                                className="si-catdot"
+                                style={{
+                                  background: r.savingsPlanId
+                                    ? (savingsPlans.find((p) => p.id === r.savingsPlanId)?.hue ?? "var(--accent)")
+                                    : (STMT_CATS[r.cat] || STMT_CATS.other).hue,
+                                }}
+                              />
+                              <select
+                                className="se-cat si-cat"
+                                value={r.savingsPlanId ? `plan:${r.savingsPlanId}` : r.cat}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (v.startsWith("plan:")) setRow(r.key, { savingsPlanId: v.slice(5) });
+                                  else setRow(r.key, { cat: v as CatKey, savingsPlanId: undefined });
+                                }}
+                              >
+                                {CAT_KEYS.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
+                                {savingsPlans.length > 0 && (
+                                  <optgroup label="Savings plans">
+                                    {savingsPlans.map((p) => (
+                                      <option key={p.id} value={`plan:${p.id}`}>→ {p.name}</option>
+                                    ))}
+                                  </optgroup>
+                                )}
+                              </select>
+                            </>
+                          ) : <span className="si-dash">—</span>}
+                        </span>
+                        <span role="cell" className={"si-td si-td--amt " + (r.kind === "income" ? "si-pos" : "si-neg")}>
+                          {r.kind === "income" ? "+" : "−"}{fmtCur(r.magnitude, r.currencyCode)}
+                        </span>
+                      </div>
+                    </Fragment>
+                  );
+                })}
               </div>
+
+              {result.meta.skippedLines.length > 0 && (
+                <details className="si-skipped">
+                  <summary>
+                    <span className="si-skipped-mark">!</span>
+                    {result.meta.rowsSkipped} line{result.meta.rowsSkipped === 1 ? "" : "s"} couldn't be parsed — view
+                  </summary>
+                  <div className="si-skipped-list">
+                    {result.meta.skippedLines.map((l, i) => <code key={i}>{l}</code>)}
+                    {result.meta.rowsSkipped > result.meta.skippedLines.length && (
+                      <span className="si-skipped-more">…and {result.meta.rowsSkipped - result.meta.skippedLines.length} more</span>
+                    )}
+                  </div>
+                </details>
+              )}
             </>
           )}
         </div>
@@ -432,6 +713,19 @@ export function StatementImport({ currency, onClose, onImport }: StatementImport
         />
       </div>
     </div>
+  );
+}
+
+function ResizeHandle(props: { onPointerDown: (e: React.PointerEvent) => void; onDoubleClick: () => void }) {
+  return (
+    <span
+      className="si-resize"
+      role="separator"
+      aria-orientation="vertical"
+      title="Drag to resize · double-click to reset"
+      onPointerDown={props.onPointerDown}
+      onDoubleClick={props.onDoubleClick}
+    />
   );
 }
 

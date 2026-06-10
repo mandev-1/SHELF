@@ -1,27 +1,48 @@
-import { niceCeil, project } from "./strategie";
+import { niceCeil, project, fmtMoney, STMT_CATS, CAT_KEYS } from "./strategie";
+import type { CatKey, MonthStatement } from "../../types/grid";
 
-export function SpendingChart({ series }: { series: { label: string; total: number }[] }) {
+/** Per-day spending for one month: stacked bars, one stack segment per category. */
+export function DailySpendChart({ stmt, monthKey, cur }: { stmt: MonthStatement; monthKey: string; cur: string }) {
   const W = 760; const H = 220;
   const PAD = { top: 16, right: 20, bottom: 28, left: 52 };
   const cw = W - PAD.left - PAD.right;
   const ch = H - PAD.top - PAD.bottom;
-  if (series.length < 2) return <div style={{ padding: 20, fontSize: 12, color: "var(--faint)" }}>Not enough data.</div>;
-  const maxVal = Math.max(...series.map((s) => s.total), 1);
-  const avg = series.reduce((s, p) => s + p.total, 0) / series.length;
-  const yMax = niceCeil(maxVal);
-  const xOf = (i: number) => PAD.left + (i / (series.length - 1)) * cw;
+
+  const [yy, mm] = monthKey.split("-").map(Number);
+  const daysInMonth = yy && mm ? new Date(yy, mm, 0).getDate() : 31;
+
+  // bucket dated expenses of this month into day × category (base amounts)
+  const days: Partial<Record<CatKey, number>>[] = Array.from({ length: daysInMonth }, () => ({}));
+  let undated = 0;
+  for (const e of stmt.expenses) {
+    if (e.savingsPlanId) continue; // savings contributions are transfers, not spending
+    const d = e.date?.startsWith(monthKey) ? Number(e.date.slice(8, 10)) : 0;
+    if (d >= 1 && d <= daysInMonth) days[d - 1][e.cat] = (days[d - 1][e.cat] ?? 0) + e.amt;
+    else undated += e.amt;
+  }
+
+  const dayTotals = days.map((d) => CAT_KEYS.reduce((s, k) => s + (d[k] ?? 0), 0));
+  const monthTotal = dayTotals.reduce((a, b) => a + b, 0);
+  if (monthTotal <= 0) {
+    return (
+      <div style={{ padding: 20, fontSize: 12, color: "var(--faint)" }}>
+        No dated expenses in {monthKey} yet — import a statement to see daily spending.
+      </div>
+    );
+  }
+
+  const yMax = niceCeil(Math.max(...dayTotals, 1));
+  const avg = monthTotal / daysInMonth;
   const yOf = (v: number) => PAD.top + ch - (v / yMax) * ch;
-  const area: string[] = [];
-  const line: string[] = [];
-  series.forEach((p, i) => {
-    const x = xOf(i); const y = yOf(p.total);
-    if (i === 0) { area.push(`M${x},${yOf(0)}`); }
-    area.push(`L${x},${y}`);
-    line.push(i === 0 ? `M${x},${y}` : `L${x},${y}`);
-  });
-  area.push(`L${xOf(series.length - 1)},${yOf(0)}Z`);
+  const slot = cw / daysInMonth;
+  const barW = Math.max(3, slot * 0.62);
+  const xOf = (dayIdx: number) => PAD.left + dayIdx * slot + (slot - barW) / 2;
+
+  const fmt = (v: number) => fmtMoney(v, cur, { abbr: true });
   const avgY = yOf(avg);
   const yTicks = 4;
+  const xLabelDays = [1, 5, 10, 15, 20, 25, daysInMonth].filter((d, i, a) => d <= daysInMonth && a.indexOf(d) === i);
+
   return (
     <svg className="proj-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
       <g className="proj-grid">
@@ -32,21 +53,45 @@ export function SpendingChart({ series }: { series: { label: string; total: numb
       </g>
       {Array.from({ length: yTicks + 1 }, (_, i) => {
         const v = (yMax / yTicks) * i;
-        return <text key={i} className="proj-ylab" x={PAD.left - 6} y={yOf(v) + 4}>{v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}</text>;
+        return <text key={i} className="proj-ylab" x={PAD.left - 6} y={yOf(v) + 4}>{v > 0 ? fmt(v) : "0"}</text>;
       })}
-      {series.map((p, i) => (
-        <text key={i} className="proj-xlab" x={xOf(i)} y={H - 4}>{p.label}</text>
+      {xLabelDays.map((d) => (
+        <text key={d} className="proj-xlab" x={xOf(d - 1) + barW / 2} y={H - 4}>{d}</text>
       ))}
-      <path className="spend-area" d={area.join(" ")} />
-      <path className="spend-line" d={line.join(" ")} />
-      <line className="spend-avgline" x1={PAD.left} y1={avgY} x2={W - PAD.right} y2={avgY} />
-      <text className="spend-avglab" x={PAD.left + 4} y={avgY - 5}>avg</text>
-      {series.map((p, i) => {
-        const x = xOf(i); const y = yOf(p.total);
-        return i === series.length - 1
-          ? <circle key={i} className="spend-dot-end" cx={x} cy={y} r={5} />
-          : <circle key={i} className="spend-dot" cx={x} cy={y} r={3} />;
+      {days.map((d, i) => {
+        if (dayTotals[i] <= 0) return null;
+        let acc = 0;
+        return (
+          <g key={i}>
+            {CAT_KEYS.map((k) => {
+              const v = d[k] ?? 0;
+              if (v <= 0) return null;
+              const y0 = yOf(acc);
+              acc += v;
+              const y1 = yOf(acc);
+              return (
+                <rect
+                  key={k}
+                  className="dsp-rect"
+                  x={xOf(i)} y={y1}
+                  width={barW} height={Math.max(1, y0 - y1)}
+                  rx={1.5}
+                  fill={STMT_CATS[k].hue}
+                >
+                  <title>{`${i + 1}. — ${STMT_CATS[k].label}: ${fmt(v)} (day total ${fmt(dayTotals[i])})`}</title>
+                </rect>
+              );
+            })}
+          </g>
+        );
       })}
+      <line className="spend-avgline" x1={PAD.left} y1={avgY} x2={W - PAD.right} y2={avgY} />
+      <text className="spend-avglab" x={PAD.left + 4} y={avgY - 5}>avg/day</text>
+      {undated > 0 && (
+        <text className="proj-xlab" x={W - PAD.right} y={PAD.top - 4} style={{ fill: "var(--faint)", textAnchor: "end" }}>
+          +{fmt(undated)} without a date (not shown)
+        </text>
+      )}
     </svg>
   );
 }

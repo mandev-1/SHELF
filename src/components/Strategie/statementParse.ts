@@ -54,6 +54,7 @@ export interface StatementMeta {
   headerIndex: number;
   rowsParsed: number;
   rowsSkipped: number;
+  skippedLines: string[];     // raw text of skipped rows (capped) for review UI
   decimalSep: "," | ".";
 }
 
@@ -73,6 +74,7 @@ export interface StatementParseResult {
 const MAX_LINES = 50000;
 const MAX_LINE_LENGTH = 10000;
 const SAMPLE_ROWS = 200;
+const MAX_SKIPPED_LINES = 40;
 
 // ─── ASCII folding ─────────────────────────────────────────────────────────────
 /** Lowercase, strip diacritics, collapse whitespace. č→c, ě→e, ů→u, etc. */
@@ -119,7 +121,8 @@ export const CAT_KEYWORDS: { cat: CatKey; keywords: string[] }[] = [
   { cat: "fun", keywords: ["netflix", "spotify", "hbo max", "max.com", "hbo", "disney+", "disney plus", "disney", "apple tv", "appletv", "apple.com/bill", "amazon prime video", "paramount", "skyshowtime", "voyo", "oneplay", "steam", "steampowered", "playstation", "psn", "xbox", "xbox live", "nintendo", "epic games", "epicgames", "gog.com", "twitch", "patreon", "youtube premium", "youtubepremium", "kino", "cinema city", "cinemacity", "cinestar", "premiere cinemas", "imax", "divadlo", "koncert", "festival", "ticketportal", "ticketmaster", "goout", "go out", "smsticket", "bar", "pub", "hospoda", "hostinec", "pivnice", "nightclub", "diskoteka", "zoo", "aquapark", "aquapalace", "bowling", "laser game", "lasergame", "escape room", "audible", "muzeum", "galerie", "casino", "sazka", "tipsport", "fortuna", "betano"] },
   { cat: "health", keywords: ["lekarna", "pharmacy", "dr.max", "dr max", "drmax", "benu lekarna", "benu", "pilulka", "magistra", "doktor", "lekar", "klinika", "poliklinika", "ordinace", "nemocnice", "zubar", "stomatolog", "dental", "zubni", "ocni", "optika", "fokus optik", "grandoptical", "vasecocky", "multisport", "multi sport", "fitness", "posilovna", "fitcentrum", "form factory", "formfactory", "bigone", "yoga", "joga", "pilates", "bazen", "plavani", "wellness", "masaz", "fyzioterapie", "rehabilitace", "vzp", "zdravotni pojisteni", "zdravotni pojistovna", "decathlon", "doplnky stravy", "vitaminy"] },
   { cat: "shopping", keywords: ["alza domacnost", "alza", "alza.cz", "notino", "zalando", "about you", "aboutyou", "zara", "h&m", "hm.com", "reserved", "cropp", "sinsay", "mohito", "new yorker", "newyorker", "c&a", "takko", "kik", "primark", "datart", "mall.cz", "mall group", "ccc", "deichmann", "bata", "humanic", "sportisimo", "amazon.de", "amazon", "amzn", "aliexpress", "ali express", "temu", "shein", "wish", "ebay", "allegro", "answear", "footshop", "bonprix", "bonami", "mountfield", "czc.cz", "tsbohemia", "ts bohemia", "electroworld", "electro world", "euronics", "okay elektro", "planeo", "megapixel", "fotolab", "eshop", "e-shop", "kosmetika", "parfumy", "sephora", "douglas", "marionnaud", "fann", "klenoty", "hodinky", "obuv", "obleceni"] },
-  { cat: "other", keywords: ["atm", "vyber hotovosti", "vyber z bankomatu", "bankomat", "cash withdrawal", "withdrawal", "poplatek", "poplatky", "bankovni poplatek", "mesicni poplatek", "fee", "prevod", "transfer", "odchozi platba", "trvaly prikaz", "inkaso", "vlastni ucet", "mezi ucty", "sporeni", "sporici ucet", "investice", "portu", "fondee", "etf", "trading212", "xtb", "revolut", "wise", "splatka uveru", "splatka", "uver", "pujcka", "kreditni karta", "dane", "financni urad", "cssz", "socialni pojisteni", "alimenty", "exekuce", "pokuta", "charita", "nadace", "clenstvi", "membership", "predplatne", "subscription", "paypal", "icloud", "apple.com", "microsoft", "google"] },
+  { cat: "fees", keywords: ["bankovni poplatek", "mesicni poplatek", "poplatek za vedeni", "poplatek", "poplatky", "provize", "bank charge", "service charge", "card fee", "account fee", "maintenance fee", "fee", "fees"] },
+  { cat: "other", keywords: ["atm", "vyber hotovosti", "vyber z bankomatu", "bankomat", "cash withdrawal", "withdrawal", "prevod", "transfer", "odchozi platba", "trvaly prikaz", "inkaso", "vlastni ucet", "mezi ucty", "sporeni", "sporici ucet", "investice", "portu", "fondee", "etf", "trading212", "xtb", "revolut", "wise", "splatka uveru", "splatka", "uver", "pujcka", "kreditni karta", "dane", "financni urad", "cssz", "socialni pojisteni", "alimenty", "exekuce", "pokuta", "charita", "nadace", "clenstvi", "membership", "predplatne", "subscription", "paypal", "icloud", "apple.com", "microsoft", "google"] },
 ];
 
 // Air Bank's own category (when present) beats keyword guessing.
@@ -133,10 +136,13 @@ export const AIRBANK_CAT_MAP: Record<string, CatKey> = {
   "zabava": "fun",
   "zdravi": "health",
   "nakupy": "shopping",
+  "poplatky": "fees",
+  "bankovni sluzby": "fees",
 };
 
 // Short tokens that need a word boundary to avoid false positives.
-const BOUNDED = new Set(["o2", "hbo", "cez", "eon", "dpp", "pid", "mhd", "mol", "omv", "atm", "vzp", "bata", "cd.cz", "ikea", "obi", "kik"]);
+// ("fee"/"fees" would otherwise substring-match "coffee", "feed", …)
+const BOUNDED = new Set(["o2", "hbo", "cez", "eon", "dpp", "pid", "mhd", "mol", "omv", "atm", "vzp", "bata", "cd.cz", "ikea", "obi", "kik", "fee", "fees"]);
 
 // Specific multi-word phrases only — a bare "zustatek"/"balance" would wrongly
 // drop real transactions like "Úrok ze zůstatku" (interest credited).
@@ -606,7 +612,7 @@ export function parseStatement(rawText: string, opts: ParseOptions = {}): Statem
   const meta: StatementMeta = {
     delimiter: null, mode: "freeform", currency: opts.currencyHint?.toUpperCase() ?? "CZK",
     periodStart: null, periodEnd: null, columnMap: emptyMap(), headerCells: [],
-    headerIndex: -1, rowsParsed: 0, rowsSkipped: 0, decimalSep: ",",
+    headerIndex: -1, rowsParsed: 0, rowsSkipped: 0, skippedLines: [], decimalSep: ",",
   };
 
   if (!lines.length) return { transactions: [], byMonth: {}, meta };
@@ -671,7 +677,11 @@ export function parseStatement(rawText: string, opts: ParseOptions = {}): Statem
           else if (/\.\d{1,2}\b/.test(cell) && !cell.includes(",")) dotDecimal++;
         }
 
-        if (signed === null || iso === null || isSummaryRow(r)) { meta.rowsSkipped++; continue; }
+        if (signed === null || iso === null || isSummaryRow(r)) {
+          meta.rowsSkipped++;
+          if (meta.skippedLines.length < MAX_SKIPPED_LINES) meta.skippedLines.push(r.join(delimiter ?? "  ").trim());
+          continue;
+        }
 
         const description = map.description !== null ? (r[map.description] ?? "").trim() : "";
         const counterparty = map.counterparty !== null ? (r[map.counterparty] ?? "").trim() : "";
@@ -709,6 +719,7 @@ export function parseStatement(rawText: string, opts: ParseOptions = {}): Statem
     meta.mode = "freeform";
     meta.delimiter = null;
     meta.rowsSkipped = ff.skipped;
+    meta.skippedLines = ff.skippedLines;
     meta.periodStart = period.start ?? ff.period.start;
     meta.periodEnd = period.end ?? ff.period.end;
     meta.currency = ff.tokens.length ? mode2currency(ff.tokens, opts) : (opts.currencyHint?.toUpperCase() ?? "CZK");
@@ -744,10 +755,15 @@ function mode2currency(tokens: string[], opts?: ParseOptions): string {
 // per-line "date … amount" extraction for copied PDF text
 function parseFreeform(
   lines: string[], period: { start: string | null; end: string | null }, opts: ParseOptions,
-): { txns: ParsedTxn[]; skipped: number; tokens: string[]; period: { start: string | null; end: string | null } } {
+): { txns: ParsedTxn[]; skipped: number; skippedLines: string[]; tokens: string[]; period: { start: string | null; end: string | null } } {
   const txns: ParsedTxn[] = [];
   const tokens: string[] = [];
+  const skippedLines: string[] = [];
   let skipped = 0;
+  const skip = (line: string) => {
+    skipped++;
+    if (skippedLines.length < MAX_SKIPPED_LINES) skippedLines.push(line.trim());
+  };
   const dateHead = /^\s*(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\.\s?\d{1,2}\.\s?\d{2,4}|\d{1,2}\/\d{1,2}\/\d{2,4})\b/;
   // Anchored at the trimmed line-end and requires a real money shape: a 2-digit
   // decimal group (",dd"/".dd") OR a trailing currency token. This avoids
@@ -761,17 +777,17 @@ function parseFreeform(
     const dm = line.match(dateHead);
     if (!dm) { if (!period.start) { /* maybe period line */ } continue; }
     const { iso, rawDate } = parseDate(dm[1], period, opts.dayFirst);
-    if (!iso) { skipped++; continue; }
+    if (!iso) { skip(line); continue; }
     const rest = line.slice(dm[0].length).trimEnd();
     const am = rest.match(amountTail);
     // reject identifier-shaped tails (no decimals and no currency token)
-    if (am && !hasMoneyShape.test(am[0])) { skipped++; continue; }
-    if (!am) { skipped++; continue; }
+    if (am && !hasMoneyShape.test(am[0])) { skip(line); continue; }
+    if (!am) { skip(line); continue; }
     const a = parseAmount(am[1]);
-    if (a.value === null) { skipped++; continue; }
+    if (a.value === null) { skip(line); continue; }
     if (a.currencyToken) tokens.push(a.currencyToken);
     const description = rest.slice(0, rest.length - am[0].length).trim();
-    if (isSummaryRow([description])) { skipped++; continue; }
+    if (isSummaryRow([description])) { skip(line); continue; }
     const signed = a.sign * a.value;
     txns.push({
       rawDate, isoDate: iso, description, counterparty: "", amount: signed,
@@ -779,5 +795,5 @@ function parseFreeform(
       kind: signed >= 0 ? "income" : "expense", monthKey: iso.slice(0, 7),
     });
   }
-  return { txns, skipped, tokens, period };
+  return { txns, skipped, skippedLines, tokens, period };
 }

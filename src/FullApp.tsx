@@ -141,6 +141,9 @@ export default function FullApp() {
     strategieToggleCompareCurrency,
     strategieSetRungAccounts,
     strategieUpsertAccountDictEntry,
+    strategieAddSavingsPlan,
+    strategieUpdateSavingsPlan,
+    strategieRemoveSavingsPlan,
     showStrategieTab,
     showHopperTab,
     showInventoryTab,
@@ -594,6 +597,9 @@ export default function FullApp() {
                 onToggleCompareCurrency={strategieToggleCompareCurrency}
                 onSetRungAccounts={strategieSetRungAccounts}
                 onUpsertAccountDictEntry={strategieUpsertAccountDictEntry}
+                onAddSavingsPlan={strategieAddSavingsPlan}
+                onRenameSavingsPlan={(id, name) => strategieUpdateSavingsPlan(id, { name })}
+                onRemoveSavingsPlan={strategieRemoveSavingsPlan}
               />
             </div>
           ) : dashboardView === "buylist" ? (

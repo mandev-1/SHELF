@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import type {
-  StrategieState, MonthStatement, CatKey, IncomeRow, ExpenseRow, MembershipRow,
+  StrategieState, MonthStatement, CatKey, IncomeRow, ExpenseRow, MembershipRow, SavingsPlan,
 } from "../../types/grid";
 import {
   dayStr, daysInMonth, monthWeeks, weekOfDate, stepMonth, monthLabel, monthAbbr,
@@ -32,6 +32,7 @@ export interface StatementEditorProps {
   statements: StrategieState["statements"] & { byMonth: Record<string, MonthStatement> };
   currency: string;
   memberships: MembershipRow[];
+  savingsPlans?: SavingsPlan[];
   onSave: (
     book: Record<string, MonthStatement>,
     order: string[],
@@ -52,7 +53,7 @@ type MemEditorState = {
   monoTouched: boolean;
 };
 
-export function StatementEditor({ statements, currency, memberships, onSave, onClose }: StatementEditorProps) {
+export function StatementEditor({ statements, currency, memberships, savingsPlans = [], onSave, onClose }: StatementEditorProps) {
   const cur = CURRENCIES[currency] ?? CURRENCIES["USD"];
   const sym = cur.code === "CZK" ? "Kč" : cur.code === "EUR" ? "€" : "$";
 
@@ -606,7 +607,11 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
                 <div className="se-row" key={r.id}>
                   <span
                     className="se-catdot"
-                    style={{ background: (STMT_CATS[r.cat] || STMT_CATS.other).hue }}
+                    style={{
+                      background: r.savingsPlanId
+                        ? (savingsPlans.find((p) => p.id === r.savingsPlanId)?.hue ?? "var(--accent)")
+                        : (STMT_CATS[r.cat] || STMT_CATS.other).hue,
+                    }}
                   />
                   <input
                     className="se-label" placeholder="What did you spend on?" value={r.label}
@@ -618,10 +623,21 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
                     onChange={(e) => e.target.value && editExpense(r.id, { date: e.target.value })}
                   />
                   <select
-                    className="se-cat" value={r.cat}
-                    onChange={(e) => editExpense(r.id, { cat: e.target.value as CatKey })}
+                    className="se-cat" value={r.savingsPlanId ? `plan:${r.savingsPlanId}` : r.cat}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v.startsWith("plan:")) editExpense(r.id, { savingsPlanId: v.slice(5) });
+                      else editExpense(r.id, { cat: v as CatKey, savingsPlanId: undefined });
+                    }}
                   >
                     {CAT_KEYS.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
+                    {savingsPlans.length > 0 && (
+                      <optgroup label="Savings plans">
+                        {savingsPlans.map((p) => (
+                          <option key={p.id} value={`plan:${p.id}`}>→ {p.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                   {renderAmt("expenses", r)}
                   <button className="se-del" onClick={() => removeExpense(r.id)} aria-label="Remove">
@@ -693,6 +709,8 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
     {importOpen && (
       <StatementImport
         currency={currency}
+        existing={draft}
+        savingsPlans={savingsPlans}
         onClose={() => setImportOpen(false)}
         onImport={handleImport}
       />
