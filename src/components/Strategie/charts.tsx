@@ -1,9 +1,11 @@
 import { niceCeil, project, fmtMoney, STMT_CATS, CAT_KEYS } from "./strategie";
 import type { CatKey, MonthStatement } from "../../types/grid";
 
-/** Per-day spending for one month: stacked bars, one stack segment per category. */
+/** Per-day spending for one month: stacked bars, one stack segment per category.
+ *  H matches the projection face's chart+controls envelope so the flip card's
+ *  back face fills the same height (no dead space under the chart). */
 export function DailySpendChart({ stmt, monthKey, cur }: { stmt: MonthStatement; monthKey: string; cur: string }) {
-  const W = 760; const H = 220;
+  const W = 760; const H = 360;
   const PAD = { top: 16, right: 20, bottom: 28, left: 52 };
   const cw = W - PAD.left - PAD.right;
   const ch = H - PAD.top - PAD.bottom;
@@ -41,7 +43,7 @@ export function DailySpendChart({ stmt, monthKey, cur }: { stmt: MonthStatement;
 
   const fmt = (v: number) => fmtMoney(v, cur, { abbr: true });
   const avgY = yOf(avg);
-  const yTicks = 4;
+  const yTicks = 5;
   const xLabelDays = [1, 5, 10, 15, 20, 25, daysInMonth].filter((d, i, a) => d <= daysInMonth && a.indexOf(d) === i);
 
   return (
