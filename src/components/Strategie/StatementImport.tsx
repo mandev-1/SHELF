@@ -204,7 +204,12 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
 
   // own Escape handling (StatementEditor defers while this is open)
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      e.preventDefault();
+      if (window.confirm("Are you sure you want to leave? Any unsaved changes will be lost.")) onClose();
+    };
     window.addEventListener("keydown", h, true);
     return () => window.removeEventListener("keydown", h, true);
   }, [onClose]);
