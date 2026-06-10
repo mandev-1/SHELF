@@ -4096,6 +4096,25 @@ body {
 .dsp-rect { opacity: 0.9; transition: opacity 0.12s; }
 .dsp-rect:hover { opacity: 1; }
 .dsp-mline { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 3; }
+.dsp-wrap { position: relative; }
+.dsp-tip {
+  position: absolute; z-index: 6; pointer-events: none;
+  min-width: 220px; max-width: 320px;
+  padding: 9px 11px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+  box-shadow: 0 12px 32px -8px rgba(0,0,0,0.5);
+  font-size: 11.5px;
+}
+.dsp-tip-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid var(--line);
+}
+.dsp-tip-head b { font-size: 12px; color: var(--fg); }
+.dsp-tip-head span { font-family: var(--mono); color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.dsp-tip-row { display: flex; align-items: center; gap: 7px; padding: 1.5px 0; }
+.dsp-tip-lab { flex: 1; min-width: 0; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsp-tip-amt { font-family: var(--mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dsp-tip-more { margin-top: 4px; font-size: 10.5px; color: var(--dim); }
 .dsp-controls {
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; flex-wrap: wrap; margin: 10px 0 2px;

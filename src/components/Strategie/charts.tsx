@@ -1,5 +1,9 @@
+import { useRef, useState } from "react";
 import { niceCeil, project, fmtMoney, monthAbbr, STMT_CATS, CAT_KEYS } from "./strategie";
 import type { CatKey, MonthStatement } from "../../types/grid";
+
+interface SpendItem { label: string; cat: CatKey; amt: number; day: string; }
+const TIP_MAX_ITEMS = 24;
 
 /** Per-day spending: stacked bars, one stack segment per category. Accepts one
  *  or more consecutive months (the range selector concatenates them on one
@@ -18,9 +22,15 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
 
   const hiddenSet = new Set(hidden);
 
+  // hover tooltip: which column, where (px within the rendered chart)
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [tip, setTip] = useState<{ col: number; x: number; y: number; flipX: boolean; flipY: boolean } | null>(null);
+
   // concatenate the months' calendars into one day axis, bucketing dated
-  // expenses into day × category (base amounts)
+  // expenses into day × category (base amounts) and keeping the rows
+  // themselves per day for the hover breakdown
   const days: Partial<Record<CatKey, number>>[] = [];
+  const dayItems: SpendItem[][] = [];
   const dayLabel: string[] = [];
   const monthStarts: { idx: number; key: string; dim: number }[] = [];
   let undated = 0;
@@ -31,14 +41,19 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
     monthStarts.push({ idx: base, key, dim });
     for (let d = 1; d <= dim; d++) {
       days.push({});
+      dayItems.push([]);
       dayLabel.push(months.length > 1 ? `${monthAbbr(key)} ${d}` : `${d}.`);
     }
     for (const e of stmt.expenses) {
       if (e.savingsPlanId) continue; // savings contributions are transfers, not spending
       if (hiddenSet.has(e.cat)) continue;
       const d = e.date?.startsWith(key) ? Number(e.date.slice(8, 10)) : 0;
-      if (d >= 1 && d <= dim) days[base + d - 1][e.cat] = (days[base + d - 1][e.cat] ?? 0) + e.amt;
-      else undated += e.amt;
+      if (d >= 1 && d <= dim) {
+        days[base + d - 1][e.cat] = (days[base + d - 1][e.cat] ?? 0) + e.amt;
+        dayItems[base + d - 1].push({ label: e.label, cat: e.cat, amt: e.amt, day: dayLabel[base + d - 1] });
+      } else {
+        undated += e.amt;
+      }
     }
   }
 
@@ -71,6 +86,18 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
     }
   });
   const colTotals = cols.map((d) => CAT_KEYS.reduce((s, k) => s + (d[k] ?? 0), 0));
+  // all expense rows behind each column, biggest first (for the hover popup)
+  const colItems: SpendItem[][] = Array.from({ length: totalCols }, () => []);
+  dayItems.forEach((items, i) => { colItems[colIdxOf(i)].push(...items); });
+  for (const items of colItems) items.sort((a, b) => b.amt - a.amt);
+
+  const moveTip = (col: number) => (e: React.MouseEvent<SVGRectElement>) => {
+    const ne = e.nativeEvent;
+    const w = wrapRef.current?.clientWidth ?? W;
+    const h = wrapRef.current?.clientHeight ?? H;
+    setTip({ col, x: ne.offsetX, y: ne.offsetY, flipX: ne.offsetX > w * 0.6, flipY: ne.offsetY > h * 0.45 });
+  };
+
   const colLabel = (c: number): string => {
     if (!weekly) return dayLabel[c];
     const monday = new Date(y0, (m0 || 1) - 1, 1 + (c * 7 - offset));
@@ -94,7 +121,8 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
   const xLabelDays = [1, 5, 10, 15, 20, 25, singleDim].filter((d, i, a) => d <= singleDim && a.indexOf(d) === i);
 
   return (
-    <svg className="proj-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+    <div className="dsp-wrap" ref={wrapRef}>
+    <svg className="proj-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" onMouseLeave={() => setTip(null)}>
       <g className="proj-grid">
         {Array.from({ length: yTicks + 1 }, (_, i) => {
           const v = (yMax / yTicks) * i;
@@ -122,6 +150,18 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
           x2={PAD.left + colPosOf(ms.idx) * slot} y2={PAD.top + ch}
         />
       ))}
+      {/* full-height invisible hover zones — the popup works in the gaps too */}
+      {cols.map((_, i) =>
+        colTotals[i] > 0 ? (
+          <rect
+            key={`hz-${i}`}
+            x={PAD.left + i * slot} y={PAD.top}
+            width={slot} height={ch}
+            fill="transparent"
+            onMouseMove={moveTip(i)}
+          />
+        ) : null
+      )}
       {cols.map((d, i) => {
         if (colTotals[i] <= 0) return null;
         let acc = 0;
@@ -141,9 +181,8 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
                   width={barW} height={Math.max(1, yA - yB)}
                   rx={1.5}
                   fill={STMT_CATS[k].hue}
-                >
-                  <title>{`${colLabel(i)} — ${STMT_CATS[k].label}: ${fmt(v)} (${weekly ? "week" : "day"} total ${fmt(colTotals[i])})`}</title>
-                </rect>
+                  onMouseMove={moveTip(i)}
+                />
               );
             })}
           </g>
@@ -157,6 +196,32 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
         </text>
       )}
     </svg>
+    {tip && colItems[tip.col]?.length > 0 && (
+      <div
+        className="dsp-tip"
+        style={{
+          left: tip.x + 14,
+          top: tip.y + 14,
+          transform: `${tip.flipX ? "translateX(calc(-100% - 28px))" : ""} ${tip.flipY ? "translateY(calc(-100% - 28px))" : ""}`,
+        }}
+      >
+        <div className="dsp-tip-head">
+          <b>{colLabel(tip.col)}</b>
+          <span>{fmt(colTotals[tip.col])}</span>
+        </div>
+        {colItems[tip.col].slice(0, TIP_MAX_ITEMS).map((it, j) => (
+          <div key={j} className="dsp-tip-row">
+            <span className="dsp-cat-dot" style={{ background: (STMT_CATS[it.cat] || STMT_CATS.other).hue }} />
+            <span className="dsp-tip-lab">{weekly ? `${it.day} · ` : ""}{it.label || "—"}</span>
+            <span className="dsp-tip-amt">{fmt(it.amt)}</span>
+          </div>
+        ))}
+        {colItems[tip.col].length > TIP_MAX_ITEMS && (
+          <div className="dsp-tip-more">…+{colItems[tip.col].length - TIP_MAX_ITEMS} more</div>
+        )}
+      </div>
+    )}
+    </div>
   );
 }
 
