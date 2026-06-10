@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { StrategieState, MonthStatement, BuylistItem, MembershipRow, AccountDictEntry, RungAccountRef, SavingsPlanKind } from "../../types/grid";
+import type { StrategieState, MonthStatement, BuylistItem, MembershipRow, AccountDictEntry, RungAccountRef, SavingsPlanKind, CatKey } from "../../types/grid";
 import { SAVINGS_PLAN_KINDS } from "../../types/grid";
 import {
   daysInMonth as _daysInMonth,
   monthWeeks, weekOfDate,
-  monthLabel, monthAbbr, project,
+  monthLabel, monthAbbr, stepMonth, project,
   fmtMoney, STMT_CATS, CAT_KEYS,
   RETURN_SCENARIOS, DEFAULT_LADDER, DEFAULT_PILLARS,
   DEFAULT_STATEMENTS, CURRENCIES,
@@ -69,6 +69,8 @@ export function StrategiePanel({
   const [horizon, setHorizon] = useState(120);
   const [monthly, setMonthly] = useState(300);
   const [heroFace, setHeroFace] = useState<"grow" | "spend">("grow");
+  const [spendRange, setSpendRange] = useState<1 | 3 | 6 | 0>(1); // months; 0 = all
+  const [hiddenCats, setHiddenCats] = useState<CatKey[]>([]);
   const [detailRung, setDetailRung] = useState<LadderRung | null>(null);
 
   const { statements, positions, pots, currency, secondaryCurrency, compareCurrencyOn } = state;
@@ -119,6 +121,29 @@ export function StrategiePanel({
     setSpName("");
     onToast?.(`Added program: ${name}`);
   };
+
+  // spend chart range: consecutive calendar months ending at the active month
+  // (1 / 3 / 6, or back to the earliest month on file for "all")
+  const spendMonths = (() => {
+    const earliest = [...sortedKeys, activeKey].sort()[0];
+    const keys: string[] = [];
+    let k = activeKey;
+    while (
+      keys.length < (spendRange === 0 ? 600 : spendRange) &&
+      (spendRange !== 0 || k >= earliest)
+    ) {
+      keys.unshift(k);
+      if (spendRange !== 0 && keys.length >= spendRange) break;
+      if (spendRange === 0 && k <= earliest) break;
+      k = stepMonth(k, -1);
+    }
+    return keys.map((mk) => ({ key: mk, stmt: byMonth[mk] ?? { income: [], expenses: [] } }));
+  })();
+  const spendCats = CAT_KEYS.filter((k) =>
+    spendMonths.some((m) => m.stmt.expenses.some((e) => !e.savingsPlanId && e.cat === k && e.amt > 0))
+  );
+  const toggleCat = (k: CatKey) =>
+    setHiddenCats((h) => (h.includes(k) ? h.filter((x) => x !== k) : [...h, k]));
 
   const scenario = RETURN_SCENARIOS.find((s) => s.id === scenarioId) ?? RETURN_SCENARIOS[1];
   const projPts = project(positions.invested, monthly, scenario.rate, horizon);
@@ -317,7 +342,33 @@ export function StrategiePanel({
                       </div>
                     )}
                   </div>
-                  <DailySpendChart stmt={stmt} monthKey={activeKey} cur={cur} />
+                  <div className="dsp-controls">
+                    <div className="seg">
+                      {([[1, "Month"], [3, "3 mo"], [6, "6 mo"], [0, "All"]] as const).map(([v, l]) => (
+                        <button key={v} className={`seg-btn${spendRange === v ? " on" : ""}`} onClick={() => setSpendRange(v)}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="dsp-cats">
+                      {spendCats.map((k) => (
+                        <button
+                          key={k}
+                          className={`dsp-cat${hiddenCats.includes(k) ? " off" : ""}`}
+                          onClick={() => toggleCat(k)}
+                          title={hiddenCats.includes(k) ? `Show ${STMT_CATS[k].label}` : `Hide ${STMT_CATS[k].label}`}
+                          aria-pressed={!hiddenCats.includes(k)}
+                        >
+                          <span className="dsp-cat-dot" style={{ background: STMT_CATS[k].hue }} />
+                          {STMT_CATS[k].label}
+                        </button>
+                      ))}
+                      {hiddenCats.length > 0 && (
+                        <button className="dsp-cat dsp-cat--reset" onClick={() => setHiddenCats([])}>show all</button>
+                      )}
+                    </div>
+                  </div>
+                  <DailySpendChart months={spendMonths} cur={cur} hidden={hiddenCats} />
                 </div>
               </div>
             </div>

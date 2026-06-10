@@ -1,50 +1,71 @@
-import { niceCeil, project, fmtMoney, STMT_CATS, CAT_KEYS } from "./strategie";
+import { niceCeil, project, fmtMoney, monthAbbr, STMT_CATS, CAT_KEYS } from "./strategie";
 import type { CatKey, MonthStatement } from "../../types/grid";
 
-/** Per-day spending for one month: stacked bars, one stack segment per category.
+/** Per-day spending: stacked bars, one stack segment per category. Accepts one
+ *  or more consecutive months (the range selector concatenates them on one
+ *  axis). `hidden` categories are left out of bars, totals, scale and average.
  *  H matches the projection face's chart+controls envelope so the flip card's
  *  back face fills the same height (no dead space under the chart). */
-export function DailySpendChart({ stmt, monthKey, cur }: { stmt: MonthStatement; monthKey: string; cur: string }) {
-  const W = 760; const H = 360;
+export function DailySpendChart({ months, cur, hidden = [] }: {
+  months: { key: string; stmt: MonthStatement }[];
+  cur: string;
+  hidden?: CatKey[];
+}) {
+  const W = 760; const H = 330;
   const PAD = { top: 16, right: 20, bottom: 28, left: 52 };
   const cw = W - PAD.left - PAD.right;
   const ch = H - PAD.top - PAD.bottom;
 
-  const [yy, mm] = monthKey.split("-").map(Number);
-  const daysInMonth = yy && mm ? new Date(yy, mm, 0).getDate() : 31;
+  const hiddenSet = new Set(hidden);
 
-  // bucket dated expenses of this month into day × category (base amounts)
-  const days: Partial<Record<CatKey, number>>[] = Array.from({ length: daysInMonth }, () => ({}));
+  // concatenate the months' calendars into one day axis, bucketing dated
+  // expenses into day × category (base amounts)
+  const days: Partial<Record<CatKey, number>>[] = [];
+  const dayLabel: string[] = [];
+  const monthStarts: { idx: number; key: string; dim: number }[] = [];
   let undated = 0;
-  for (const e of stmt.expenses) {
-    if (e.savingsPlanId) continue; // savings contributions are transfers, not spending
-    const d = e.date?.startsWith(monthKey) ? Number(e.date.slice(8, 10)) : 0;
-    if (d >= 1 && d <= daysInMonth) days[d - 1][e.cat] = (days[d - 1][e.cat] ?? 0) + e.amt;
-    else undated += e.amt;
+  for (const { key, stmt } of months) {
+    const [yy, mm] = key.split("-").map(Number);
+    const dim = yy && mm ? new Date(yy, mm, 0).getDate() : 31;
+    const base = days.length;
+    monthStarts.push({ idx: base, key, dim });
+    for (let d = 1; d <= dim; d++) {
+      days.push({});
+      dayLabel.push(months.length > 1 ? `${monthAbbr(key)} ${d}` : `${d}.`);
+    }
+    for (const e of stmt.expenses) {
+      if (e.savingsPlanId) continue; // savings contributions are transfers, not spending
+      if (hiddenSet.has(e.cat)) continue;
+      const d = e.date?.startsWith(key) ? Number(e.date.slice(8, 10)) : 0;
+      if (d >= 1 && d <= dim) days[base + d - 1][e.cat] = (days[base + d - 1][e.cat] ?? 0) + e.amt;
+      else undated += e.amt;
+    }
   }
 
+  const totalDays = days.length;
   const dayTotals = days.map((d) => CAT_KEYS.reduce((s, k) => s + (d[k] ?? 0), 0));
-  const monthTotal = dayTotals.reduce((a, b) => a + b, 0);
-  if (monthTotal <= 0) {
+  const rangeTotal = dayTotals.reduce((a, b) => a + b, 0);
+  if (rangeTotal <= 0 || totalDays === 0) {
     return (
       <div style={{ padding: 20, fontSize: 12, color: "var(--faint)" }}>
-        No dated expenses in {monthKey} yet — import a statement to see daily spending.
+        Nothing to show — no dated expenses in this range{hidden.length > 0 ? " (some categories are hidden)" : ""}.
       </div>
     );
   }
 
   // scale to the data: the tallest day IS the top of the chart (no rounded-up headroom)
   const yMax = Math.max(...dayTotals, 1);
-  const avg = monthTotal / daysInMonth;
+  const avg = rangeTotal / totalDays;
   const yOf = (v: number) => PAD.top + ch - (v / yMax) * ch;
-  const slot = cw / daysInMonth;
-  const barW = Math.max(3, slot * 0.62);
+  const slot = cw / totalDays;
+  const barW = Math.max(1.5, slot * 0.62);
   const xOf = (dayIdx: number) => PAD.left + dayIdx * slot + (slot - barW) / 2;
 
   const fmt = (v: number) => fmtMoney(v, cur, { abbr: true });
   const avgY = yOf(avg);
   const yTicks = 5;
-  const xLabelDays = [1, 5, 10, 15, 20, 25, daysInMonth].filter((d, i, a) => d <= daysInMonth && a.indexOf(d) === i);
+  const singleDim = monthStarts[0]?.dim ?? 31;
+  const xLabelDays = [1, 5, 10, 15, 20, 25, singleDim].filter((d, i, a) => d <= singleDim && a.indexOf(d) === i);
 
   return (
     <svg className="proj-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
@@ -58,8 +79,22 @@ export function DailySpendChart({ stmt, monthKey, cur }: { stmt: MonthStatement;
         const v = (yMax / yTicks) * i;
         return <text key={i} className="proj-ylab" x={PAD.left - 6} y={yOf(v) + 4}>{v > 0 ? fmt(v) : "0"}</text>;
       })}
-      {xLabelDays.map((d) => (
-        <text key={d} className="proj-xlab" x={xOf(d - 1) + barW / 2} y={H - 4}>{d}</text>
+      {months.length === 1
+        ? xLabelDays.map((d) => (
+            <text key={d} className="proj-xlab" x={xOf(d - 1) + barW / 2} y={H - 4}>{d}</text>
+          ))
+        : monthStarts.map((ms) => (
+            <text key={ms.key} className="proj-xlab" x={PAD.left + (ms.idx + ms.dim / 2) * slot} y={H - 4}>
+              {monthAbbr(ms.key)}
+            </text>
+          ))}
+      {months.length > 1 && monthStarts.slice(1).map((ms) => (
+        <line
+          key={ms.key}
+          className="dsp-mline"
+          x1={PAD.left + ms.idx * slot} y1={PAD.top}
+          x2={PAD.left + ms.idx * slot} y2={PAD.top + ch}
+        />
       ))}
       {days.map((d, i) => {
         if (dayTotals[i] <= 0) return null;
@@ -81,7 +116,7 @@ export function DailySpendChart({ stmt, monthKey, cur }: { stmt: MonthStatement;
                   rx={1.5}
                   fill={STMT_CATS[k].hue}
                 >
-                  <title>{`${i + 1}. — ${STMT_CATS[k].label}: ${fmt(v)} (day total ${fmt(dayTotals[i])})`}</title>
+                  <title>{`${dayLabel[i]} — ${STMT_CATS[k].label}: ${fmt(v)} (day total ${fmt(dayTotals[i])})`}</title>
                 </rect>
               );
             })}
