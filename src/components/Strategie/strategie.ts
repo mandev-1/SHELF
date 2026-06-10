@@ -168,6 +168,7 @@ export const STMT_CATS: Record<CatKey, { label: string; hue: string }> = {
   transport:   { label: "Transport",   hue: "#3b82f6" },
   home:        { label: "Home",        hue: "#14b8a6" },
   electronics: { label: "Electronics", hue: "#06b6d4" },
+  clothing:    { label: "Clothing",    hue: "#2dd4bf" },
   fun:         { label: "Fun",         hue: "#ec4899" },
   health:      { label: "Health",      hue: "#22c55e" },
   shopping:    { label: "Shopping",    hue: "#f97316" },
@@ -179,7 +180,7 @@ export const STMT_CATS: Record<CatKey, { label: string; hue: string }> = {
 
 export const CAT_KEYS: CatKey[] = [
   "housing", "food", "eating", "taxi", "transport", "home", "electronics",
-  "fun", "health", "shopping", "vending", "cash", "fees", "other",
+  "clothing", "fun", "health", "shopping", "vending", "cash", "fees", "other",
 ];
 
 // ─── Scenarios / constants ───────────────────────────────────────────────────
