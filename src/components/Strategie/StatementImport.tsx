@@ -48,6 +48,8 @@ const ALTAR_FRAGMENTS: { left: string; top: string; text: string; em?: boolean }
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform ?? "");
 
+type SortKey = "date" | "kind" | "label" | "cpty" | "cat" | "amount";
+
 function newId(): string {
   try {
     if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -98,7 +100,13 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showManual, setShowManual] = useState(false);
-  const [sort, setSort] = useState<{ key: "date" | "amount"; dir: 1 | -1 } | null>(null);
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
+  // bulk-edit selection — separate from the include checkbox (which means
+  // "import this row"); click a row to select, shift-click for a range
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkLabel, setBulkLabel] = useState("");
+  const [bulkCat, setBulkCat] = useState("");
+  const lastSelIdxRef = useRef<number | null>(null);
   const [colW, setColW] = useState<Record<ResizableCol, number>>({ ...COL_DEFAULTS });
 
   const startResize = useCallback((key: ResizableCol) => (e: React.PointerEvent) => {
@@ -143,6 +151,8 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
   const runParse = useCallback((text: string, ov: Partial<ColumnMap>) => {
     const res = parseStatement(text, { currencyHint: currency, columnMap: ov });
     setResult(res);
+    setSelected(new Set()); // row keys change on re-parse
+    lastSelIdxRef.current = null;
     // Carry the user's review edits across a re-parse (encoding toggle, column
     // remap) by matching on the stable date+magnitude identity, so a re-decode
     // doesn't silently reset every include / in-out / label / category choice.
@@ -265,6 +275,10 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
     setLoading(false);
     setSort(null);
     setShowManual(false);
+    setSelected(new Set());
+    setBulkLabel("");
+    setBulkCat("");
+    lastSelIdxRef.current = null;
   };
 
   const setRow = (key: string, patch: Partial<ReviewRow>) =>
@@ -282,18 +296,69 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
   const allOn = rows.length > 0 && rows.every((r) => r.include);
   const toggleAll = () => setRows((rs) => rs.map((r) => ({ ...r, include: !allOn })));
 
-  const cycleSort = (key: "date" | "amount") =>
+  const cycleSort = (key: SortKey) =>
     setSort((s) => (s?.key !== key ? { key, dir: 1 } : s.dir === 1 ? { key, dir: -1 } : null));
-  const sortGlyph = (key: "date" | "amount") => (sort?.key === key ? (sort.dir === 1 ? " ↑" : " ↓") : "");
+  const sortGlyph = (key: SortKey) => (sort?.key === key ? (sort.dir === 1 ? " ↑" : " ↓") : "");
 
+  const sortVal = (r: ReviewRow, key: SortKey): string | number => {
+    switch (key) {
+      case "date": return r.isoDate;
+      case "amount": return r.magnitude;
+      case "kind": return r.kind;
+      case "label": return r.label;
+      case "cpty": return r.counterparty;
+      case "cat":
+        if (r.kind === "income") return "";
+        if (r.savingsPlanId) return savingsPlans.find((p) => p.id === r.savingsPlanId)?.name ?? "";
+        return (STMT_CATS[r.cat] || STMT_CATS.other).label;
+    }
+  };
   const displayRows = sort
     ? [...rows].sort((a, b) => {
-        const v = sort.key === "date"
-          ? a.isoDate.localeCompare(b.isoDate)
-          : a.magnitude - b.magnitude;
+        const va = sortVal(a, sort.key);
+        const vb = sortVal(b, sort.key);
+        const v = typeof va === "number" && typeof vb === "number"
+          ? va - vb
+          : String(va).localeCompare(String(vb), undefined, { sensitivity: "base" });
         return v * sort.dir;
       })
     : rows;
+
+  const onRowClick = (e: React.MouseEvent, key: string, displayIdx: number) => {
+    const t = e.target as HTMLElement;
+    if (t.closest("button, input, select, label, a")) return; // interactive cells keep their behavior
+    if (e.shiftKey) window.getSelection()?.removeAllRanges();
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (e.shiftKey && lastSelIdxRef.current !== null) {
+        const [a, b] = [Math.min(lastSelIdxRef.current, displayIdx), Math.max(lastSelIdxRef.current, displayIdx)];
+        for (let i = a; i <= b; i++) next.add(displayRows[i].key);
+      } else if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+    lastSelIdxRef.current = displayIdx;
+  };
+
+  const applyBulk = () => {
+    const label = bulkLabel.trim();
+    if (!label && !bulkCat) return;
+    setRows((rs) => rs.map((r) => {
+      if (!selected.has(r.key)) return r;
+      const patch: Partial<ReviewRow> = {};
+      if (label) patch.label = label;
+      if (bulkCat) {
+        if (bulkCat.startsWith("plan:")) patch.savingsPlanId = bulkCat.slice(5);
+        else { patch.cat = bulkCat as CatKey; patch.savingsPlanId = undefined; }
+      }
+      return { ...r, ...patch };
+    }));
+    setBulkLabel("");
+    setBulkCat("");
+  };
 
   const hasCpty = rows.some((r) => r.counterparty.trim() !== "");
   const dupCount = rows.filter((r) => r.dup).length;
@@ -530,6 +595,38 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
                 </div>
               </div>
 
+              {selected.size > 0 && (
+                <div className="si-bulk">
+                  <span className="si-bulk-count">{selected.size} selected</span>
+                  <input
+                    className="si-bulk-input"
+                    placeholder="Rewrite 'What' for all selected rows…"
+                    value={bulkLabel}
+                    onChange={(e) => setBulkLabel(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") applyBulk(); }}
+                  />
+                  <select className="se-cat si-bulk-cat" value={bulkCat} onChange={(e) => setBulkCat(e.target.value)}>
+                    <option value="">Category — keep as is</option>
+                    {CAT_KEYS.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
+                    {savingsPlans.length > 0 && (
+                      <optgroup label="Savings plans">
+                        {savingsPlans.map((p) => <option key={p.id} value={`plan:${p.id}`}>→ {p.name}</option>)}
+                      </optgroup>
+                    )}
+                  </select>
+                  <button
+                    className="se-btn se-btn--primary si-bulk-apply"
+                    onClick={applyBulk}
+                    disabled={!bulkLabel.trim() && !bulkCat}
+                  >
+                    Apply to {selected.size}
+                  </button>
+                  <button className="si-link" onClick={() => { setSelected(new Set()); lastSelIdxRef.current = null; }}>
+                    Clear selection
+                  </button>
+                </div>
+              )}
+
               <div
                 className={"si-table" + (hasCpty ? " si-table--cpty" : "")}
                 role="table"
@@ -560,18 +657,28 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
                     <ResizeHandle onPointerDown={startResize("date")} onDoubleClick={() => resetCol("date")} />
                   </span>
                   <span className="si-th si-th--dir" role="columnheader">
-                    In/Out
+                    <button className="si-th-sort" onClick={() => cycleSort("kind")} title="Sort by in/out">
+                      In/Out{sortGlyph("kind")}
+                    </button>
                     <ResizeHandle onPointerDown={startResize("dir")} onDoubleClick={() => resetCol("dir")} />
                   </span>
-                  <span className="si-th si-th--label" role="columnheader">What</span>
+                  <span className="si-th si-th--label" role="columnheader">
+                    <button className="si-th-sort" onClick={() => cycleSort("label")} title="Sort A–Z by description">
+                      What{sortGlyph("label")}
+                    </button>
+                  </span>
                   {hasCpty && (
                     <span className="si-th si-th--cpty" role="columnheader">
-                      Who
+                      <button className="si-th-sort" onClick={() => cycleSort("cpty")} title="Sort A–Z by counterparty">
+                        Who{sortGlyph("cpty")}
+                      </button>
                       <ResizeHandle onPointerDown={startResize("cpty")} onDoubleClick={() => resetCol("cpty")} />
                     </span>
                   )}
                   <span className="si-th si-th--cat" role="columnheader">
-                    Category
+                    <button className="si-th-sort" onClick={() => cycleSort("cat")} title="Sort A–Z by category">
+                      Category{sortGlyph("cat")}
+                    </button>
                     <ResizeHandle onPointerDown={startResize("cat")} onDoubleClick={() => resetCol("cat")} />
                   </span>
                   <span className="si-th si-th--amt" role="columnheader">
@@ -587,7 +694,12 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
                   return (
                     <Fragment key={r.key}>
                       {divider && <div className="si-mdiv" role="presentation">{monthLabel(r.monthKey)}</div>}
-                      <div className={"si-trow" + (r.include ? "" : " si-trow--off") + (r.dup ? " si-trow--dup" : "")} role="row">
+                      <div
+                        className={"si-trow" + (r.include ? "" : " si-trow--off") + (r.dup ? " si-trow--dup" : "") + (selected.has(r.key) ? " si-trow--sel" : "")}
+                        role="row"
+                        title="Click to select for bulk edit · Shift-click selects a range"
+                        onClick={(e) => onRowClick(e, r.key, i)}
+                      >
                         <span className="si-td si-td--chk" role="cell">
                           <button
                             className={"si-chk" + (r.include ? " on" : "")}
