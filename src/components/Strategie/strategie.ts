@@ -161,19 +161,24 @@ export function niceCeil(x: number): number {
 
 // ─── Category metadata ───────────────────────────────────────────────────────
 export const STMT_CATS: Record<CatKey, { label: string; hue: string }> = {
-  housing:   { label: "Housing",    hue: "#6366f1" },
-  food:      { label: "Food",       hue: "#f59e0b" },
-  transport: { label: "Transport",  hue: "#3b82f6" },
-  home:      { label: "Home",       hue: "#14b8a6" },
-  fun:       { label: "Fun",        hue: "#ec4899" },
-  health:    { label: "Health",     hue: "#22c55e" },
-  shopping:  { label: "Shopping",   hue: "#f97316" },
-  fees:      { label: "Fees",       hue: "#ef4444" },
-  other:     { label: "Other",      hue: "#94a3b8" },
+  housing:     { label: "Housing",     hue: "#6366f1" },
+  food:        { label: "Groceries",   hue: "#f59e0b" },
+  eating:      { label: "Eating out",  hue: "#eab308" },
+  transport:   { label: "Transport",   hue: "#3b82f6" },
+  home:        { label: "Home",        hue: "#14b8a6" },
+  electronics: { label: "Electronics", hue: "#06b6d4" },
+  fun:         { label: "Fun",         hue: "#ec4899" },
+  health:      { label: "Health",      hue: "#22c55e" },
+  shopping:    { label: "Shopping",    hue: "#f97316" },
+  vending:     { label: "Vending",     hue: "#a78bfa" },
+  cash:        { label: "Cash (ATM)",  hue: "#84cc16" },
+  fees:        { label: "Fees",        hue: "#ef4444" },
+  other:       { label: "Other",       hue: "#94a3b8" },
 };
 
 export const CAT_KEYS: CatKey[] = [
-  "housing", "food", "transport", "home", "fun", "health", "shopping", "fees", "other",
+  "housing", "food", "eating", "transport", "home", "electronics",
+  "fun", "health", "shopping", "vending", "cash", "fees", "other",
 ];
 
 // ─── Scenarios / constants ───────────────────────────────────────────────────

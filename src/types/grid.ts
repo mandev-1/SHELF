@@ -298,7 +298,9 @@ export interface ShelfBackupData {
   saleItems?: SaleItem[];
 }
 
-export type CatKey = "housing" | "food" | "transport" | "home" | "fun" | "health" | "shopping" | "fees" | "other";
+export type CatKey =
+  | "housing" | "food" | "eating" | "transport" | "home" | "electronics"
+  | "fun" | "health" | "shopping" | "vending" | "cash" | "fees" | "other";
 
 export interface IncomeRow { id: string; label: string; amt: number; kind: string; }
 export interface ExpenseRow {
