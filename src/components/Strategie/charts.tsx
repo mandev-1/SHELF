@@ -31,7 +31,8 @@ export function DailySpendChart({ stmt, monthKey, cur }: { stmt: MonthStatement;
     );
   }
 
-  const yMax = niceCeil(Math.max(...dayTotals, 1));
+  // scale to the data: the tallest day IS the top of the chart (no rounded-up headroom)
+  const yMax = Math.max(...dayTotals, 1);
   const avg = monthTotal / daysInMonth;
   const yOf = (v: number) => PAD.top + ch - (v / yMax) * ch;
   const slot = cw / daysInMonth;
