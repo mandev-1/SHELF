@@ -43,8 +43,7 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
   }
 
   const totalDays = days.length;
-  const dayTotals = days.map((d) => CAT_KEYS.reduce((s, k) => s + (d[k] ?? 0), 0));
-  const rangeTotal = dayTotals.reduce((a, b) => a + b, 0);
+  const rangeTotal = days.reduce((s, d) => s + CAT_KEYS.reduce((a, k) => a + (d[k] ?? 0), 0), 0);
   if (rangeTotal <= 0 || totalDays === 0) {
     return (
       <div style={{ padding: 20, fontSize: 12, color: "var(--faint)" }}>
@@ -53,13 +52,40 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
     );
   }
 
-  // scale to the data: the tallest day IS the top of the chart (no rounded-up headroom)
-  const yMax = Math.max(...dayTotals, 1);
-  const avg = rangeTotal / totalDays;
+  // long ranges (6 months+) get one column per calendar week (Monday-aligned)
+  // instead of per day — daily slivers stop being readable around there
+  const weekly = months.length >= 6;
+  const [y0, m0] = months[0].key.split("-").map(Number);
+  const startDate = new Date(y0, (m0 || 1) - 1, 1);
+  const offset = weekly ? (startDate.getDay() + 6) % 7 : 0; // days since Monday
+  const unit = weekly ? 7 : 1;
+  const totalCols = Math.ceil((totalDays + offset) / unit);
+  const colIdxOf = (dayIdx: number) => Math.floor((dayIdx + offset) / unit);
+
+  const cols: Partial<Record<CatKey, number>>[] = Array.from({ length: totalCols }, () => ({}));
+  days.forEach((d, i) => {
+    const c = colIdxOf(i);
+    for (const k of CAT_KEYS) {
+      const v = d[k] ?? 0;
+      if (v > 0) cols[c][k] = (cols[c][k] ?? 0) + v;
+    }
+  });
+  const colTotals = cols.map((d) => CAT_KEYS.reduce((s, k) => s + (d[k] ?? 0), 0));
+  const colLabel = (c: number): string => {
+    if (!weekly) return dayLabel[c];
+    const monday = new Date(y0, (m0 || 1) - 1, 1 + (c * 7 - offset));
+    return `wk of ${monday.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  };
+
+  // scale to the data: the tallest column IS the top of the chart (no rounded-up headroom)
+  const yMax = Math.max(...colTotals, 1);
+  const avg = rangeTotal / totalCols;
   const yOf = (v: number) => PAD.top + ch - (v / yMax) * ch;
-  const slot = cw / totalDays;
+  const slot = cw / totalCols;
   const barW = Math.max(1.5, slot * 0.62);
-  const xOf = (dayIdx: number) => PAD.left + dayIdx * slot + (slot - barW) / 2;
+  const xOf = (col: number) => PAD.left + col * slot + (slot - barW) / 2;
+  // day-index → fractional column position, for month labels / boundary lines
+  const colPosOf = (dayIdx: number) => (dayIdx + offset) / unit;
 
   const fmt = (v: number) => fmtMoney(v, cur, { abbr: true });
   const avgY = yOf(avg);
@@ -84,7 +110,7 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
             <text key={d} className="proj-xlab" x={xOf(d - 1) + barW / 2} y={H - 4}>{d}</text>
           ))
         : monthStarts.map((ms) => (
-            <text key={ms.key} className="proj-xlab" x={PAD.left + (ms.idx + ms.dim / 2) * slot} y={H - 4}>
+            <text key={ms.key} className="proj-xlab" x={PAD.left + colPosOf(ms.idx + ms.dim / 2) * slot} y={H - 4}>
               {monthAbbr(ms.key)}
             </text>
           ))}
@@ -92,31 +118,31 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
         <line
           key={ms.key}
           className="dsp-mline"
-          x1={PAD.left + ms.idx * slot} y1={PAD.top}
-          x2={PAD.left + ms.idx * slot} y2={PAD.top + ch}
+          x1={PAD.left + colPosOf(ms.idx) * slot} y1={PAD.top}
+          x2={PAD.left + colPosOf(ms.idx) * slot} y2={PAD.top + ch}
         />
       ))}
-      {days.map((d, i) => {
-        if (dayTotals[i] <= 0) return null;
+      {cols.map((d, i) => {
+        if (colTotals[i] <= 0) return null;
         let acc = 0;
         return (
           <g key={i}>
             {CAT_KEYS.map((k) => {
               const v = d[k] ?? 0;
               if (v <= 0) return null;
-              const y0 = yOf(acc);
+              const yA = yOf(acc);
               acc += v;
-              const y1 = yOf(acc);
+              const yB = yOf(acc);
               return (
                 <rect
                   key={k}
                   className="dsp-rect"
-                  x={xOf(i)} y={y1}
-                  width={barW} height={Math.max(1, y0 - y1)}
+                  x={xOf(i)} y={yB}
+                  width={barW} height={Math.max(1, yA - yB)}
                   rx={1.5}
                   fill={STMT_CATS[k].hue}
                 >
-                  <title>{`${dayLabel[i]} — ${STMT_CATS[k].label}: ${fmt(v)} (day total ${fmt(dayTotals[i])})`}</title>
+                  <title>{`${colLabel(i)} — ${STMT_CATS[k].label}: ${fmt(v)} (${weekly ? "week" : "day"} total ${fmt(colTotals[i])})`}</title>
                 </rect>
               );
             })}
@@ -124,7 +150,7 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
         );
       })}
       <line className="spend-avgline" x1={PAD.left} y1={avgY} x2={W - PAD.right} y2={avgY} />
-      <text className="spend-avglab" x={PAD.left + 4} y={avgY - 5}>avg/day</text>
+      <text className="spend-avglab" x={PAD.left + 4} y={avgY - 5}>{weekly ? "avg/wk" : "avg/day"}</text>
       {undated > 0 && (
         <text className="proj-xlab" x={W - PAD.right} y={PAD.top - 4} style={{ fill: "var(--faint)", textAnchor: "end" }}>
           +{fmt(undated)} without a date (not shown)
