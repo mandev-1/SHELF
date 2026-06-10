@@ -3195,6 +3195,14 @@ body {
   display: flex; flex-direction: column; gap: 10px;
 }
 .se-col-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* clicking the Spending header toggles the full-screen editor */
+.se-col-head--expand { cursor: pointer; border-radius: 8px; transition: background-color 0.13s; }
+.se-col-head--expand:hover { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+.se-expand-glyph { font-size: 13px; color: var(--dim); margin-left: 2px; }
+.se-col-head--expand:hover .se-expand-glyph { color: var(--fg-2); }
+/* full-screen editor — same footprint as the import's review view */
+.se-modal--max { width: min(1500px, 100%); height: calc(100vh - 56px); }
+.se-modal--max .se-body { flex: 1; min-height: 0; align-content: start; }
 .se-col-title { display: inline-flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 600; color: var(--fg); }
 .se-pill { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; }
 .se-pill svg { width: 14px; height: 14px; }

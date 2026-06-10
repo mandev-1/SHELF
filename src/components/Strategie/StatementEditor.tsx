@@ -72,6 +72,9 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
   const [keys, setKeys] = useState<string[]>([...statements.order]);
   const [viewKey, setViewKey] = useState(statements.current);
   const [gran, setGran] = useState<"month" | "week">("month");
+  // full-screen mode (same footprint as the import's review view) — toggled
+  // by clicking the Spending column header
+  const [maximized, setMaximized] = useState(false);
   const [weekIdx, setWeekIdx] = useState(1);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -316,7 +319,7 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
   return (
     <>
     <div className="se-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="se-modal" role="dialog" aria-modal="true" aria-label="Edit statement">
+      <div className={"se-modal" + (maximized ? " se-modal--max" : "")} role="dialog" aria-modal="true" aria-label="Edit statement">
         <div className="se-head">
           <div className="se-head-l">
             <div className="se-eyebrow"><IcoFile /> Statement</div>
@@ -555,13 +558,20 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
           </section>
 
           <section className="se-col se-col--out">
-            <div className="se-col-head">
+            <div
+              className="se-col-head se-col-head--expand"
+              onClick={() => setMaximized((v) => !v)}
+              title={maximized ? "Shrink the editor back down" : "Expand the editor to full screen"}
+              role="button"
+              aria-expanded={maximized}
+            >
               <span className="se-col-title">
                 <span className="se-pill se-pill--out"><IcoOut /></span>
                 Spending
                 {gran === "week" && activeWeek
                   ? <small className="se-col-hint">{activeWeek.label} · {activeWeek.range}</small>
                   : <small className="se-col-hint">dated</small>}
+                <span className="se-expand-glyph" aria-hidden="true">{maximized ? "⤡" : "⤢"}</span>
               </span>
               <span className="se-col-sum">{fmt(expShownSum)}</span>
             </div>
