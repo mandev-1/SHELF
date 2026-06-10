@@ -329,7 +329,54 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
       })
     : rows;
 
+  // click-and-drag selection: pointerdown on a row arms a drag; entering other
+  // rows with the button held paints base-selection ∪ anchor..current range
+  const dragAnchorRef = useRef<number | null>(null);
+  const dragStartedRef = useRef(false);
+  const dragBaseRef = useRef<Set<string>>(new Set());
+  const suppressClickRef = useRef(false);
+
+  useEffect(() => {
+    const up = () => {
+      if (dragStartedRef.current) {
+        suppressClickRef.current = true; // swallow the click that follows a drag
+        setTimeout(() => { suppressClickRef.current = false; }, 0);
+        document.body.style.userSelect = "";
+      }
+      dragAnchorRef.current = null;
+      dragStartedRef.current = false;
+    };
+    window.addEventListener("pointerup", up);
+    return () => window.removeEventListener("pointerup", up);
+  }, []);
+
+  const onRowPointerDown = (e: React.PointerEvent, displayIdx: number) => {
+    if (e.button !== 0) return;
+    const t = e.target as HTMLElement;
+    if (t.closest("button, input, select, label, a")) return;
+    dragAnchorRef.current = displayIdx;
+    dragStartedRef.current = false;
+    dragBaseRef.current = new Set(selected);
+    e.preventDefault(); // no native text-selection drag
+  };
+
+  const onRowPointerEnter = (e: React.PointerEvent, displayIdx: number) => {
+    if (dragAnchorRef.current === null) return;
+    if (!(e.buttons & 1)) { dragAnchorRef.current = null; return; }
+    if (!dragStartedRef.current && displayIdx !== dragAnchorRef.current) {
+      dragStartedRef.current = true;
+      document.body.style.userSelect = "none";
+    }
+    if (!dragStartedRef.current) return;
+    const [a, b] = [Math.min(dragAnchorRef.current, displayIdx), Math.max(dragAnchorRef.current, displayIdx)];
+    const next = new Set(dragBaseRef.current);
+    for (let i = a; i <= b; i++) next.add(displayRows[i].key);
+    setSelected(next);
+    lastSelIdxRef.current = displayIdx;
+  };
+
   const onRowClick = (e: React.MouseEvent, key: string, displayIdx: number) => {
+    if (suppressClickRef.current) return; // drag already did the selecting
     const t = e.target as HTMLElement;
     if (t.closest("button, input, select, label, a")) return; // interactive cells keep their behavior
     if (e.shiftKey) window.getSelection()?.removeAllRanges();
@@ -702,8 +749,10 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
                       <div
                         className={"si-trow" + (r.include ? "" : " si-trow--off") + (r.dup ? " si-trow--dup" : "") + (selected.has(r.key) ? " si-trow--sel" : "")}
                         role="row"
-                        title="Click to select for bulk edit · Shift-click selects a range"
+                        title="Click or drag to select for bulk edit · Shift-click selects a range"
                         onClick={(e) => onRowClick(e, r.key, i)}
+                        onPointerDown={(e) => onRowPointerDown(e, i)}
+                        onPointerEnter={(e) => onRowPointerEnter(e, i)}
                       >
                         <span className="si-td si-td--chk" role="cell">
                           <button
