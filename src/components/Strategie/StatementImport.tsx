@@ -1,6 +1,6 @@
 import { Fragment, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import type { CatKey, MonthStatement, IncomeRow, ExpenseRow, SavingsPlan } from "../../types/grid";
-import { CURRENCIES, STMT_CATS, CAT_KEYS } from "./strategie";
+import { CURRENCIES, STMT_CATS, CAT_KEYS_BY_LABEL } from "./strategie";
 import {
   parseStatement, toBaseAmount, foldAscii,
   type StatementParseResult, type ColumnMap, type TxnKind,
@@ -707,7 +707,7 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
                   />
                   <select className="se-cat si-bulk-cat" value={bulkCat} onChange={(e) => setBulkCat(e.target.value)}>
                     <option value="">Category — keep as is</option>
-                    {CAT_KEYS.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
+                    {CAT_KEYS_BY_LABEL.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
                     {savingsPlans.length > 0 && (
                       <optgroup label="Savings plans">
                         {savingsPlans.map((p) => <option key={p.id} value={`plan:${p.id}`}>→ {p.name}</option>)}
@@ -861,7 +861,7 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
                                   else setRow(r.key, { cat: v as CatKey, savingsPlanId: undefined });
                                 }}
                               >
-                                {CAT_KEYS.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
+                                {CAT_KEYS_BY_LABEL.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
                                 {savingsPlans.length > 0 && (
                                   <optgroup label="Savings plans">
                                     {savingsPlans.map((p) => (

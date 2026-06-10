@@ -175,13 +175,23 @@ export const STMT_CATS: Record<CatKey, { label: string; hue: string }> = {
   vending:     { label: "Vending",     hue: "#a78bfa" },
   cash:        { label: "Cash (ATM)",  hue: "#84cc16" },
   fees:        { label: "Fees",        hue: "#ef4444" },
+  charity:     { label: "Charity",     hue: "#f43f5e" },
+  credit:      { label: "Credit card", hue: "#0ea5e9" },
   other:       { label: "Other",       hue: "#94a3b8" },
 };
 
 export const CAT_KEYS: CatKey[] = [
   "housing", "food", "eating", "taxi", "transport", "home", "electronics",
-  "clothing", "fun", "health", "shopping", "vending", "cash", "fees", "other",
+  "clothing", "fun", "health", "shopping", "vending", "cash", "fees", "charity",
+  "credit", "other",
 ];
+
+// Same set, ordered by display label for dropdowns. "Other" stays pinned last.
+export const CAT_KEYS_BY_LABEL: CatKey[] = (() => {
+  const rest = CAT_KEYS.filter((k) => k !== "other");
+  rest.sort((a, b) => STMT_CATS[a].label.localeCompare(STMT_CATS[b].label));
+  return [...rest, "other"];
+})();
 
 // ─── Scenarios / constants ───────────────────────────────────────────────────
 export const RETURN_SCENARIOS: { id: string; label: string; rate: number }[] = [

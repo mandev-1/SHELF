@@ -62,6 +62,7 @@ export function StrategiePanel({
   const [spName, setSpName] = useState("");
   const [spKind, setSpKind] = useState<SavingsPlanKind>("savings");
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editorImportOpen, setEditorImportOpen] = useState(false);
   const [potMenuOpen, setPotMenuOpen] = useState(false);
   const potMenuRef = useRef<HTMLDivElement>(null);
 
@@ -422,7 +423,15 @@ export function StrategiePanel({
 
         {/* weekly spending — span 8 */}
         <div className="card span-8">
-          <div className="card-head">
+          <div
+            className="card-head"
+            role="button"
+            tabIndex={0}
+            style={{ cursor: "pointer" }}
+            onClick={() => { setEditorImportOpen(true); setEditorOpen(true); }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditorImportOpen(true); setEditorOpen(true); } }}
+            title="Bring in a bank statement"
+          >
             <div>
               <div className="card-eyebrow">Spending</div>
               <div className="card-title">Weekly breakdown — {monthLabel(activeKey)}</div>
@@ -775,7 +784,8 @@ export function StrategiePanel({
           memberships={state.memberships}
           savingsPlans={savingsPlans}
           onSave={onSaveStatement}
-          onClose={() => setEditorOpen(false)}
+          onClose={() => { setEditorOpen(false); setEditorImportOpen(false); }}
+          defaultImportOpen={editorImportOpen}
         />
       )}
 

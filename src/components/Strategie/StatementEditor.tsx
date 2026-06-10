@@ -4,7 +4,7 @@ import type {
 } from "../../types/grid";
 import {
   dayStr, daysInMonth, monthWeeks, weekOfDate, stepMonth, monthLabel, monthAbbr,
-  cloneMonth, fmtMoney, CURRENCIES, STMT_CATS, CAT_KEYS,
+  cloneMonth, fmtMoney, CURRENCIES, STMT_CATS, CAT_KEYS_BY_LABEL,
 } from "./strategie";
 import { brandMatch, BrandMark, BRAND_COLORS } from "./brandLogos";
 import {
@@ -653,7 +653,7 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
                       else editExpense(r.id, { cat: v as CatKey, savingsPlanId: undefined });
                     }}
                   >
-                    {CAT_KEYS.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
+                    {CAT_KEYS_BY_LABEL.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
                     {savingsPlans.length > 0 && (
                       <optgroup label="Savings plans">
                         {savingsPlans.map((p) => (
