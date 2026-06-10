@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import type {
-  StrategieState, MonthStatement, CatKey, IncomeRow, ExpenseRow, MembershipRow,
+  StrategieState, MonthStatement, CatKey, IncomeRow, ExpenseRow, MembershipRow, SavingsPlan,
 } from "../../types/grid";
 import {
   dayStr, daysInMonth, monthWeeks, weekOfDate, stepMonth, monthLabel, monthAbbr,
-  cloneMonth, fmtMoney, CURRENCIES, STMT_CATS, CAT_KEYS,
+  cloneMonth, fmtMoney, CURRENCIES, STMT_CATS, CAT_KEYS_BY_LABEL,
 } from "./strategie";
 import { brandMatch, BrandMark, BRAND_COLORS } from "./brandLogos";
 import {
@@ -32,6 +32,7 @@ export interface StatementEditorProps {
   statements: StrategieState["statements"] & { byMonth: Record<string, MonthStatement> };
   currency: string;
   memberships: MembershipRow[];
+  savingsPlans?: SavingsPlan[];
   onSave: (
     book: Record<string, MonthStatement>,
     order: string[],
@@ -39,6 +40,8 @@ export interface StatementEditorProps {
     memberships: MembershipRow[],
   ) => void;
   onClose: () => void;
+  /** Open the "Bring in a bank statement" modal as soon as the editor mounts. */
+  defaultImportOpen?: boolean;
 }
 
 type MemEditorState = {
@@ -52,7 +55,7 @@ type MemEditorState = {
   monoTouched: boolean;
 };
 
-export function StatementEditor({ statements, currency, memberships, onSave, onClose }: StatementEditorProps) {
+export function StatementEditor({ statements, currency, memberships, savingsPlans = [], onSave, onClose, defaultImportOpen = false }: StatementEditorProps) {
   const cur = CURRENCIES[currency] ?? CURRENCIES["USD"];
   const sym = cur.code === "CZK" ? "Kč" : cur.code === "EUR" ? "€" : "$";
 
@@ -71,9 +74,13 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
   const [keys, setKeys] = useState<string[]>([...statements.order]);
   const [viewKey, setViewKey] = useState(statements.current);
   const [gran, setGran] = useState<"month" | "week">("month");
+  // full-screen mode (same footprint as the import's review view) — toggled
+  // by clicking the Spending column header
+  const [maximized, setMaximized] = useState(false);
   const [weekIdx, setWeekIdx] = useState(1);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(defaultImportOpen);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
   const [members, setMembers] = useState<MembershipRow[]>(() => memberships.map((m) => ({ ...m })));
@@ -96,13 +103,13 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (importOpen) return; // StatementImport owns Escape while open
+      if (importOpen || bulkOpen) return; // StatementImport owns Escape while open
       if (pickerOpen) setPickerOpen(false);
       else onClose();
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [pickerOpen, onClose, importOpen]);
+  }, [pickerOpen, onClose, importOpen, bulkOpen]);
 
   const cm: MonthStatement = draft[viewKey] ?? { income: [], expenses: [] };
   const incomeBase = cm.income.reduce((a, r) => a + (r.amt || 0), 0);
@@ -315,7 +322,7 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
   return (
     <>
     <div className="se-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="se-modal" role="dialog" aria-modal="true" aria-label="Edit statement">
+      <div className={"se-modal" + (maximized ? " se-modal--max" : "")} role="dialog" aria-modal="true" aria-label="Edit statement">
         <div className="se-head">
           <div className="se-head-l">
             <div className="se-eyebrow"><IcoFile /> Statement</div>
@@ -554,15 +561,32 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
           </section>
 
           <section className="se-col se-col--out">
-            <div className="se-col-head">
+            <div
+              className="se-col-head se-col-head--expand"
+              onClick={() => setMaximized((v) => !v)}
+              title={maximized ? "Shrink the editor back down" : "Expand the editor to full screen"}
+              role="button"
+              aria-expanded={maximized}
+            >
               <span className="se-col-title">
                 <span className="se-pill se-pill--out"><IcoOut /></span>
                 Spending
                 {gran === "week" && activeWeek
                   ? <small className="se-col-hint">{activeWeek.label} · {activeWeek.range}</small>
                   : <small className="se-col-hint">dated</small>}
+                <span className="se-expand-glyph" aria-hidden="true">{maximized ? "⤡" : "⤢"}</span>
               </span>
-              <span className="se-col-sum">{fmt(expShownSum)}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                <button
+                  className="si-link"
+                  onClick={(e) => { e.stopPropagation(); setBulkOpen(true); }}
+                  disabled={cm.expenses.length === 0}
+                  title="Open this month's expenses in the big review table — sort, drag-select, bulk-rewrite"
+                >
+                  <IcoPencil /> Bulk edit
+                </button>
+                <span className="se-col-sum">{fmt(expShownSum)}</span>
+              </span>
             </div>
 
             <div className="se-weekrow">
@@ -606,7 +630,11 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
                 <div className="se-row" key={r.id}>
                   <span
                     className="se-catdot"
-                    style={{ background: (STMT_CATS[r.cat] || STMT_CATS.other).hue }}
+                    style={{
+                      background: r.savingsPlanId
+                        ? (savingsPlans.find((p) => p.id === r.savingsPlanId)?.hue ?? "var(--accent)")
+                        : (STMT_CATS[r.cat] || STMT_CATS.other).hue,
+                    }}
                   />
                   <input
                     className="se-label" placeholder="What did you spend on?" value={r.label}
@@ -618,10 +646,21 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
                     onChange={(e) => e.target.value && editExpense(r.id, { date: e.target.value })}
                   />
                   <select
-                    className="se-cat" value={r.cat}
-                    onChange={(e) => editExpense(r.id, { cat: e.target.value as CatKey })}
+                    className="se-cat" value={r.savingsPlanId ? `plan:${r.savingsPlanId}` : r.cat}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v.startsWith("plan:")) editExpense(r.id, { savingsPlanId: v.slice(5) });
+                      else editExpense(r.id, { cat: v as CatKey, savingsPlanId: undefined });
+                    }}
                   >
-                    {CAT_KEYS.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
+                    {CAT_KEYS_BY_LABEL.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
+                    {savingsPlans.length > 0 && (
+                      <optgroup label="Savings plans">
+                        {savingsPlans.map((p) => (
+                          <option key={p.id} value={`plan:${p.id}`}>→ {p.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                   {renderAmt("expenses", r)}
                   <button className="se-del" onClick={() => removeExpense(r.id)} aria-label="Remove">
@@ -693,8 +732,23 @@ export function StatementEditor({ statements, currency, memberships, onSave, onC
     {importOpen && (
       <StatementImport
         currency={currency}
+        existing={draft}
+        savingsPlans={savingsPlans}
         onClose={() => setImportOpen(false)}
         onImport={handleImport}
+      />
+    )}
+    {bulkOpen && (
+      <StatementImport
+        currency={currency}
+        savingsPlans={savingsPlans}
+        editRows={{ monthKey: viewKey, expenses: cm.expenses }}
+        onApplyEdits={(mk, expenses) => {
+          setDraft((d) => ({ ...d, [mk]: { ...d[mk], expenses } }));
+          setBulkOpen(false);
+        }}
+        onClose={() => setBulkOpen(false)}
+        onImport={() => {}}
       />
     )}
     </>

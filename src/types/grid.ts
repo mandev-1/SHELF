@@ -298,11 +298,37 @@ export interface ShelfBackupData {
   saleItems?: SaleItem[];
 }
 
-export type CatKey = "housing" | "food" | "transport" | "home" | "fun" | "health" | "shopping" | "other";
+export type CatKey =
+  | "housing" | "food" | "eating" | "taxi" | "transport" | "home" | "electronics"
+  | "clothing" | "fun" | "health" | "shopping" | "vending" | "cash" | "fees"
+  | "charity" | "credit" | "other";
 
 export interface IncomeRow { id: string; label: string; amt: number; kind: string; }
-export interface ExpenseRow { id: string; label: string; amt: number; cat: CatKey; date: string; }
+export interface ExpenseRow {
+  id: string; label: string; amt: number; cat: CatKey; date: string;
+  /** When set, this "expense" is really a contribution to a savings plan. */
+  savingsPlanId?: string;
+}
 export interface MonthStatement { income: IncomeRow[]; expenses: ExpenseRow[]; }
+
+export type SavingsPlanKind = "savings" | "investment" | "pension" | "building" | "other";
+export const SAVINGS_PLAN_KINDS: { id: SavingsPlanKind; label: string }[] = [
+  { id: "savings",    label: "Savings account" },
+  { id: "investment", label: "Investment plan" },
+  { id: "pension",    label: "Pension" },
+  { id: "building",   label: "Building savings" },
+  { id: "other",      label: "Other program" },
+];
+/** Legend hues cycled through as plans are created. */
+export const SAVINGS_PLAN_HUES = ["#6366f1", "#3b82f6", "#14b8a6", "#f59e0b", "#a384df", "#ec4899", "#22c55e", "#94a3b8"];
+export interface SavingsPlan {
+  id: string;
+  name: string;
+  kind: SavingsPlanKind;
+  hue: string;       // legend / chart color
+  monthly: number;   // planned monthly contribution (USD-base), 0 = none
+  target: number;    // total goal (USD-base), 0 = open-ended
+}
 
 export interface MembershipRow {
   id: string;
@@ -339,6 +365,8 @@ export interface StrategieState {
   accountsDirectory: AccountDictEntry[];
   /** Per-rung overrides. When unset for a rung, fall back to DEFAULT_LADDER seed. */
   rungAccounts: Record<number, RungAccountRef[]>;
+  /** Savings accounts / programs that expense rows can be tagged as contributions to. */
+  savingsPlans: SavingsPlan[];
 }
 
 function _defaultStrategie(): StrategieState {
@@ -366,6 +394,7 @@ function _defaultStrategie(): StrategieState {
     compareCurrencyOn: false,
     accountsDirectory: [],
     rungAccounts: {},
+    savingsPlans: [],
   };
 }
 
@@ -514,7 +543,24 @@ export function normalizeStrategie(raw: unknown): StrategieState {
     }
   }
 
-  return { statements, positions, pots, memberships, currency, secondaryCurrency, compareCurrencyOn, accountsDirectory, rungAccounts };
+  // savings plans
+  const KIND_IDS = new Set(SAVINGS_PLAN_KINDS.map((k) => k.id));
+  let savingsPlans: SavingsPlan[] = [];
+  if (Array.isArray(r["savingsPlans"])) {
+    savingsPlans = (r["savingsPlans"] as unknown[])
+      .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+      .filter((o) => typeof o["id"] === "string" && typeof o["name"] === "string")
+      .map((o, i) => ({
+        id:      o["id"] as string,
+        name:    o["name"] as string,
+        kind:    KIND_IDS.has(o["kind"] as SavingsPlanKind) ? (o["kind"] as SavingsPlanKind) : "savings",
+        hue:     typeof o["hue"] === "string" ? o["hue"] : SAVINGS_PLAN_HUES[i % SAVINGS_PLAN_HUES.length],
+        monthly: typeof o["monthly"] === "number" ? o["monthly"] : 0,
+        target:  typeof o["target"]  === "number" ? o["target"]  : 0,
+      }));
+  }
+
+  return { statements, positions, pots, memberships, currency, secondaryCurrency, compareCurrencyOn, accountsDirectory, rungAccounts, savingsPlans };
 }
 
 export const ACCENT_COLORS = [

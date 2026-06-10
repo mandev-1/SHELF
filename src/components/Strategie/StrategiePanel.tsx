@@ -1,18 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { StrategieState, MonthStatement, BuylistItem, MembershipRow, AccountDictEntry, RungAccountRef } from "../../types/grid";
+import type { StrategieState, MonthStatement, BuylistItem, MembershipRow, AccountDictEntry, RungAccountRef, SavingsPlanKind, CatKey } from "../../types/grid";
+import { SAVINGS_PLAN_KINDS } from "../../types/grid";
 import {
   daysInMonth as _daysInMonth,
   monthWeeks, weekOfDate,
-  monthLabel, monthAbbr, project,
+  monthLabel, monthAbbr, stepMonth, project,
   fmtMoney, STMT_CATS, CAT_KEYS,
-  RETURN_SCENARIOS, DEFAULT_LADDER, DEFAULT_ALLOCATION, DEFAULT_PILLARS,
+  RETURN_SCENARIOS, DEFAULT_LADDER, DEFAULT_PILLARS,
   DEFAULT_STATEMENTS, CURRENCIES,
 } from "./strategie";
 import type { LadderRung } from "./strategie";
 import { IcoCheck, IcoLock, IcoPlus, IcoFile, IcoHopper, IcoUpload, IcoFlip, IcoChev } from "./icons";
 import { StatementEditor } from "./StatementEditor";
 import { totalIncome, totalExpenses, expensesByCat } from "./helpers";
-import { SpendingChart, ProjectionChart } from "./charts";
+import { DailySpendChart, ProjectionChart } from "./charts";
 import { LadderDetail } from "./LadderDetail";
 import { MonthCloseDiff } from "./MonthCloseDiff";
 
@@ -34,6 +35,9 @@ interface StrategiePanelProps {
   onToggleCompareCurrency: () => void;
   onSetRungAccounts: (rungId: number, rows: RungAccountRef[]) => void;
   onUpsertAccountDictEntry: (entry: AccountDictEntry) => void;
+  onAddSavingsPlan: (name: string, kind: SavingsPlanKind) => void;
+  onRenameSavingsPlan: (id: string, name: string) => void;
+  onRemoveSavingsPlan: (id: string) => void;
   onToast?: (msg: string) => void;
 }
 
@@ -50,9 +54,15 @@ export function StrategiePanel({
   onToggleCompareCurrency,
   onSetRungAccounts,
   onUpsertAccountDictEntry,
+  onAddSavingsPlan,
+  onRenameSavingsPlan,
+  onRemoveSavingsPlan,
   onToast,
 }: StrategiePanelProps) {
+  const [spName, setSpName] = useState("");
+  const [spKind, setSpKind] = useState<SavingsPlanKind>("savings");
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editorImportOpen, setEditorImportOpen] = useState(false);
   const [potMenuOpen, setPotMenuOpen] = useState(false);
   const potMenuRef = useRef<HTMLDivElement>(null);
 
@@ -60,6 +70,8 @@ export function StrategiePanel({
   const [horizon, setHorizon] = useState(120);
   const [monthly, setMonthly] = useState(300);
   const [heroFace, setHeroFace] = useState<"grow" | "spend">("grow");
+  const [spendRange, setSpendRange] = useState<1 | 3 | 6 | 0>(1); // months; 0 = all
+  const [hiddenCats, setHiddenCats] = useState<CatKey[]>([]);
   const [detailRung, setDetailRung] = useState<LadderRung | null>(null);
 
   const { statements, positions, pots, currency, secondaryCurrency, compareCurrencyOn } = state;
@@ -84,9 +96,55 @@ export function StrategiePanel({
   const prevStmt = prevKey ? byMonth[prevKey] : undefined;
 
   const inc = totalIncome(stmt);
-  const exp = totalExpenses(stmt);
-  const surplus = inc - exp;
+  const expAll = totalExpenses(stmt);                 // everything, incl. savings transfers
+  const toPlansMonth = stmt.expenses.reduce((s, e) => s + (e.savingsPlanId ? e.amt : 0), 0);
+  const exp = expAll - toPlansMonth;                  // true spending (transfers excluded)
+  const surplus = inc - expAll;                       // cash left after everything
   void Math.min(200, surplus > 0 ? surplus : 0); // toPots removed from KPI
+
+  // savings-plan contributions: active month + all time, per plan
+  const savingsPlans = state.savingsPlans;
+  const planMonth: Record<string, number> = {};
+  const planTotal: Record<string, number> = {};
+  for (const [mk, mo] of Object.entries(byMonth)) {
+    for (const e of mo.expenses) {
+      if (!e.savingsPlanId) continue;
+      planTotal[e.savingsPlanId] = (planTotal[e.savingsPlanId] ?? 0) + e.amt;
+      if (mk === activeKey) planMonth[e.savingsPlanId] = (planMonth[e.savingsPlanId] ?? 0) + e.amt;
+    }
+  }
+  const plansContribTotal = Object.values(planTotal).reduce((a, b) => a + b, 0);
+
+  const addPlan = () => {
+    const name = spName.trim();
+    if (!name) return;
+    onAddSavingsPlan(name, spKind);
+    setSpName("");
+    onToast?.(`Added program: ${name}`);
+  };
+
+  // spend chart range: consecutive calendar months ending at the active month
+  // (1 / 3 / 6, or back to the earliest month on file for "all")
+  const spendMonths = (() => {
+    const earliest = [...sortedKeys, activeKey].sort()[0];
+    const keys: string[] = [];
+    let k = activeKey;
+    while (
+      keys.length < (spendRange === 0 ? 600 : spendRange) &&
+      (spendRange !== 0 || k >= earliest)
+    ) {
+      keys.unshift(k);
+      if (spendRange !== 0 && keys.length >= spendRange) break;
+      if (spendRange === 0 && k <= earliest) break;
+      k = stepMonth(k, -1);
+    }
+    return keys.map((mk) => ({ key: mk, stmt: byMonth[mk] ?? { income: [], expenses: [] } }));
+  })();
+  const spendCats = CAT_KEYS.filter((k) =>
+    spendMonths.some((m) => m.stmt.expenses.some((e) => !e.savingsPlanId && e.cat === k && e.amt > 0))
+  );
+  const toggleCat = (k: CatKey) =>
+    setHiddenCats((h) => (h.includes(k) ? h.filter((x) => x !== k) : [...h, k]));
 
   const scenario = RETURN_SCENARIOS.find((s) => s.id === scenarioId) ?? RETURN_SCENARIOS[1];
   const projPts = project(positions.invested, monthly, scenario.rate, horizon);
@@ -97,10 +155,6 @@ export function StrategiePanel({
   const emergencyPct = Math.min(100, Math.round((positions.emergencySaved / positions.emergencyTarget) * 100));
 
   const netWorth = positions.invested + positions.emergencySaved + extraAssets;
-
-  const spendSeries = Object.keys(byMonth)
-    .sort()
-    .map((k) => ({ label: monthAbbr(k), total: totalExpenses(byMonth[k]) }));
 
   useEffect(() => {
     if (!potMenuOpen) return;
@@ -283,8 +337,39 @@ export function StrategiePanel({
                     <div className="split-item" style={{ color: surplus >= 0 ? "var(--accent)" : "#ef4444" }}>
                       {surplus >= 0 ? "+" : ""}{fmtMoney(surplus, cur, { abbr: true })} surplus
                     </div>
+                    {toPlansMonth > 0 && (
+                      <div className="split-item" title="Statement rows tagged as savings-plan contributions — not counted as spending">
+                        {fmtMoney(toPlansMonth, cur, { abbr: true })} to savings
+                      </div>
+                    )}
                   </div>
-                  <SpendingChart series={spendSeries} />
+                  <div className="dsp-controls">
+                    <div className="seg">
+                      {([[1, "Month"], [3, "3 mo"], [6, "6 mo"], [0, "All"]] as const).map(([v, l]) => (
+                        <button key={v} className={`seg-btn${spendRange === v ? " on" : ""}`} onClick={() => setSpendRange(v)}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="dsp-cats">
+                      {spendCats.map((k) => (
+                        <button
+                          key={k}
+                          className={`dsp-cat${hiddenCats.includes(k) ? " off" : ""}`}
+                          onClick={() => toggleCat(k)}
+                          title={hiddenCats.includes(k) ? `Show ${STMT_CATS[k].label}` : `Hide ${STMT_CATS[k].label}`}
+                          aria-pressed={!hiddenCats.includes(k)}
+                        >
+                          <span className="dsp-cat-dot" style={{ background: STMT_CATS[k].hue }} />
+                          {STMT_CATS[k].label}
+                        </button>
+                      ))}
+                      {hiddenCats.length > 0 && (
+                        <button className="dsp-cat dsp-cat--reset" onClick={() => setHiddenCats([])}>show all</button>
+                      )}
+                    </div>
+                  </div>
+                  <DailySpendChart months={spendMonths} cur={cur} hidden={hiddenCats} />
                 </div>
               </div>
             </div>
@@ -338,7 +423,15 @@ export function StrategiePanel({
 
         {/* weekly spending — span 8 */}
         <div className="card span-8">
-          <div className="card-head">
+          <div
+            className="card-head"
+            role="button"
+            tabIndex={0}
+            style={{ cursor: "pointer" }}
+            onClick={() => { setEditorImportOpen(true); setEditorOpen(true); }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditorImportOpen(true); setEditorOpen(true); } }}
+            title="Bring in a bank statement"
+          >
             <div>
               <div className="card-eyebrow">Spending</div>
               <div className="card-title">Weekly breakdown — {monthLabel(activeKey)}</div>
@@ -442,59 +535,117 @@ export function StrategiePanel({
           </div>
         </div>
 
-        {/* allocation — span 4 */}
+        {/* portfolio: savings programs — span 4 */}
         <div className="card span-4">
           <div className="card-head">
             <div>
               <div className="card-eyebrow">Portfolio</div>
-              <div className="card-title">{DEFAULT_ALLOCATION.profile}</div>
+              <div className="card-title">Savings programs</div>
             </div>
           </div>
           <div style={{ padding: "14px 20px 18px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-              <svg viewBox="0 0 36 36" style={{ width: 100, height: 100, flexShrink: 0 }}>
-                <circle className="ring-track" cx="18" cy="18" r="13" />
-                {(() => {
-                  const r = 13;
-                  const c = 2 * Math.PI * r;
-                  let offset = 0;
-                  return DEFAULT_ALLOCATION.slices.map((s) => {
-                    const dash = (s.pct / 100) * c;
-                    const el = (
-                      <circle
-                        key={s.id}
-                        className="ring-fill"
-                        cx="18" cy="18" r={r}
-                        stroke={s.hue}
-                        strokeDasharray={`${dash} ${c - dash}`}
-                        strokeDashoffset={-offset}
-                        transform="rotate(-90 18 18)"
-                      />
-                    );
-                    offset += dash;
-                    return el;
-                  });
-                })()}
-              </svg>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="ring-cap">{fmtMoney(positions.invested, cur, { abbr: true })}</div>
-                <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 2 }}>Invested</div>
-              </div>
-            </div>
-            <div className="alloc-bar">
-              {DEFAULT_ALLOCATION.slices.map((s) => (
-                <div key={s.id} className="alloc-seg" style={{ width: `${s.pct}%`, background: s.hue }} />
-              ))}
-            </div>
-            <div className="alloc-legend">
-              {DEFAULT_ALLOCATION.slices.map((s) => (
-                <div key={s.id} className="alloc-row">
-                  <div className="alloc-dot" style={{ background: s.hue }} />
-                  <div className="alloc-name">{s.label}</div>
-                  <div className="alloc-pct">{s.pct}%</div>
-                  <div className="alloc-amt">{fmtMoney((positions.invested * s.pct) / 100, cur, { abbr: true })}</div>
+            {savingsPlans.length > 0 && (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+                  <svg viewBox="0 0 36 36" style={{ width: 100, height: 100, flexShrink: 0 }}>
+                    <circle className="ring-track" cx="18" cy="18" r="13" />
+                    {(() => {
+                      if (plansContribTotal <= 0) return null;
+                      const r = 13;
+                      const c = 2 * Math.PI * r;
+                      let offset = 0;
+                      return savingsPlans.map((p) => {
+                        const share = (planTotal[p.id] ?? 0) / plansContribTotal;
+                        if (share <= 0) return null;
+                        const dash = share * c;
+                        const el = (
+                          <circle
+                            key={p.id}
+                            className="ring-fill"
+                            cx="18" cy="18" r={r}
+                            stroke={p.hue}
+                            strokeDasharray={`${dash} ${c - dash}`}
+                            strokeDashoffset={-offset}
+                            transform="rotate(-90 18 18)"
+                          />
+                        );
+                        offset += dash;
+                        return el;
+                      });
+                    })()}
+                  </svg>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="ring-cap">{fmtMoney(plansContribTotal, cur, { abbr: true })}</div>
+                    <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 2 }}>
+                      Contributed{toPlansMonth > 0 ? ` · ${fmtMoney(toPlansMonth, cur, { abbr: true })} this month` : ""}
+                    </div>
+                  </div>
                 </div>
-              ))}
+                {plansContribTotal > 0 && (
+                  <div className="alloc-bar">
+                    {savingsPlans.map((p) => {
+                      const share = (planTotal[p.id] ?? 0) / plansContribTotal;
+                      return share > 0
+                        ? <div key={p.id} className="alloc-seg" style={{ width: `${share * 100}%`, background: p.hue }} />
+                        : null;
+                    })}
+                  </div>
+                )}
+                <div className="alloc-legend" style={{ marginTop: plansContribTotal > 0 ? 0 : 14 }}>
+                  {savingsPlans.map((p) => (
+                    <div key={p.id} className="alloc-row sp-row">
+                      <div className="alloc-dot" style={{ background: p.hue }} />
+                      <div
+                        className="alloc-name"
+                        title="Double-click to rename"
+                        onDoubleClick={() => {
+                          const name = window.prompt(`Rename "${p.name}"`, p.name)?.trim();
+                          if (name && name !== p.name) onRenameSavingsPlan(p.id, name);
+                        }}
+                      >
+                        <span>{p.name}</span>
+                        <span className="sp-kind">{SAVINGS_PLAN_KINDS.find((k) => k.id === p.kind)?.label ?? p.kind}</span>
+                      </div>
+                      <div className="alloc-pct" title={`Contributed in ${monthAbbr(activeKey)}`}>
+                        {planMonth[p.id] ? fmtMoney(planMonth[p.id], cur, { abbr: true }) : "—"}
+                      </div>
+                      <div className="alloc-amt" title="Contributed all time">
+                        {fmtMoney(planTotal[p.id] ?? 0, cur, { abbr: true })}
+                      </div>
+                      <button
+                        className="sp-del"
+                        title={`Remove ${p.name}`}
+                        onClick={() => {
+                          if (window.confirm(`Remove "${p.name}"? Statement rows keep their amounts but lose the link to this program.`))
+                            onRemoveSavingsPlan(p.id);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {savingsPlans.length === 0 && (
+              <div className="sp-empty">
+                No savings programs yet. Add one below, then tag statement rows
+                (in the import or the statement editor) as contributions — they'll
+                stop counting as spending and show up here instead.
+              </div>
+            )}
+            <div className="sp-add">
+              <input
+                className="sp-add-name"
+                placeholder="e.g. Building savings ČS"
+                value={spName}
+                onChange={(e) => setSpName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") addPlan(); }}
+              />
+              <select className="se-cat sp-add-kind" value={spKind} onChange={(e) => setSpKind(e.target.value as SavingsPlanKind)}>
+                {SAVINGS_PLAN_KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
+              </select>
+              <button className="ghost-btn" onClick={addPlan} disabled={!spName.trim()}><IcoPlus /> Add</button>
             </div>
           </div>
         </div>
@@ -631,8 +782,10 @@ export function StrategiePanel({
           statements={{ ...statements, byMonth }}
           currency={cur}
           memberships={state.memberships}
+          savingsPlans={savingsPlans}
           onSave={onSaveStatement}
-          onClose={() => setEditorOpen(false)}
+          onClose={() => { setEditorOpen(false); setEditorImportOpen(false); }}
+          defaultImportOpen={editorImportOpen}
         />
       )}
 

@@ -161,19 +161,37 @@ export function niceCeil(x: number): number {
 
 // ─── Category metadata ───────────────────────────────────────────────────────
 export const STMT_CATS: Record<CatKey, { label: string; hue: string }> = {
-  housing:   { label: "Housing",    hue: "#6366f1" },
-  food:      { label: "Food",       hue: "#f59e0b" },
-  transport: { label: "Transport",  hue: "#3b82f6" },
-  home:      { label: "Home",       hue: "#14b8a6" },
-  fun:       { label: "Fun",        hue: "#ec4899" },
-  health:    { label: "Health",     hue: "#22c55e" },
-  shopping:  { label: "Shopping",   hue: "#f97316" },
-  other:     { label: "Other",      hue: "#94a3b8" },
+  housing:     { label: "Housing",     hue: "#6366f1" },
+  food:        { label: "Groceries",   hue: "#f59e0b" },
+  eating:      { label: "Eating out",  hue: "#eab308" },
+  taxi:        { label: "Taxi & delivery", hue: "#d946ef" },
+  transport:   { label: "Transport",   hue: "#3b82f6" },
+  home:        { label: "Home",        hue: "#14b8a6" },
+  electronics: { label: "Electronics", hue: "#06b6d4" },
+  clothing:    { label: "Clothing",    hue: "#2dd4bf" },
+  fun:         { label: "Fun",         hue: "#ec4899" },
+  health:      { label: "Health",      hue: "#22c55e" },
+  shopping:    { label: "Shopping",    hue: "#f97316" },
+  vending:     { label: "Vending",     hue: "#a78bfa" },
+  cash:        { label: "Cash (ATM)",  hue: "#84cc16" },
+  fees:        { label: "Fees",        hue: "#ef4444" },
+  charity:     { label: "Charity",     hue: "#f43f5e" },
+  credit:      { label: "Credit card", hue: "#0ea5e9" },
+  other:       { label: "Other",       hue: "#94a3b8" },
 };
 
 export const CAT_KEYS: CatKey[] = [
-  "housing", "food", "transport", "home", "fun", "health", "shopping", "other",
+  "housing", "food", "eating", "taxi", "transport", "home", "electronics",
+  "clothing", "fun", "health", "shopping", "vending", "cash", "fees", "charity",
+  "credit", "other",
 ];
+
+// Same set, ordered by display label for dropdowns. "Other" stays pinned last.
+export const CAT_KEYS_BY_LABEL: CatKey[] = (() => {
+  const rest = CAT_KEYS.filter((k) => k !== "other");
+  rest.sort((a, b) => STMT_CATS[a].label.localeCompare(STMT_CATS[b].label));
+  return [...rest, "other"];
+})();
 
 // ─── Scenarios / constants ───────────────────────────────────────────────────
 export const RETURN_SCENARIOS: { id: string; label: string; rate: number }[] = [
