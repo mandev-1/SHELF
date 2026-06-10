@@ -40,6 +40,8 @@ export interface StatementEditorProps {
     memberships: MembershipRow[],
   ) => void;
   onClose: () => void;
+  /** Open the "Bring in a bank statement" modal as soon as the editor mounts. */
+  defaultImportOpen?: boolean;
 }
 
 type MemEditorState = {
@@ -53,7 +55,7 @@ type MemEditorState = {
   monoTouched: boolean;
 };
 
-export function StatementEditor({ statements, currency, memberships, savingsPlans = [], onSave, onClose }: StatementEditorProps) {
+export function StatementEditor({ statements, currency, memberships, savingsPlans = [], onSave, onClose, defaultImportOpen = false }: StatementEditorProps) {
   const cur = CURRENCIES[currency] ?? CURRENCIES["USD"];
   const sym = cur.code === "CZK" ? "Kč" : cur.code === "EUR" ? "€" : "$";
 
@@ -77,7 +79,8 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
   const [maximized, setMaximized] = useState(false);
   const [weekIdx, setWeekIdx] = useState(1);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(defaultImportOpen);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
   const [members, setMembers] = useState<MembershipRow[]>(() => memberships.map((m) => ({ ...m })));
@@ -100,13 +103,13 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (importOpen) return; // StatementImport owns Escape while open
+      if (importOpen || bulkOpen) return; // StatementImport owns Escape while open
       if (pickerOpen) setPickerOpen(false);
       else onClose();
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [pickerOpen, onClose, importOpen]);
+  }, [pickerOpen, onClose, importOpen, bulkOpen]);
 
   const cm: MonthStatement = draft[viewKey] ?? { income: [], expenses: [] };
   const incomeBase = cm.income.reduce((a, r) => a + (r.amt || 0), 0);
@@ -573,7 +576,17 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
                   : <small className="se-col-hint">dated</small>}
                 <span className="se-expand-glyph" aria-hidden="true">{maximized ? "⤡" : "⤢"}</span>
               </span>
-              <span className="se-col-sum">{fmt(expShownSum)}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                <button
+                  className="si-link"
+                  onClick={(e) => { e.stopPropagation(); setBulkOpen(true); }}
+                  disabled={cm.expenses.length === 0}
+                  title="Open this month's expenses in the big review table — sort, drag-select, bulk-rewrite"
+                >
+                  <IcoPencil /> Bulk edit
+                </button>
+                <span className="se-col-sum">{fmt(expShownSum)}</span>
+              </span>
             </div>
 
             <div className="se-weekrow">
@@ -723,6 +736,19 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
         savingsPlans={savingsPlans}
         onClose={() => setImportOpen(false)}
         onImport={handleImport}
+      />
+    )}
+    {bulkOpen && (
+      <StatementImport
+        currency={currency}
+        savingsPlans={savingsPlans}
+        editRows={{ monthKey: viewKey, expenses: cm.expenses }}
+        onApplyEdits={(mk, expenses) => {
+          setDraft((d) => ({ ...d, [mk]: { ...d[mk], expenses } }));
+          setBulkOpen(false);
+        }}
+        onClose={() => setBulkOpen(false)}
+        onImport={() => {}}
       />
     )}
     </>

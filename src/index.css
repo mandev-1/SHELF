@@ -4657,6 +4657,7 @@ body {
   transition: color 0.14s, background-color 0.14s, border-color 0.14s;
 }
 .si-link:hover { color: var(--fg); background: var(--surface-2); border-color: var(--line); }
+.si-link:disabled { opacity: 0.4; cursor: not-allowed; }
 .si-link.on { color: var(--fg-2); }
 .si-link svg { width: 11px; height: 11px; }
 

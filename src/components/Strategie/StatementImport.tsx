@@ -15,6 +15,10 @@ export interface StatementImportProps {
   existing?: Record<string, MonthStatement>;
   /** Savings programs rows can be tagged as contributions to. */
   savingsPlans?: SavingsPlan[];
+  /** Edit mode: review one month's existing expense rows instead of parsing a
+   *  statement. Apply replaces the month's expenses (unchecked rows = removed). */
+  editRows?: { monthKey: string; expenses: ExpenseRow[] };
+  onApplyEdits?: (monthKey: string, expenses: ExpenseRow[]) => void;
   onClose: () => void;
   onImport: (additions: Record<string, MonthStatement>) => void;
 }
@@ -32,6 +36,7 @@ interface ReviewRow {
   currencyCode: string;
   dup: boolean;          // duplicate of an existing/earlier row — excluded by default
   savingsPlanId?: string; // tagged as a contribution to a savings program
+  srcId?: string;         // edit mode: id of the ExpenseRow this came from
 }
 
 // faint statement-text fragments scattered around the drop zone (decoration)
@@ -88,10 +93,29 @@ const ROLE_FIELDS: { key: keyof ColumnMap; label: string }[] = [
   { key: "currency", label: "Currency" },
 ];
 
-export function StatementImport({ currency, existing, savingsPlans = [], onClose, onImport }: StatementImportProps) {
+export function StatementImport({ currency, existing, savingsPlans = [], editRows, onApplyEdits, onClose, onImport }: StatementImportProps) {
+  const editMode = !!editRows;
   const [rawText, setRawText] = useState("");
   const [result, setResult] = useState<StatementParseResult | null>(null);
-  const [rows, setRows] = useState<ReviewRow[]>([]);
+  const [rows, setRows] = useState<ReviewRow[]>(() => {
+    if (!editRows) return [];
+    const rate = CURRENCIES[currency]?.rate ?? 1;
+    return editRows.expenses.map((e) => ({
+      key: e.id,
+      srcId: e.id,
+      include: true,
+      isoDate: e.date || "",
+      monthKey: editRows.monthKey,
+      label: e.label,
+      counterparty: "",
+      kind: "expense" as TxnKind,
+      cat: e.cat,
+      magnitude: e.amt * rate, // base → display; toBaseAmount round-trips on apply
+      currencyCode: currency,
+      dup: false,
+      savingsPlanId: e.savingsPlanId,
+    }));
+  });
   const [override, setOverride] = useState<Partial<ColumnMap>>({});
   const [showCols, setShowCols] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -198,9 +222,10 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
 
   // single re-parse path: whenever the raw text or column override changes
   useEffect(() => {
+    if (editMode) return; // edit mode rows come from the editor draft, not a parse
     if (rawText.trim()) runParse(rawText, override);
     else { setResult(null); setRows([]); }
-  }, [rawText, override, runParse]);
+  }, [rawText, override, runParse, editMode]);
 
   // own Escape handling (StatementEditor defers while this is open)
   useEffect(() => {
@@ -218,7 +243,7 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
   // drops the clipboard text straight into the parser (unless the user is
   // pasting into the manual textarea, which handles itself).
   useEffect(() => {
-    if (rows.length > 0) return;
+    if (editMode || rows.length > 0) return;
     const h = (e: ClipboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
@@ -227,7 +252,7 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
     };
     window.addEventListener("paste", h);
     return () => window.removeEventListener("paste", h);
-  }, [rows.length]);
+  }, [editMode, rows.length]);
 
   const decodeBytes = useCallback((buf: ArrayBuffer, enc: string) => {
     try { return new TextDecoder(enc).decode(buf); }
@@ -417,6 +442,20 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
   // month dividers only make sense in chronological-ish order
   const showDividers = months.length > 1 && (!sort || sort.key === "date");
 
+  // edit mode: replace the month's expenses with the (kept) edited rows
+  const doApplyEdits = () => {
+    if (!editRows || !onApplyEdits) return;
+    const out: ExpenseRow[] = included.map((r) => ({
+      id: r.srcId ?? newId(),
+      label: r.label || "Expense",
+      amt: toBaseAmount(r.magnitude, r.currencyCode),
+      cat: r.cat,
+      date: r.isoDate,
+      savingsPlanId: r.savingsPlanId || undefined,
+    }));
+    onApplyEdits(editRows.monthKey, out);
+  };
+
   const doImport = () => {
     const additions: Record<string, MonthStatement> = {};
     for (const r of included) {
@@ -446,12 +485,19 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
       <div className={"se-modal si-modal" + (hasRows ? " si-modal--review" : "")} role="dialog" aria-modal="true" aria-label="Import bank statement">
         <div className="se-head">
           <div className="se-head-l">
-            <div className="se-eyebrow"><IcoUpload /> Import</div>
-            <h2 className="se-title">Bring in a bank statement</h2>
-            <p className="se-lede">
-              Paste your statement or drop a <code>.csv</code>/<code>.txt</code>/<code>.pdf</code> export.
-              It's parsed right here on your device — nothing is uploaded, and nothing is saved until you hit Import.
-            </p>
+            <div className="se-eyebrow"><IcoUpload /> {editMode ? "Bulk edit" : "Import"}</div>
+            <h2 className="se-title">{editMode ? "Review this month's expenses" : "Bring in a bank statement"}</h2>
+            {editMode ? (
+              <p className="se-lede">
+                Sort, drag-select and bulk-rewrite the expense rows of {monthLabel(editRows!.monthKey)}.
+                Unchecking a row removes it when you apply. Nothing is saved until you Save the statement.
+              </p>
+            ) : (
+              <p className="se-lede">
+                Paste your statement or drop a <code>.csv</code>/<code>.txt</code>/<code>.pdf</code> export.
+                It's parsed right here on your device — nothing is uploaded, and nothing is saved until you hit Import.
+              </p>
+            )}
           </div>
           <button className="se-close" onClick={onClose} aria-label="Close"><IcoX /></button>
         </div>
@@ -560,8 +606,9 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
             </div>
           )}
 
-          {hasRows && result && (
+          {hasRows && (
             <>
+              {result && !editMode && (
               <div className="si-meta">
                 <div className="si-meta-left">
                   <span className="si-chip"><b>{result.meta.currency}</b></span>
@@ -601,8 +648,9 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
                   <button className="si-link" onClick={startOver}>Start over</button>
                 </div>
               </div>
+              )}
 
-              {showCols && result.meta.mode !== "freeform" && (
+              {showCols && result && result.meta.mode !== "freeform" && (
                 <div className="si-cols">
                   {ROLE_FIELDS.map((f) => (
                     <label key={f.key} className="si-col-field">
@@ -768,13 +816,17 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
                           {r.dup && <em className="si-dupbadge" title="Same date, amount and description as an existing or earlier row">dup</em>}
                         </span>
                         <span className="si-td si-td--dir" role="cell">
-                          <button
-                            className={"si-dir si-dir--" + r.kind}
-                            onClick={() => setRow(r.key, { kind: r.kind === "income" ? "expense" : "income" })}
-                            title="Toggle income / spending"
-                          >
-                            {r.kind === "income" ? <><IcoIn /> In</> : <><IcoOut /> Out</>}
-                          </button>
+                          {editMode ? (
+                            <span className={"si-dir si-dir--" + r.kind}><IcoOut /> Out</span>
+                          ) : (
+                            <button
+                              className={"si-dir si-dir--" + r.kind}
+                              onClick={() => setRow(r.key, { kind: r.kind === "income" ? "expense" : "income" })}
+                              title="Toggle income / spending"
+                            >
+                              {r.kind === "income" ? <><IcoIn /> In</> : <><IcoOut /> Out</>}
+                            </button>
+                          )}
                         </span>
                         <span className="si-td si-td--label" role="cell">
                           <input
@@ -830,7 +882,7 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
                 })}
               </div>
 
-              {result.meta.skippedLines.length > 0 && (
+              {result && result.meta.skippedLines.length > 0 && (
                 <details className="si-skipped">
                   <summary>
                     <span className="si-skipped-mark">!</span>
@@ -850,19 +902,27 @@ export function StatementImport({ currency, existing, savingsPlans = [], onClose
 
         <div className="se-foot si-foot">
           <div className="si-foot-note">
-            {hasRows
-              ? <><LockGlyph /> {included.length} of {rows.length} rows will merge into the editor — review &amp; Save there to keep them.</>
-              : <><LockGlyph /> 100% local · nothing leaves this tab</>}
+            {editMode
+              ? <><LockGlyph /> {included.length} of {rows.length} rows kept — unchecked rows are removed. Save the statement afterwards to persist.</>
+              : hasRows
+                ? <><LockGlyph /> {included.length} of {rows.length} rows will merge into the editor — review &amp; Save there to keep them.</>
+                : <><LockGlyph /> 100% local · nothing leaves this tab</>}
           </div>
           <div className="se-actions">
             <button className="se-btn se-btn--ghost" onClick={onClose}>Cancel</button>
-            <button
-              className="se-btn se-btn--primary"
-              onClick={doImport}
-              disabled={included.length === 0}
-            >
-              <IcoUpload /> Import {included.length || ""} {included.length === 1 ? "row" : "rows"}
-            </button>
+            {editMode ? (
+              <button className="se-btn se-btn--primary" onClick={doApplyEdits}>
+                <IcoCheck /> Apply {included.length === rows.length ? "changes" : `(keep ${included.length} of ${rows.length})`}
+              </button>
+            ) : (
+              <button
+                className="se-btn se-btn--primary"
+                onClick={doImport}
+                disabled={included.length === 0}
+              >
+                <IcoUpload /> Import {included.length || ""} {included.length === 1 ? "row" : "rows"}
+              </button>
+            )}
           </div>
         </div>
 
