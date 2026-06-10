@@ -299,7 +299,7 @@ export interface ShelfBackupData {
 }
 
 export type CatKey =
-  | "housing" | "food" | "eating" | "transport" | "home" | "electronics"
+  | "housing" | "food" | "eating" | "taxi" | "transport" | "home" | "electronics"
   | "fun" | "health" | "shopping" | "vending" | "cash" | "fees" | "other";
 
 export interface IncomeRow { id: string; label: string; amt: number; kind: string; }
