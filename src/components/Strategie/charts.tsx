@@ -91,11 +91,18 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
   dayItems.forEach((items, i) => { colItems[colIdxOf(i)].push(...items); });
   for (const items of colItems) items.sort((a, b) => b.amt - a.amt);
 
-  const moveTip = (col: number) => (e: React.MouseEvent<SVGRectElement>) => {
-    const ne = e.nativeEvent;
-    const w = wrapRef.current?.clientWidth ?? W;
-    const h = wrapRef.current?.clientHeight ?? H;
-    setTip({ col, x: ne.offsetX, y: ne.offsetY, flipX: ne.offsetX > w * 0.6, flipY: ne.offsetY > h * 0.45 });
+  // one handler on the svg: wrapper-relative coords (offsetX on svg children is
+  // relative to the child, not the chart), column derived from the x position —
+  // the popup tracks the mouse anywhere over the chart, gaps included
+  const onSvgMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const vx = (x / rect.width) * W; // CSS px → viewBox units
+    const col = Math.floor((vx - PAD.left) / slot);
+    if (col < 0 || col >= totalCols || colTotals[col] <= 0) { setTip(null); return; }
+    setTip({ col, x, y, flipX: x > rect.width * 0.6, flipY: y > rect.height * 0.45 });
   };
 
   const colLabel = (c: number): string => {
@@ -122,7 +129,7 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
 
   return (
     <div className="dsp-wrap" ref={wrapRef}>
-    <svg className="proj-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" onMouseLeave={() => setTip(null)}>
+    <svg className="proj-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" onMouseMove={onSvgMove} onMouseLeave={() => setTip(null)}>
       <g className="proj-grid">
         {Array.from({ length: yTicks + 1 }, (_, i) => {
           const v = (yMax / yTicks) * i;
@@ -150,18 +157,6 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
           x2={PAD.left + colPosOf(ms.idx) * slot} y2={PAD.top + ch}
         />
       ))}
-      {/* full-height invisible hover zones — the popup works in the gaps too */}
-      {cols.map((_, i) =>
-        colTotals[i] > 0 ? (
-          <rect
-            key={`hz-${i}`}
-            x={PAD.left + i * slot} y={PAD.top}
-            width={slot} height={ch}
-            fill="transparent"
-            onMouseMove={moveTip(i)}
-          />
-        ) : null
-      )}
       {cols.map((d, i) => {
         if (colTotals[i] <= 0) return null;
         let acc = 0;
@@ -181,7 +176,6 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
                   width={barW} height={Math.max(1, yA - yB)}
                   rx={1.5}
                   fill={STMT_CATS[k].hue}
-                  onMouseMove={moveTip(i)}
                 />
               );
             })}
