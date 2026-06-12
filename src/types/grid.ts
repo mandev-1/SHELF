@@ -143,6 +143,8 @@ export interface ShelfPillarTodoItem {
   date?: string;
   /** When true, the task appears in the visual flow focus drawer. */
   focused?: boolean;
+  /** Urgency flag — "on fire". Renders a flame + warm border on the Pillar row. */
+  burning?: boolean;
   /** Epic / sector name (optional); shown lightly on Visual Flow when set */
   sectorName?: string;
   /** When set, a subtle Visual Flow border uses this tint; omit for default node chrome */
@@ -294,6 +296,8 @@ export interface ShelfBackupData {
   lowPerformanceMode?: boolean;
   /** Builist (TEMP) — buylist hopper stack */
   buylist?: BuylistItem[];
+  /** Which face of the Hopper flip-card (chute vs. selling ledger) is showing. */
+  hopperFace?: "buy" | "sell";
   strategie?: StrategieState;
   saleItems?: SaleItem[];
 }
@@ -399,6 +403,8 @@ export interface StrategieState {
   rungAccounts: Record<number, RungAccountRef[]>;
   /** Savings accounts / programs that expense rows can be tagged as contributions to. */
   savingsPlans: SavingsPlan[];
+  /** Which face of the projection hero flip-card is showing. */
+  heroFace: "grow" | "spend";
 }
 
 function _defaultStrategie(): StrategieState {
@@ -428,6 +434,7 @@ function _defaultStrategie(): StrategieState {
     acctSchemaV: ACCT_SCHEMA_V,
     rungAccounts: {},
     savingsPlans: [],
+    heroFace: "grow",
   };
 }
 
@@ -604,7 +611,9 @@ export function normalizeStrategie(raw: unknown): StrategieState {
       }));
   }
 
-  return { statements, positions, pots, memberships, currency, secondaryCurrency, compareCurrencyOn, accountsDirectory, acctSchemaV, rungAccounts, savingsPlans };
+  const heroFace = r["heroFace"] === "spend" ? "spend" : "grow";
+
+  return { statements, positions, pots, memberships, currency, secondaryCurrency, compareCurrencyOn, accountsDirectory, acctSchemaV, rungAccounts, savingsPlans, heroFace };
 }
 
 export const ACCENT_COLORS = [

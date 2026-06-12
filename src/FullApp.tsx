@@ -126,6 +126,8 @@ export default function FullApp() {
     buylistBuyBottom,
     buylistBump,
     buylistSkip,
+    hopperFace,
+    setHopperFace,
     saleItems,
     saleItemAdd,
     saleItemUpdate,
@@ -139,6 +141,7 @@ export default function FullApp() {
     strategieAddPot,
     strategieSetCurrency,
     strategieSetCurrentMonth,
+    strategieSetHeroFace,
     strategieToggleCompareCurrency,
     strategieSetRungAccounts,
     strategieUpsertAccountDictEntry,
@@ -599,6 +602,7 @@ export default function FullApp() {
                 onAddPot={strategieAddPot}
                 onSetCurrency={strategieSetCurrency}
                 onSetActiveMonth={strategieSetCurrentMonth}
+                onSetHeroFace={strategieSetHeroFace}
                 onToggleCompareCurrency={strategieToggleCompareCurrency}
                 onSetRungAccounts={strategieSetRungAccounts}
                 onUpsertAccountDictEntry={strategieUpsertAccountDictEntry}
@@ -620,6 +624,8 @@ export default function FullApp() {
               onSaleAdd={saleItemAdd}
               onSaleUpdate={saleItemUpdate}
               onSaleRemove={saleItemRemove}
+              face={hopperFace}
+              onSetFace={setHopperFace}
             />
           ) : dashboardView === "inventory" ? (
             <div className="max-w-[1640px] mx-auto px-6 py-6">

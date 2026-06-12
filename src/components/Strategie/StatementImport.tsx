@@ -39,6 +39,15 @@ interface ReviewRow {
   srcId?: string;         // edit mode: id of the ExpenseRow this came from
 }
 
+/** Order-independent fingerprint of the editable row fields — used to tell
+ *  whether the user has actually changed anything (sorting is not a change). */
+function rowsSignature(rows: ReviewRow[]): string {
+  return rows
+    .map((r) => `${r.srcId ?? r.key}|${r.include ? 1 : 0}|${r.kind}|${r.label}|${r.cat}|${r.savingsPlanId ?? ""}|${r.magnitude}`)
+    .sort()
+    .join("¶");
+}
+
 // faint statement-text fragments scattered around the drop zone (decoration)
 const ALTAR_FRAGMENTS: { left: string; top: string; text: string; em?: boolean }[] = [
   { left: "5%",  top: "14%", text: "−1 234,56" },
@@ -231,18 +240,35 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
     else { setResult(null); setRows([]); }
   }, [rawText, override, runParse, editMode]);
 
+  // "dirty" = the user has actually changed something. Edit mode: rows differ
+  // from the snapshot they opened with. Import mode: any pasted text or parsed
+  // rows. Leaving when clean closes straight away — no confirm dialog.
+  const rowsSig = rowsSignature(rows);
+  const initialSigRef = useRef<string | null>(null);
+  if (initialSigRef.current === null) initialSigRef.current = rowsSig;
+  const dirty = editMode
+    ? rowsSig !== initialSigRef.current
+    : rawText.trim().length > 0 || rows.length > 0;
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const leaveOpenRef = useRef(leaveConfirm);
+  leaveOpenRef.current = leaveConfirm;
+
   // own Escape handling (StatementEditor defers while this is open).
-  // Esc opens the in-app leave dialog; a second Esc dismisses that dialog.
+  // Esc on a dirty modal opens the leave dialog; clean → closes; a second Esc
+  // (with the dialog up) dismisses it.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.stopPropagation();
       e.preventDefault();
-      setLeaveConfirm((open) => !open);
+      if (leaveOpenRef.current) { setLeaveConfirm(false); return; }
+      if (dirtyRef.current) setLeaveConfirm(true);
+      else onClose();
     };
     window.addEventListener("keydown", h, true);
     return () => window.removeEventListener("keydown", h, true);
-  }, []);
+  }, [onClose]);
 
   // "paste anywhere" — while the modal is in its empty state, a global ⌘V/Ctrl+V
   // drops the clipboard text straight into the parser (unless the user is

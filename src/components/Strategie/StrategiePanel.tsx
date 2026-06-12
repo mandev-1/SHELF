@@ -35,6 +35,7 @@ interface StrategiePanelProps {
   onAddPot: (name: string) => void;
   onSetCurrency: (c: string) => void;
   onSetActiveMonth: (key: string) => void;
+  onSetHeroFace: (face: "grow" | "spend") => void;
   onToggleCompareCurrency: () => void;
   onSetRungAccounts: (rungId: number, rows: RungAccountRef[]) => void;
   onUpsertAccountDictEntry: (entry: AccountDictEntry) => void;
@@ -56,6 +57,7 @@ export function StrategiePanel({
   onAddPot,
   onSetCurrency,
   onSetActiveMonth,
+  onSetHeroFace,
   onToggleCompareCurrency,
   onSetRungAccounts,
   onUpsertAccountDictEntry,
@@ -90,7 +92,7 @@ export function StrategiePanel({
   const [scenarioId, setScenarioId] = useState("balanced");
   const [horizon, setHorizon] = useState(120);
   const [monthly, setMonthly] = useState(300);
-  const [heroFace, setHeroFace] = useState<"grow" | "spend">("grow");
+  const heroFace = state.heroFace;
   const [hiddenCats, setHiddenCats] = useState<CatKey[]>([]);
   const [detailRung, setDetailRung] = useState<LadderRung | null>(null);
   // month-switch toast (top-right, slides in then away)
@@ -361,7 +363,7 @@ export function StrategiePanel({
               )}
               <button
                 className={`hero-flip-btn${heroFace === "spend" ? " on" : ""}`}
-                onClick={() => setHeroFace((f) => f === "grow" ? "spend" : "grow")}
+                onClick={() => onSetHeroFace(heroFace === "grow" ? "spend" : "grow")}
                 title="Flip card"
               >
                 <IcoFlip />

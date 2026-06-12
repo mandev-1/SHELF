@@ -461,8 +461,8 @@ function NodeEditCard({
             onChange={(e) => setNote(e.target.value)}
             onKeyDown={handleNoteKeyDown}
             placeholder={showBinInfoFields ? "Why does this belong in the bin?" : "Note (optional)"}
-            className="shelf-note-popover-textarea min-h-[60px] max-h-64 w-full resize-y rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
-            rows={2}
+            className="shelf-note-popover-textarea min-h-[7.5rem] max-h-64 w-full resize-y rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none"
+            rows={5}
           />
         </div>
         {showBinInfoFields && (
@@ -1276,7 +1276,7 @@ function VisualFlowPanelInner({
   onTodoLog?: (entry: string) => void;
   fullPage?: boolean;
 }) {
-  const { screenToFlowPosition, getNodes, getViewport, setViewport, fitView } = useReactFlow();
+  const { screenToFlowPosition, getNodes, getViewport, setViewport, setCenter, fitView } = useReactFlow();
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [nodeMenu, setNodeMenu] = useState<{ nodeIds: string[]; x: number; y: number } | null>(null);
@@ -1430,6 +1430,22 @@ function VisualFlowPanelInner({
     }
     return hit;
   }, [searchQuery, canvasItems]);
+
+  // matched items in canvas order — surfaced in the search results panel
+  const searchResults = useMemo(
+    () => (searchMatchingIds ? canvasItems.filter((t) => searchMatchingIds.has(t.id)) : []),
+    [searchMatchingIds, canvasItems],
+  );
+
+  // jump the viewport to a node (search result click) and focus it
+  const panToNode = useCallback((id: string) => {
+    const node = getNodes().find((n) => n.id === id);
+    if (!node) return;
+    const w = node.measured?.width ?? 280;
+    const h = node.measured?.height ?? 120;
+    setFocusedNodeId(id);
+    setCenter(node.position.x + w / 2, node.position.y + h / 2, { zoom: getViewport().zoom, duration: 460 });
+  }, [getNodes, getViewport, setCenter]);
   const allVisualFlowSectorNames = useMemo(() => {
     const set = new Set<string>();
     for (const t of todos) {
@@ -2839,6 +2855,35 @@ function VisualFlowPanelInner({
             )}
             {searchMatchingIds && (
               <span className="vf-search-n" aria-live="polite">{searchMatchingIds.size}</span>
+            )}
+            {searchQuery.trim() && (
+              <div className="vf-search-results" role="listbox" aria-label="Search results">
+                <div className="vf-search-results-head">
+                  {searchResults.length > 0
+                    ? `${searchResults.length} match${searchResults.length === 1 ? "" : "es"} for “${searchQuery.trim()}”`
+                    : `No matches for “${searchQuery.trim()}”`}
+                </div>
+                {searchResults.length > 0 && (
+                  <div className="vf-search-results-list">
+                    {searchResults.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        role="option"
+                        aria-selected={focusedNodeId === t.id}
+                        className={`vf-search-result${focusedNodeId === t.id ? " on" : ""}`}
+                        onClick={() => panToNode(t.id)}
+                        title="Jump to this node"
+                      >
+                        <span className="vf-search-result-title">{t.text?.trim() || "Untitled"}</span>
+                        {(t.tag || t.sectorName) && (
+                          <span className="vf-search-result-meta">{t.tag || t.sectorName}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
           <div

@@ -12,6 +12,8 @@ interface Props {
   onSaleAdd: (item: Omit<SaleItem, "id">) => void;
   onSaleUpdate: (id: string, patch: Partial<SaleItem>) => void;
   onSaleRemove: (id: string) => void;
+  face: "buy" | "sell";
+  onSetFace: (face: "buy" | "sell") => void;
   onToast?: (msg: string) => void;
 }
 
@@ -51,6 +53,9 @@ function IClock(p: React.SVGProps<SVGSVGElement>) {
 }
 function ITrash(p: React.SVGProps<SVGSVGElement>) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>;
+}
+function IRows(p: React.SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9.5h18M3 14.5h18"/></svg>;
 }
 
 /* ---- date helpers ---- */
@@ -203,19 +208,134 @@ function SaleEditor({ sale, onSave, onClose, onDelete }: {
   );
 }
 
+/* ---- bulk add listings (spreadsheet-style) ---- */
+type BulkRow = { name: string; where: string; price: string; unit: string; status: SaleStatus; url: string };
+const blankBulkRow = (): BulkRow => ({ name: "", where: "", price: "", unit: "Kč", status: "listed", url: "" });
+
+function SaleBulkAdd({ onAdd, onClose }: {
+  onAdd: (rows: Omit<SaleItem, "id">[]) => void;
+  onClose: () => void;
+}) {
+  const [rows, setRows] = useState<BulkRow[]>(() => [blankBulkRow(), blankBulkRow(), blankBulkRow()]);
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [onClose]);
+
+  const patch = (i: number, p: Partial<BulkRow>) =>
+    setRows((rs) => rs.map((r, ix) => (ix === i ? { ...r, ...p } : r)));
+  const addRow = () => setRows((rs) => [...rs, blankBulkRow()]);
+  const removeRow = (i: number) => setRows((rs) => (rs.length > 1 ? rs.filter((_, ix) => ix !== i) : rs));
+
+  // paste a block from a spreadsheet — tab/comma separated, one listing per line,
+  // starting at the row pasted into (columns: item, where, price, unit, status, url)
+  const onPasteRows = (e: React.ClipboardEvent, rowIndex: number) => {
+    const text = e.clipboardData.getData("text");
+    if (!/[\t\n]/.test(text)) return; // single value — normal paste
+    e.preventDefault();
+    const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.trim().length > 0);
+    const parsed: BulkRow[] = lines.map((l) => {
+      const c = l.split(/\t|,(?=\s*\S)/);
+      const st = (c[4] || "").trim().toLowerCase();
+      return {
+        name: (c[0] ?? "").trim(),
+        where: (c[1] ?? "").trim(),
+        price: (c[2] ?? "").trim(),
+        unit: (c[3] ?? "").trim() || "Kč",
+        status: (SALE_STATUS as string[]).includes(st) ? (st as SaleStatus) : "listed",
+        url: (c[5] ?? "").trim(),
+      };
+    });
+    setRows((prev) => [...prev.slice(0, rowIndex), ...parsed, ...prev.slice(rowIndex + parsed.length)]);
+  };
+
+  const filled = rows.filter((r) => r.name.trim().length > 0);
+  const commit = () => {
+    if (filled.length === 0) return;
+    const now = new Date().toISOString().slice(0, 19);
+    const out: Omit<SaleItem, "id">[] = filled.map((r) => ({
+      name: r.name.trim(),
+      where: r.where.trim(),
+      price: parseFloat(r.price.replace(/[^\d.-]/g, "")) || 0,
+      unit: r.unit.trim() || "Kč",
+      status: r.status,
+      url: r.url.trim() || undefined,
+      createdAt: now,
+      updatedAt: now,
+      soldAt: null,
+      history: [],
+    }));
+    onAdd(out);
+    onClose();
+  };
+
+  return (
+    <div className="sba-veil" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sba-modal" role="dialog" aria-modal="true" aria-label="Add multiple listings">
+        <div className="sba-head">
+          <div>
+            <div className="sba-eyebrow">Selling</div>
+            <h2 className="sba-title">Add multiple listings</h2>
+            <div className="sba-sub">Type, or paste rows straight from a spreadsheet (item · where · price · unit · status · url).</div>
+          </div>
+          <button className="sba-close" onClick={onClose} aria-label="Close"><IX style={{ width: 14, height: 14 }} /></button>
+        </div>
+
+        <div className="sba-table">
+          <div className="sba-row sba-thead">
+            <span>Item</span><span>Where</span><span className="sba-right">Price</span><span>Unit</span><span>Status</span><span>Link</span><span />
+          </div>
+          {rows.map((r, i) => (
+            <div className="sba-row" key={i}>
+              <input className="sba-in" placeholder="What you're selling" value={r.name}
+                onChange={(e) => patch(i, { name: e.target.value })}
+                onPaste={(e) => onPasteRows(e, i)} autoFocus={i === 0} />
+              <input className="sba-in" placeholder="Platform / buyer" value={r.where}
+                onChange={(e) => patch(i, { where: e.target.value })} onPaste={(e) => onPasteRows(e, i)} />
+              <input className="sba-in sba-right sba-mono" inputMode="decimal" placeholder="0" value={r.price}
+                onChange={(e) => patch(i, { price: e.target.value })} onPaste={(e) => onPasteRows(e, i)} />
+              <input className="sba-in" placeholder="Kč" value={r.unit}
+                onChange={(e) => patch(i, { unit: e.target.value })} onPaste={(e) => onPasteRows(e, i)} />
+              <select className="sba-in sba-sel" value={r.status} onChange={(e) => patch(i, { status: e.target.value as SaleStatus })}>
+                {SALE_STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <input className="sba-in" placeholder="https://…" value={r.url}
+                onChange={(e) => patch(i, { url: e.target.value })} onPaste={(e) => onPasteRows(e, i)} />
+              <button className="sba-del" title="Remove row" onClick={() => removeRow(i)}><IX style={{ width: 13, height: 13 }} /></button>
+            </div>
+          ))}
+        </div>
+
+        <div className="sba-foot">
+          <button className="sba-addrow" onClick={addRow}><IPlus style={{ width: 13, height: 13 }} /> Add row</button>
+          <span className="sba-spacer" />
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="sba-commit" onClick={commit} disabled={filled.length === 0}>
+            <ICheck style={{ width: 14, height: 14 }} /> Add {filled.length || ""} listing{filled.length === 1 ? "" : "s"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---- Hopper component ---- */
 export function BuylistPanel({
   items, saleItems,
   onAdd, onDiscard, onBuyBottom, onBump, onSkip,
   onSaleAdd, onSaleUpdate, onSaleRemove,
+  face, onSetFace,
   onToast,
 }: Props) {
   const [name, setName] = useState("");
-  const [face, setFace] = useState<"buy" | "sell">("buy");
   const [flipping, setFlipping] = useState(false);
   const [sceneH, setSceneH] = useState<number | null>(null);
   const [saleFilter, setSaleFilter] = useState("selling");
   const [editId, setEditId] = useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [sellW, setSellW] = useState(940);
   const [sellH, setSellH] = useState<number | null>(null);
   const [resizing, setResizing] = useState(false);
@@ -240,7 +360,7 @@ export function BuylistPanel({
   }, [face, items, saleItems, sellH, sellW, saleFilter]);
 
   const flip = () => {
-    setFace((f) => (f === "buy" ? "sell" : "buy"));
+    onSetFace(face === "buy" ? "sell" : "buy");
     setFlipping(true);
     if (flipTimer.current) clearTimeout(flipTimer.current);
     flipTimer.current = setTimeout(() => setFlipping(false), 640);
@@ -281,6 +401,17 @@ export function BuylistPanel({
   };
 
   const dropSale = (id: string) => { onSaleRemove(id); setEditId(null); };
+
+  useEffect(() => {
+    if (!confirmDeleteId) return;
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setConfirmDeleteId(null);
+    };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, [confirmDeleteId]);
 
   const liveSales = saleItems.filter((s) => s.status !== "sold").length;
   const visibleSales = saleItems.filter((s) =>
@@ -477,7 +608,7 @@ export function BuylistPanel({
                         type="button"
                         className="icon-btn"
                         title="Remove"
-                        onClick={(e) => { e.stopPropagation(); dropSale(s.id); }}
+                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(s.id); }}
                         tabIndex={face === "sell" ? 0 : -1}
                       >
                         <IX style={{ width: 14, height: 14 }} />
@@ -497,24 +628,17 @@ export function BuylistPanel({
               <div className="ledger-add">
                 <button
                   type="button"
-                  className="btn-ghost ok ledger-add-btn"
+                  className="ledger-add-btn ledger-add-morph"
                   tabIndex={face === "sell" ? 0 : -1}
-                  onClick={() => {
-                    const now = new Date().toISOString().slice(0, 19);
-                    onSaleAdd({
-                      name: "New listing",
-                      where: "",
-                      price: 0,
-                      unit: "Kč",
-                      status: "listed",
-                      createdAt: now,
-                      updatedAt: now,
-                      soldAt: null,
-                      history: [],
-                    });
-                  }}
+                  title="Add several listings at once"
+                  onClick={() => setBulkOpen(true)}
                 >
-                  <IPlus style={{ width: 14, height: 14 }} /> Add listing
+                  <span className="ledger-add-face ledger-add-face--rest">
+                    <IPlus style={{ width: 14, height: 14 }} /> Add listing
+                  </span>
+                  <span className="ledger-add-face ledger-add-face--hover" aria-hidden="true">
+                    <IRows style={{ width: 14, height: 14 }} /> Add multiple
+                  </span>
                 </button>
               </div>
 
@@ -547,6 +671,39 @@ export function BuylistPanel({
             onClose={() => setEditId(null)}
             onDelete={dropSale}
           />
+        );
+      })()}
+
+      {bulkOpen && (
+        <SaleBulkAdd
+          onAdd={(out) => {
+            // saleItemAdd prepends — add in reverse so the first row ends up on top
+            [...out].reverse().forEach((row) => onSaleAdd(row));
+            onToast?.(`Added ${out.length} listing${out.length === 1 ? "" : "s"}`);
+          }}
+          onClose={() => setBulkOpen(false)}
+        />
+      )}
+
+      {confirmDeleteId && (() => {
+        const sale = saleItems.find((s) => s.id === confirmDeleteId);
+        const label = sale?.name?.trim() ? `“${sale.name.trim()}”` : "This listing";
+        return (
+          <div className="sba-veil" onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmDeleteId(null); }}>
+            <div className="si-leave-card" role="alertdialog" aria-modal="true" aria-label="Remove listing">
+              <div className="si-leave-title">Remove this listing?</div>
+              <div className="si-leave-body">{label} will be permanently removed from the Selling ledger. This can’t be undone.</div>
+              <div className="si-leave-actions">
+                <button className="se-btn se-btn--ghost" onClick={() => setConfirmDeleteId(null)} autoFocus>Keep</button>
+                <button
+                  className="se-btn se-btn--danger"
+                  onClick={() => { dropSale(confirmDeleteId); setConfirmDeleteId(null); onToast?.("Listing removed"); }}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          </div>
         );
       })()}
     </div>

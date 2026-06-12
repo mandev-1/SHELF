@@ -125,10 +125,14 @@ export function Pillar({
   };
 
   const pinIntoTop = (id: string) => {
+    const wasPinned = pinnedTop.includes(id);
     const nextTop = pinnedTop.filter((x) => x !== id);
     nextTop.unshift(id);
     if (nextTop.length > 6) nextTop.pop();
     capturePinPositions();
+    // Only a genuinely new pin gets the drop-in; re-pinning an existing one
+    // is a reorder and should ride the FLIP glide instead.
+    if (!wasPinned) justPinnedRef.current = id;
     onSetPinned({ top: nextTop });
   };
 
@@ -138,6 +142,8 @@ export function Pillar({
   // identity over 0.3s cubic-bezier(.2,.9,.3,1). Displaced pins glide.
   const pinNodeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const pinRectsRef = useRef<Map<string, DOMRect>>(new Map());
+  // id of a bookmark just pinned into Top 6 — gets a one-shot drop-in animation.
+  const justPinnedRef = useRef<string | null>(null);
 
   const capturePinPositions = () => {
     const snap = new Map<string, DOMRect>();
@@ -148,11 +154,16 @@ export function Pillar({
   };
 
   useLayoutEffect(() => {
+    const justId = justPinnedRef.current;
+    justPinnedRef.current = null;
+
+    // FLIP glide for displaced pins (skips the freshly-pinned node, which has
+    // no prior rect and instead plays the drop-in below).
     const prev = pinRectsRef.current;
-    if (prev.size === 0) return;
-    pinNodeRefs.current.forEach((node, id) => {
-      const oldRect = prev.get(id);
-      if (!oldRect) return;
+    pinRectsRef.current = new Map();
+    prev.forEach((oldRect, id) => {
+      const node = pinNodeRefs.current.get(id);
+      if (!node || id === justId) return;
       const newRect = node.getBoundingClientRect();
       const dx = oldRect.left - newRect.left;
       const dy = oldRect.top - newRect.top;
@@ -172,7 +183,22 @@ export function Pillar({
         node.addEventListener("transitionend", clear);
       });
     });
-    pinRectsRef.current = new Map();
+
+    // Ghost drop-in for a freshly pinned bookmark — works even from an empty
+    // stack (no prior rects to FLIP against).
+    if (justId) {
+      const node = pinNodeRefs.current.get(justId);
+      if (node) {
+        node.classList.remove("pin-drop-in");
+        void node.getBoundingClientRect();
+        node.classList.add("pin-drop-in");
+        const clear = () => {
+          node.classList.remove("pin-drop-in");
+          node.removeEventListener("animationend", clear);
+        };
+        node.addEventListener("animationend", clear);
+      }
+    }
   }, [pinnedTop]);
 
   // Deterministic tag color per spec (only violet or blue available)
@@ -281,6 +307,12 @@ export function Pillar({
   const setTodoSubtitle = (id: string, subtitle: string) => {
     onSetTodos((prev) =>
       prev.map((item) => (item.id === id ? { ...item, subtitle: subtitle === "" ? undefined : subtitle } : item))
+    );
+  };
+
+  const toggleTodoBurning = (id: string) => {
+    onSetTodos((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, burning: item.burning ? undefined : true } : item))
     );
   };
 
@@ -503,7 +535,7 @@ export function Pillar({
                 return (
                 <div
                   key={t.id}
-                  className={`todo ${isFocused ? "todo--focus" : ""} ${t.done ? "todo--done" : ""} ${t.blockStatus === "blocked" ? "italic" : ""}`}
+                  className={`todo ${isFocused ? "todo--focus" : ""} ${t.done ? "todo--done" : ""} ${t.burning ? "todo--burning" : ""} ${t.blockStatus === "blocked" ? "italic" : ""}`}
                   data-focus-rank={focusRank}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -524,6 +556,9 @@ export function Pillar({
                   </button>
                   <div className="todo-main">
                     <div className="todo-row">
+                      {t.burning && (
+                        <span className="todo-burn" aria-label="Burning" title="Burning">🔥</span>
+                      )}
                       {t.url ? (
                         <Link
                           href={t.url}
@@ -686,19 +721,32 @@ export function Pillar({
           >
             <div className="note-popover-header">
               <span>Note: {t.text}</span>
-              {onSetPillarTodoPins && (
+              <div className="flex shrink-0 items-center gap-3">
                 <label className="flex shrink-0 items-center gap-1.5 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={focusDesynced ? pillarTodoPins.includes(t.id) : !!t.focused}
-                    onChange={() => toggleTodoFocus(t.id)}
+                    checked={!!t.burning}
+                    onChange={() => toggleTodoBurning(t.id)}
                     className="h-3.5 w-3.5 rounded"
-                    style={{ accentColor: "var(--accent)" }}
-                    aria-label="Focus task"
+                    style={{ accentColor: "var(--hue-orange)" }}
+                    aria-label="Mark task as burning"
                   />
-                  <span style={{ fontSize: 10, color: "var(--muted)" }}>Focus</span>
+                  <span style={{ fontSize: 10, color: "var(--muted)" }}>🔥 Burning</span>
                 </label>
-              )}
+                {onSetPillarTodoPins && (
+                  <label className="flex shrink-0 items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={focusDesynced ? pillarTodoPins.includes(t.id) : !!t.focused}
+                      onChange={() => toggleTodoFocus(t.id)}
+                      className="h-3.5 w-3.5 rounded"
+                      style={{ accentColor: "var(--accent)" }}
+                      aria-label="Focus task"
+                    />
+                    <span style={{ fontSize: 10, color: "var(--muted)" }}>Focus</span>
+                  </label>
+                )}
+              </div>
             </div>
             <div className="note-popover-body">
               <input

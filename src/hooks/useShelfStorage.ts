@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { isPragueDaylight } from "../utils/sun";
 import {
   GRAZELAND_HANDLE_SLOTS,
   createGrazelandHandleVisibility,
@@ -76,6 +77,7 @@ const SHOW_STRATEGIE_TAB_KEY = "shelf-show-strategie-tab";
 const SHOW_HOPPER_TAB_KEY    = "shelf-show-hopper-tab";
 const SHOW_INVENTORY_TAB_KEY = "shelf-show-inventory-tab";
 const BUYLIST_KEY = "shelf-buylist";
+const HOPPER_FACE_KEY = "shelf-hopper-face";
 const SALE_ITEMS_KEY = "shelf-sale-items";
 const INVENTORY_KEY = "shelf-inventory";
 const STRATEGIE_KEY = "shelf-strategie";
@@ -306,6 +308,7 @@ function normalizeShelfTodoItems(input: unknown): ShelfPillarTodoItem[] {
       handleConfig: isShelfTodoHandleConfig(x.handleConfig) ? x.handleConfig : undefined,
       grazelandHandleVisibility: normalizeGrazelandHandleVisibility(x.grazelandHandleVisibility),
       focused: Boolean(x.focused),
+      burning: x.burning ? true : undefined,
       sectorName: typeof x.sectorName === "string" && x.sectorName.trim() ? x.sectorName.trim() : undefined,
       sectorColor: isSectorColorKey(x.sectorColor) ? x.sectorColor : undefined,
     }));
@@ -355,6 +358,7 @@ export function useShelfStorage() {
   const [showHopperTab,    setShowHopperTabState]    = useState(true);
   const [showInventoryTab, setShowInventoryTabState] = useState(true);
   const [buylist, setBuylistState] = useState<BuylistItem[]>([]);
+  const [hopperFace, setHopperFaceState] = useState<"buy" | "sell">("buy");
   const [saleItems, setSaleItemsState] = useState<SaleItem[]>([]);
   const [inventoryItems, setInventoryItemsState] = useState<InventoryItem[]>([]);
   const [strategieState, setStrategieState] = useState<StrategieState>(() => normalizeStrategie(null));
@@ -402,6 +406,7 @@ export function useShelfStorage() {
         SHOW_HOPPER_TAB_KEY,
         SHOW_INVENTORY_TAB_KEY,
         BUYLIST_KEY,
+        HOPPER_FACE_KEY,
         SALE_ITEMS_KEY,
         INVENTORY_KEY,
         STRATEGIE_KEY,
@@ -531,6 +536,7 @@ export function useShelfStorage() {
       setShowHopperTabState   (result[SHOW_HOPPER_TAB_KEY]    !== false);
       setShowInventoryTabState(result[SHOW_INVENTORY_TAB_KEY] !== false);
       setBuylistState(normalizeBuylist(result[BUYLIST_KEY]));
+      setHopperFaceState(result[HOPPER_FACE_KEY] === "sell" ? "sell" : "buy");
       setSaleItemsState(normalizeSaleItems(result[SALE_ITEMS_KEY]));
       setInventoryItemsState(normalizeInventory(result[INVENTORY_KEY]));
       setStrategieState(normalizeStrategie(result[STRATEGIE_KEY]));
@@ -628,23 +634,17 @@ export function useShelfStorage() {
     return () => chrome.storage.onChanged.removeListener(listener);
   }, []);
 
-  /* Update every minute so "auto" theme switches at 08:00 and 21:40 */
+  /* Re-evaluate every minute so "auto" flips within a minute of Prague sun-up/-down */
   useEffect(() => {
     const id = setInterval(() => setTimeTick(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
 
+  // "auto" follows the sun in Prague (computed offline from an astronomical
+  // formula — no network): daylight → sap, night → dark.
   const resolvedTheme: "dark" | "day" | "sap" =
     theme === "auto"
-      ? (() => {
-          const d = new Date(timeTick);
-          const h = d.getHours();
-          const m = d.getMinutes();
-          const totalMin = h * 60 + m;
-          const darkUntil = 8 * 60; // 08:00
-          const darkFrom = 21 * 60 + 40; // 21:40
-          return totalMin < darkUntil || totalMin >= darkFrom ? "dark" : "sap";
-        })()
+      ? (isPragueDaylight(new Date(timeTick)) ? "sap" : "dark")
       : theme;
 
   // Derived: the accent for the currently-resolved theme.
@@ -790,6 +790,15 @@ export function useShelfStorage() {
       const normalized = normalizeBuylist(list);
       getStorage()?.set({ [BUYLIST_KEY]: normalized });
       return normalized;
+    });
+  }, []);
+
+  // remember which face of the Hopper flip-card (chute vs. selling ledger) is showing
+  const setHopperFace = useCallback((face: "buy" | "sell") => {
+    setHopperFaceState((prev) => {
+      if (prev === face) return prev;
+      getStorage()?.set({ [HOPPER_FACE_KEY]: face });
+      return face;
     });
   }, []);
 
@@ -948,6 +957,16 @@ export function useShelfStorage() {
     setStrategieState((prev) => {
       if (!(key in prev.statements.byMonth) || prev.statements.current === key) return prev;
       const next: StrategieState = { ...prev, statements: { ...prev.statements, current: key } };
+      getStorage()?.set({ [STRATEGIE_KEY]: next });
+      return next;
+    });
+  }, []);
+
+  // remember which face of the projection hero flip-card is showing
+  const strategieSetHeroFace = useCallback((face: "grow" | "spend") => {
+    setStrategieState((prev) => {
+      if (prev.heroFace === face) return prev;
+      const next: StrategieState = { ...prev, heroFace: face };
       getStorage()?.set({ [STRATEGIE_KEY]: next });
       return next;
     });
@@ -1340,10 +1359,11 @@ export function useShelfStorage() {
       focusDesynced,
       lowPerformanceMode,
       buylist,
+      hopperFace,
       strategie: strategieState,
       saleItems,
     };
-  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState]);
+  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -1392,6 +1412,7 @@ export function useShelfStorage() {
     if (typeof backup.focusDesynced === "boolean") setFocusDesyncedState(backup.focusDesynced);
     if (typeof backup.lowPerformanceMode === "boolean") setLowPerformanceModeState(backup.lowPerformanceMode);
     if (Array.isArray(backup.buylist)) setBuylist(backup.buylist as BuylistItem[]);
+    if (backup.hopperFace === "buy" || backup.hopperFace === "sell") setHopperFace(backup.hopperFace);
     if (backup.strategie) setStrategie(normalizeStrategie(backup.strategie));
     if (Array.isArray(backup.saleItems)) setSaleItems(normalizeSaleItems(backup.saleItems));
 
@@ -1428,10 +1449,11 @@ export function useShelfStorage() {
       [FOCUS_DESYNCED_KEY]: typeof backup.focusDesynced === "boolean" ? backup.focusDesynced : focusDesynced,
       [LOW_PERFORMANCE_MODE_KEY]: typeof backup.lowPerformanceMode === "boolean" ? backup.lowPerformanceMode : lowPerformanceMode,
       [BUYLIST_KEY]: Array.isArray(backup.buylist) ? backup.buylist : buylist,
+      [HOPPER_FACE_KEY]: backup.hopperFace === "buy" || backup.hopperFace === "sell" ? backup.hopperFace : hopperFace,
       [STRATEGIE_KEY]: backup.strategie ? normalizeStrategie(backup.strategie) : strategieState,
       [SALE_ITEMS_KEY]: Array.isArray(backup.saleItems) ? normalizeSaleItems(backup.saleItems) : saleItems,
     });
-  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setGrazelandItems, setSaleItems, strategieState, setStrategie]);
+  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setHopperFace, setGrazelandItems, setSaleItems, strategieState, setStrategie]);
 
   return {
     layout,
@@ -1510,6 +1532,8 @@ export function useShelfStorage() {
     buylistBuyBottom,
     buylistBump,
     buylistSkip,
+    hopperFace,
+    setHopperFace,
     saleItems,
     setSaleItems,
     saleItemAdd,
@@ -1526,6 +1550,7 @@ export function useShelfStorage() {
     strategieAddPot,
     strategieSetCurrency,
     strategieSetCurrentMonth,
+    strategieSetHeroFace,
     strategieSetSecondaryCurrency,
     strategieToggleCompareCurrency,
     strategieSetRungAccounts,
