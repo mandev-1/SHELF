@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
-import type React from "react";
+import type * as React from "react";
 import type { CardLayout, CardWidth } from "../types/grid";
 import { CARD_W_SNAPS } from "../types/grid";
 
