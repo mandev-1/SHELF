@@ -141,6 +141,7 @@ export default function FullApp() {
     strategieToggleCompareCurrency,
     strategieSetRungAccounts,
     strategieUpsertAccountDictEntry,
+    strategieSetAccountsDirectory,
     strategieAddSavingsPlan,
     strategieUpdateSavingsPlan,
     strategieRemoveSavingsPlan,
@@ -586,6 +587,8 @@ export default function FullApp() {
               content (scrolls along with the page) instead of stuck to the viewport. */}
           <div className="bg-diffuse-host">
             <div className="bg-diffuse" aria-hidden="true" />
+            {/* SAP office texture: graph-paper ruling + paper grain (SAP theme only) */}
+            <div className="office-paper" aria-hidden="true" />
           {dashboardView === "strategie" ? (
             <div className="max-w-[1640px] mx-auto px-6 py-6">
               <StrategiePanel
@@ -597,6 +600,7 @@ export default function FullApp() {
                 onToggleCompareCurrency={strategieToggleCompareCurrency}
                 onSetRungAccounts={strategieSetRungAccounts}
                 onUpsertAccountDictEntry={strategieUpsertAccountDictEntry}
+                onSetAccountsDirectory={strategieSetAccountsDirectory}
                 onAddSavingsPlan={strategieAddSavingsPlan}
                 onRenameSavingsPlan={(id, name) => strategieUpdateSavingsPlan(id, { name })}
                 onRemoveSavingsPlan={strategieRemoveSavingsPlan}

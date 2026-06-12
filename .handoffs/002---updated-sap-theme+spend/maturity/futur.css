@@ -1,0 +1,62 @@
+/* Futuristic boards — HUD · Aurora glass · Orbital */
+.fu { width: 100%; height: 100%; border-radius: 10px; overflow: hidden; position: relative; font-family: ui-sans-serif, system-ui, sans-serif; color: #e8f4f2; box-sizing: border-box; }
+.fu * { box-sizing: border-box; }
+.fu-mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+.fu-cap { font-size: 8.5px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; }
+
+/* ── 1 · HUD ── */
+.hud { background: radial-gradient(120% 90% at 50% 0%, #07131a 0%, #04090d 60%, #02060a 100%); padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+.hud::before { content: ""; position: absolute; inset: 0; background: linear-gradient(rgba(34,211,238,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.025) 1px, transparent 1px); background-size: 28px 28px; pointer-events: none; }
+.hud-cap { color: #3d7a8a; }
+.hud-panel { position: relative; border: 1px solid rgba(34,211,238,0.16); background: rgba(8,20,27,0.6); padding: 12px 14px; }
+.hud-tick { position: absolute; width: 7px; height: 7px; border: 1.5px solid #22d3ee; }
+.hud-tick.tl { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.hud-tick.br { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+.hud-big { font-size: 30px; font-weight: 650; letter-spacing: -0.01em; color: #d9fbff; text-shadow: 0 0 18px rgba(34,211,238,0.45); }
+.hud-readout { display: flex; gap: 0; }
+.hud-readout > div { flex: 1; padding: 0 12px; border-left: 1px solid rgba(34,211,238,0.12); }
+.hud-readout > div:first-child { border-left: 0; padding-left: 0; }
+.hud-val { font-size: 15px; font-weight: 600; color: #bdf3ff; }
+.hud-val.g { color: #4ade80; text-shadow: 0 0 12px rgba(74,222,128,0.5); }
+.hud-row { display: flex; align-items: center; gap: 9px; font-size: 10.5px; padding: 5px 0; color: #7fb5c2; }
+.hud-bar { flex: 1; height: 4px; background: rgba(34,211,238,0.08); overflow: hidden; }
+.hud-bar span { display: block; height: 100%; background: linear-gradient(90deg, #0e7490, #22d3ee); box-shadow: 0 0 8px rgba(34,211,238,0.6); }
+.hud-scan { position: absolute; left: 0; right: 0; height: 46px; top: 18%; background: linear-gradient(180deg, transparent, rgba(34,211,238,0.05), transparent); pointer-events: none; }
+
+/* ── 2 · Aurora glass ── */
+.aur { background: #07090f; padding: 22px 24px; display: flex; flex-direction: column; gap: 12px; }
+.aur::before { content: ""; position: absolute; inset: -30%;
+  background: radial-gradient(40% 34% at 22% 18%, rgba(16,185,129,0.34), transparent 70%),
+              radial-gradient(36% 30% at 80% 8%, rgba(99,102,241,0.30), transparent 70%),
+              radial-gradient(44% 38% at 68% 86%, rgba(34,211,238,0.16), transparent 70%),
+              radial-gradient(30% 26% at 8% 78%, rgba(168,85,247,0.18), transparent 70%);
+  filter: blur(34px); pointer-events: none; }
+.aur > * { position: relative; }
+.aur-glass { border-radius: 18px; padding: 14px 16px; background: linear-gradient(165deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)); border: 1px solid rgba(255,255,255,0.13); border-top-color: rgba(255,255,255,0.22); box-shadow: 0 18px 40px -18px rgba(0,0,0,0.7), inset 0 0 24px rgba(255,255,255,0.02); }
+.aur-hero { font-size: 38px; font-weight: 750; letter-spacing: -0.035em; line-height: 1; background: linear-gradient(92deg, #6ee7b7 10%, #67e8f9 55%, #a5b4fc 95%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.aur-cap { color: rgba(232,244,242,0.45); }
+.aur-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; padding: 5px 11px; border-radius: 999px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); color: rgba(232,244,242,0.8); }
+.aur-pill.on { background: linear-gradient(90deg, rgba(110,231,183,0.2), rgba(103,232,249,0.16)); border-color: rgba(110,231,183,0.45); color: #b8ffe3; }
+.aur-row { display: flex; align-items: center; gap: 10px; font-size: 11px; color: rgba(232,244,242,0.66); padding: 5.5px 0; }
+.aur-bar { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.aur-bar span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #34d399, #22d3ee); }
+.aur-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ── 3 · Orbital ── */
+.orb { background: radial-gradient(90% 70% at 50% 38%, #0b1118 0%, #05080c 70%); padding: 20px 22px; display: flex; flex-direction: column; }
+.orb-stage { position: relative; height: 360px; flex-shrink: 0; }
+.orb-ring { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 1px dashed rgba(125,211,252,0.16); border-radius: 50%; }
+.orb-core { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; text-align: center;
+  background: radial-gradient(circle at 38% 30%, #103326, #07120d 70%); box-shadow: 0 0 0 1px rgba(52,211,153,0.35), 0 0 44px rgba(52,211,153,0.22), inset 0 0 26px rgba(52,211,153,0.12); }
+.orb-node { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 3px; transform: translate(-50%, -50%); }
+.orb-dot { width: 13px; height: 13px; border-radius: 50%; box-shadow: 0 0 12px currentColor; background: currentColor; }
+.orb-lab { font-size: 9px; color: #9fc4d8; white-space: nowrap; }
+.orb-lab b { color: #e0f2fe; font-weight: 600; }
+.orb-foot { display: flex; gap: 8px; margin-top: auto; }
+.orb-chip { flex: 1; border: 1px solid rgba(125,211,252,0.14); border-radius: 10px; padding: 8px 10px; background: rgba(13,22,30,0.7); }
+
+/* shared motion footer */
+.fu-motion { display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding-top: 10px; }
+.fu-motion-row { display: flex; align-items: center; gap: 8px; font-size: 10px; color: #6b8a95; position: relative; }
+.fu-motion-row b { color: #c9e6ee; font-weight: 600; }
+.fu-dot { width: 5px; height: 5px; border-radius: 50%; background: #22d3ee; box-shadow: 0 0 6px #22d3ee; flex-shrink: 0; }

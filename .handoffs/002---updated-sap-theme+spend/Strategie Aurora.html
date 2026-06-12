@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Strategie — Aurora</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="aurora/aurora.css" />
+</head>
+<body>
+<div class="mesh"></div>
+<div class="grain"></div>
+
+<div class="page">
+
+  <div class="top rv">
+    <div class="brand">ShELF <i>/ Strategie</i></div>
+    <div class="top-r">
+      <div class="pillrow">
+        <button class="pill">USD</button><button class="pill">EUR</button><button class="pill on">CZK</button>
+      </div>
+      <button class="btn-glass">↔ EUR</button>
+      <button class="btn-glass">⤓ Statement · Apr 2026</button>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="rv d1">
+      <div class="cap">Net worth · April 2026</div>
+      <div class="hero-num mono">637 400 Kč</div>
+      <div class="hero-sent">
+        <span class="delta">▲ 17 900 Kč /mo</span>
+        <span>on pace for <b class="mono">1.11M Kč</b> by 2031 · balanced 7% p.a.</span>
+      </div>
+    </div>
+    <div class="kpis rv d2">
+      <div class="glass kpi"><div class="cap">Surplus /mo</div><div class="v mono" style="color:var(--em-hi)">+17.9k</div><div class="s">17% of income saved</div></div>
+      <div class="glass kpi"><div class="cap">Emergency</div><div class="v mono warn">3.0 / 6 mo</div><div class="s">212k of 423k Kč</div></div>
+      <div class="glass kpi"><div class="cap">To programs</div><div class="v mono">8.2k /mo</div><div class="s">2 active plans</div></div>
+    </div>
+  </div>
+
+  <div class="grid">
+
+    <div class="glass s8 card-pad rv d3">
+      <div class="card-head">
+        <span class="card-title">Compounding engine</span>
+        <div class="pillrow">
+          <button class="pill">4%</button><button class="pill on">7%</button><button class="pill">10%</button><button class="pill">S&amp;P</button>
+        </div>
+      </div>
+      <div class="proj-wrap">
+        <div class="proj-final"><div class="n mono">2 075k</div><div class="c">in 10 yrs · 7% p.a.</div></div>
+        <svg viewBox="0 0 760 240" style="width:100%;display:block" fill="none">
+          <defs>
+            <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#34d399" stop-opacity="0.25"/><stop offset="100%" stop-color="#34d399" stop-opacity="0"/>
+            </linearGradient>
+            <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#34d399"/><stop offset="100%" stop-color="#67e8f9"/>
+            </linearGradient>
+          </defs>
+          <g stroke="rgba(255,255,255,0.05)"><line x1="0" y1="60" x2="760" y2="60"/><line x1="0" y1="120" x2="760" y2="120"/><line x1="0" y1="180" x2="760" y2="180"/></g>
+          <path d="M0,225 C140,218 300,196 460,150 C580,116 680,72 760,28 L760,240 L0,240 Z" fill="url(#area)"/>
+          <path class="draw-line l2" d="M0,228 C160,224 330,212 500,192 C600,180 690,168 760,158" stroke="rgba(110,231,183,0.4)" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <path class="draw-line" d="M0,225 C140,218 300,196 460,150 C580,116 680,72 760,28" stroke="url(#line)" stroke-width="2.5"/>
+          <circle class="endglow" cx="760" cy="28" r="10" fill="#67e8f9" opacity="0.35"/>
+          <circle cx="760" cy="28" r="4" fill="#67e8f9"/>
+        </svg>
+        <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:11px;color:var(--ink-3)" class="mono">
+          <span>now</span><span>’28</span><span>’30</span><span>’32</span><span>’34</span><span style="color:var(--em-hi)">’36</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="glass s4 card-pad rv d4">
+      <div class="card-head"><span class="card-title">The method</span><span class="cap">4 / 7</span></div>
+      <div class="seq">
+        <div class="seq-row done"><span class="seq-n">✓</span><span class="seq-name">Starter buffer</span></div>
+        <div class="seq-row done"><span class="seq-n">✓</span><span class="seq-name">Capture free money</span></div>
+        <div class="seq-row done"><span class="seq-n">✓</span><span class="seq-name">Kill high-interest debt</span></div>
+        <div class="seq-row"><span class="seq-n">4</span><span class="seq-name">Full emergency fund</span><span class="seq-bar"><i style="width:50%"></i></span><span class="seq-pct mono">50%</span></div>
+        <div class="seq-row"><span class="seq-n">5</span><span class="seq-name">Tax-advantaged investing</span><span class="seq-bar"><i style="width:35%"></i></span><span class="seq-pct mono">35%</span></div>
+        <div class="seq-row"><span class="seq-n">6</span><span class="seq-name">Broad index investing</span><span class="seq-bar"><i style="width:82%"></i></span><span class="seq-pct mono">∞</span></div>
+        <div class="seq-row queued"><span class="seq-n">7</span><span class="seq-name">Goal &amp; taxable investing</span></div>
+      </div>
+    </div>
+
+    <div class="glass s8 card-pad rv d5">
+      <div class="card-head"><span class="card-title">Spending — April</span><span class="cap mono">79 665 Kč · avg 15.9k /wk</span></div>
+      <div class="wk"><span class="wk-l mono">Wk 1</span><span class="wk-track"><i style="width:34%;background:#6366f1"></i><i style="width:18%;background:#f59e0b"></i><i style="width:14%;background:#d946ef"></i><i style="width:11%;background:#3b82f6"></i><i style="width:8%;background:#22c55e"></i></span><span class="wk-v mono hot">40.3k</span></div>
+      <div class="wk"><span class="wk-l mono">Wk 2</span><span class="wk-track"><i style="width:12%;background:#f59e0b"></i><i style="width:9%;background:#14b8a6"></i><i style="width:7%;background:#f97316"></i><i style="width:5%;background:#3b82f6"></i></span><span class="wk-v mono">16.4k</span></div>
+      <div class="wk"><span class="wk-l mono">Wk 3</span><span class="wk-track"><i style="width:9%;background:#f59e0b"></i><i style="width:6%;background:#eab308"></i><i style="width:5%;background:#94a3b8"></i></span><span class="wk-v mono">11.2k</span></div>
+      <div class="wk"><span class="wk-l mono">Wk 4</span><span class="wk-track"><i style="width:8%;background:#f59e0b"></i><i style="width:5%;background:#f97316"></i><i style="width:4%;background:#94a3b8"></i></span><span class="wk-v mono">10.2k</span></div>
+      <div class="wk"><span class="wk-l mono">Wk 5</span><span class="wk-track"><i style="width:2%;background:#3b82f6"></i></span><span class="wk-v mono">0.8k</span></div>
+    </div>
+
+    <div class="glass s4 card-pad rv d5">
+      <div class="card-head"><span class="card-title">vs March</span><span class="cap">net change</span></div>
+      <div class="diff-head" style="margin-bottom:10px"><span class="n mono">+1 100 Kč</span></div>
+      <div class="diff-row"><span style="color:var(--ink-3)">Income</span><span class="mono" style="font-size:12px">107k → 106k <span class="dd bad">−1.3k</span></span></div>
+      <div class="diff-row"><span style="color:var(--ink-3)">Expenses</span><span class="mono" style="font-size:12px">90.2k → 87.9k <span class="dd good">−2.3k</span></span></div>
+      <div class="diff-row"><span>Groceries</span><span class="dd good mono">−2.2k</span></div>
+      <div class="diff-row"><span>Shopping</span><span class="dd good mono">−1.6k</span></div>
+      <div class="diff-row"><span>Eating out</span><span class="dd bad mono">+1.1k</span></div>
+    </div>
+
+    <div class="glass s6 card-pad rv d6">
+      <div class="card-head"><span class="card-title">Savings programs</span><span class="cap mono">16.4k Kč total</span></div>
+      <div style="display:flex;gap:22px;align-items:center">
+        <div class="donut"><b class="mono">16.4k</b></div>
+        <div style="flex:1">
+          <div class="diff-row"><span style="display:flex;align-items:center;gap:8px"><span style="width:9px;height:9px;border-radius:50%;background:#6595ee;box-shadow:0 0 10px #6595ee"></span>Building savings ČS</span><span class="mono" style="font-size:12px">4.7k /mo · <span style="color:var(--ink-3)">9.4k</span></span></div>
+          <div class="diff-row"><span style="display:flex;align-items:center;gap:8px"><span style="width:9px;height:9px;border-radius:50%;background:#34c891;box-shadow:0 0 10px #34c891"></span>DIP — investiční účet</span><span class="mono" style="font-size:12px">3.5k /mo · <span style="color:var(--ink-3)">7.0k</span></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="glass s6 card-pad rv d6">
+      <div class="card-head"><span class="card-title">Savings pots</span><button class="btn-glass" style="padding:6px 13px;font-size:11px">+ Add pot</button></div>
+      <div class="pot-row"><div class="pot-t"><span>Standing desk</span><span class="pot-eta mono">54% · Aug ’26</span></div><div class="bar"><i style="width:54%"></i></div></div>
+      <div class="pot-row"><div class="pot-t"><span>Japan trip · spring</span><span class="pot-eta mono">35% · Feb ’27</span></div><div class="bar"><i style="width:35%"></i></div></div>
+      <div class="pot-row"><div class="pot-t"><span>New laptop</span><span class="pot-eta mono">43% · Jan ’27</span></div><div class="bar"><i style="width:43%"></i></div></div>
+    </div>
+
+    <div class="s12 rv d7">
+      <div class="pillars">
+        <div class="glass pillar warn"><span class="state">Close</span><div class="cap">Savings rate</div><div class="m mono">~18 %</div><div class="n2">target ≥ 20 %</div></div>
+        <div class="glass pillar"><span class="state">Almost</span><div class="cap">Emergency fund</div><div class="m mono">5 mo</div><div class="n2">target 6 months</div></div>
+        <div class="glass pillar"><span class="state">On track</span><div class="cap">Monthly invest</div><div class="m mono">€300</div><div class="n2">regular DCA plan</div></div>
+        <div class="glass pillar"><span class="state">Growing</span><div class="cap">Net worth trend</div><div class="m mono">+€1 200 /mo</div><div class="n2">12-month average</div></div>
+      </div>
+    </div>
+
+    <div class="glass s12 card-pad rv d8">
+      <div class="card-head"><span class="card-title">Where it goes</span><span class="cap">April · by category</span></div>
+      <div class="cats">
+        <div class="cat" style="color:#818cf8"><div class="h"><span class="dot"></span>Housing</div><div class="v mono">30 550 Kč</div><div class="bar"><i style="width:100%"></i></div></div>
+        <div class="cat" style="color:#fbbf24"><div class="h"><span class="dot"></span>Groceries</div><div class="v mono">12 220 Kč</div><div class="bar"><i style="width:40%"></i></div></div>
+        <div class="cat" style="color:#fb923c"><div class="h"><span class="dot"></span>Shopping</div><div class="v mono">8 930 Kč</div><div class="bar"><i style="width:29%"></i></div></div>
+        <div class="cat" style="color:#facc15"><div class="h"><span class="dot"></span>Eating out</div><div class="v mono">6 110 Kč</div><div class="bar"><i style="width:20%"></i></div></div>
+        <div class="cat" style="color:#2dd4bf"><div class="h"><span class="dot"></span>Home</div><div class="v mono">5 170 Kč</div><div class="bar"><i style="width:17%"></i></div></div>
+        <div class="cat" style="color:#94a3b8"><div class="h"><span class="dot"></span>Other</div><div class="v mono">4 700 Kč</div><div class="bar"><i style="width:15%"></i></div></div>
+        <div class="cat" style="color:#60a5fa"><div class="h"><span class="dot"></span>Transport</div><div class="v mono">4 230 Kč</div><div class="bar"><i style="width:14%"></i></div></div>
+        <div class="cat" style="color:#4ade80"><div class="h"><span class="dot"></span>Health</div><div class="v mono">3 525 Kč</div><div class="bar"><i style="width:12%"></i></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

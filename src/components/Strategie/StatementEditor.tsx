@@ -42,6 +42,10 @@ export interface StatementEditorProps {
   onClose: () => void;
   /** Open the "Bring in a bank statement" modal as soon as the editor mounts. */
   defaultImportOpen?: boolean;
+  initialWeek?: number | null;
+  initialRange?: { startIso: string; endIso: string } | null;
+  initialBulk?: boolean;
+  initialIds?: string[] | null;
 }
 
 type MemEditorState = {
@@ -55,7 +59,11 @@ type MemEditorState = {
   monoTouched: boolean;
 };
 
-export function StatementEditor({ statements, currency, memberships, savingsPlans = [], onSave, onClose, defaultImportOpen = false }: StatementEditorProps) {
+export function StatementEditor({
+  statements, currency, memberships, savingsPlans = [],
+  onSave, onClose, defaultImportOpen = false,
+  initialWeek = null, initialRange = null, initialBulk = false, initialIds = null,
+}: StatementEditorProps) {
   const cur = CURRENCIES[currency] ?? CURRENCIES["USD"];
   const sym = cur.code === "CZK" ? "Kč" : cur.code === "EUR" ? "€" : "$";
 
@@ -73,14 +81,19 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
   );
   const [keys, setKeys] = useState<string[]>([...statements.order]);
   const [viewKey, setViewKey] = useState(statements.current);
-  const [gran, setGran] = useState<"month" | "week">("month");
+  const [gran, setGran] = useState<"month" | "week">(initialRange ? "month" : initialWeek ? "week" : "month");
   // full-screen mode (same footprint as the import's review view) — toggled
   // by clicking the Spending column header
   const [maximized, setMaximized] = useState(false);
-  const [weekIdx, setWeekIdx] = useState(1);
+  const [weekIdx, setWeekIdx] = useState(initialWeek ?? 1);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(defaultImportOpen);
-  const [bulkOpen, setBulkOpen] = useState(false);
+  const [range, setRange] = useState<{ startIso: string; endIso: string } | null>(initialRange);
+  const [bulkFilter, setBulkFilter] = useState<{
+    range: { startIso: string; endIso: string } | null;
+    ids: string[] | null;
+  } | null>(initialBulk ? { range: initialRange, ids: initialIds } : null);
+  const [bulkOpen, setBulkOpen] = useState(initialBulk);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
   const [members, setMembers] = useState<MembershipRow[]>(() => memberships.map((m) => ({ ...m })));
@@ -129,15 +142,27 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
   const weekSpend = weekTotals[safeWeek - 1] || 0;
   const avgWeek = weeks.length ? expenseBase / weeks.length : 0;
   const activeWeek = weeks[safeWeek - 1] || weeks[0];
-  const defaultDay = gran === "week" && activeWeek ? activeWeek.startDay : Math.min(dim, 15);
+  const rangeActive = !!range && gran !== "week" && range.startIso.slice(0, 7) === viewKey;
+  const inRange = (r: ExpenseRow) => !rangeActive || (r.date && r.date >= range.startIso && r.date <= range.endIso);
+  const defaultDay = gran === "week" && activeWeek
+    ? activeWeek.startDay
+    : rangeActive
+      ? Number(range.startIso.slice(8, 10))
+      : Math.min(dim, 15);
 
   const sortedEx = [...cm.expenses].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
   const shownEx = gran === "week"
     ? sortedEx.filter((r) => weekOfDate(viewKey, r.date) === safeWeek)
-    : sortedEx;
-  const expShownSum = gran === "week" ? weekSpend : expenseBase;
+    : sortedEx.filter(inRange);
+  const expShownSum = gran === "week" ? weekSpend : shownEx.reduce((a, r) => a + (r.amt || 0), 0);
+  const fmtRangeDay = (iso: string) => `${Number(iso.slice(8, 10))}.`;
+  const rangeLabel = rangeActive
+    ? (range.startIso === range.endIso
+        ? `${fmtRangeDay(range.startIso)} ${monthAbbr(viewKey)}`
+        : `${fmtRangeDay(range.startIso)}–${fmtRangeDay(range.endIso)} ${monthAbbr(viewKey)}`)
+    : null;
 
-  const pickWeek = (i: number) => { setWeekIdx(i); setGran("week"); };
+  const pickWeek = (i: number) => { setWeekIdx(i); setGran("week"); setRange(null); };
 
   const idx = keys.indexOf(viewKey);
   const canPrev = idx > 0;
@@ -573,17 +598,34 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
                 Spending
                 {gran === "week" && activeWeek
                   ? <small className="se-col-hint">{activeWeek.label} · {activeWeek.range}</small>
-                  : <small className="se-col-hint">dated</small>}
+                  : rangeActive
+                    ? (
+                      <button
+                        type="button"
+                        className="se-rangechip"
+                        onClick={(e) => { e.stopPropagation(); setRange(null); }}
+                        title="Showing only the days you selected on the chart — click to show the whole month"
+                      >
+                        {rangeLabel} · {shownEx.length} item{shownEx.length === 1 ? "" : "s"} <IcoX />
+                      </button>
+                    )
+                    : <small className="se-col-hint">dated</small>}
                 <span className="se-expand-glyph" aria-hidden="true">{maximized ? "⤡" : "⤢"}</span>
               </span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
                 <button
                   className="si-link"
-                  onClick={(e) => { e.stopPropagation(); setBulkOpen(true); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setBulkFilter({ range: rangeActive ? range : null, ids: null });
+                    setBulkOpen(true);
+                  }}
                   disabled={cm.expenses.length === 0}
-                  title="Open this month's expenses in the big review table — sort, drag-select, bulk-rewrite"
+                  title={rangeActive
+                    ? "Open the selected days in the big review table — sort, drag-select, bulk-rewrite"
+                    : "Open this month's expenses in the big review table — sort, drag-select, bulk-rewrite"}
                 >
-                  <IcoPencil /> Bulk edit
+                  <IcoPencil /> Bulk edit{rangeActive ? " selection" : ""}
                 </button>
                 <span className="se-col-sum">{fmt(expShownSum)}</span>
               </span>
@@ -672,12 +714,15 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
                 <div className="se-empty">
                   {gran === "week" && activeWeek
                     ? `Nothing spent in ${activeWeek.label} — add a row or pick another week.`
-                    : "Nothing spent yet — add a row."}
+                    : rangeActive
+                      ? `Nothing spent on ${rangeLabel} — add a row or clear the filter.`
+                      : "Nothing spent yet — add a row."}
                 </div>
               )}
             </div>
             <button className="se-add" onClick={addExpense}>
-              <IcoPlus /> Add expense{gran === "week" && activeWeek ? " in " + activeWeek.label : ""}
+              <IcoPlus /> Add expense
+              {gran === "week" && activeWeek ? ` in ${activeWeek.label}` : rangeActive ? ` on ${rangeLabel}` : ""}
             </button>
           </section>
         </div>
@@ -705,6 +750,18 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
                     </div>
                   );
                 })()}
+              </>
+            ) : rangeActive ? (
+              <>
+                <div className="se-tally"><span className="se-tally-lab">{rangeLabel} spent</span><b>{fmt(expShownSum)}</b></div>
+                <span className="se-op">·</span>
+                <div className="se-tally"><span className="se-tally-lab">Whole month</span><b>{fmt(expenseBase)}</b></div>
+                <span className="se-op">=</span>
+                <div className="se-tally se-tally--net">
+                  <span className="se-tally-lab">Share of month</span>
+                  <b>{expenseBase > 0 ? Math.round((expShownSum / expenseBase) * 100) : 0}%</b>
+                  <small>{shownEx.length} item{shownEx.length === 1 ? "" : "s"} in selection</small>
+                </div>
               </>
             ) : (
               <>
@@ -738,19 +795,37 @@ export function StatementEditor({ statements, currency, memberships, savingsPlan
         onImport={handleImport}
       />
     )}
-    {bulkOpen && (
-      <StatementImport
-        currency={currency}
-        savingsPlans={savingsPlans}
-        editRows={{ monthKey: viewKey, expenses: cm.expenses }}
-        onApplyEdits={(mk, expenses) => {
-          setDraft((d) => ({ ...d, [mk]: { ...d[mk], expenses } }));
-          setBulkOpen(false);
-        }}
-        onClose={() => setBulkOpen(false)}
-        onImport={() => {}}
-      />
-    )}
+    {bulkOpen && (() => {
+      const br = bulkFilter?.range ?? null;
+      const idSet = bulkFilter?.ids?.length ? new Set(bulkFilter.ids) : null;
+      const inBulk = (r: ExpenseRow) => (idSet ? idSet.has(r.id) : (!br || (r.date && r.date >= br.startIso && r.date <= br.endIso)));
+      const scoped = cm.expenses.filter(inBulk);
+      const dayLab = br
+        ? (br.startIso === br.endIso
+            ? `${Number(br.startIso.slice(8, 10))}. ${monthAbbr(viewKey)}`
+            : `${Number(br.startIso.slice(8, 10))}.–${Number(br.endIso.slice(8, 10))}. ${monthAbbr(viewKey)}`)
+        : null;
+      const scopeLabel = dayLab
+        ? `${dayLab}${idSet ? ` · amount band · ${scoped.length} row${scoped.length === 1 ? "" : "s"}` : ""}`
+        : undefined;
+      return (
+        <StatementImport
+          currency={currency}
+          savingsPlans={savingsPlans}
+          editRows={{ monthKey: viewKey, expenses: scoped, scopeLabel }}
+          onApplyEdits={(mk, expenses) => {
+            setDraft((d) => ({
+              ...d,
+              [mk]: { ...d[mk], expenses: d[mk].expenses.filter((r) => !inBulk(r)).concat(expenses) },
+            }));
+            setBulkOpen(false);
+            setBulkFilter(null);
+          }}
+          onClose={() => { setBulkOpen(false); setBulkFilter(null); }}
+          onImport={() => {}}
+        />
+      );
+    })()}
     </>
   );
 }

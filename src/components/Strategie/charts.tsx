@@ -1,34 +1,64 @@
-import { useRef, useState } from "react";
-import { niceCeil, project, fmtMoney, monthAbbr, STMT_CATS, CAT_KEYS } from "./strategie";
+import { useRef, useState, useEffect, Fragment } from "react";
+import { createPortal } from "react-dom";
+import {
+  niceCeil, project, fmtMoney, monthAbbr, STMT_CATS, CAT_KEYS,
+  dayStr, weekOfDate,
+} from "./strategie";
 import type { CatKey, MonthStatement } from "../../types/grid";
 
-interface SpendItem { label: string; cat: CatKey; amt: number; day: string; }
-const TIP_MAX_ITEMS = 24;
+interface SpendItem { id?: string; label: string; cat: CatKey; amt: number; day: string; }
 
-/** Per-day spending: stacked bars, one stack segment per category. Accepts one
- *  or more consecutive months (the range selector concatenates them on one
- *  axis). `hidden` categories are left out of bars, totals, scale and average.
- *  H matches the projection face's chart+controls envelope so the flip card's
- *  back face fills the same height (no dead space under the chart). */
-export function DailySpendChart({ months, cur, hidden = [] }: {
+const SPEND_TIP_MAX_ITEMS = 24;
+
+export interface SpendRangeOpenInfo {
+  monthKey: string;
+  week: number | null;
+  startIso: string;
+  endIso: string;
+  ids: string[] | null;
+}
+
+interface SelState {
+  a: number;
+  b: number;
+  yT: number;
+  yB: number;
+  fullY: boolean;
+}
+
+/** Per-day spending: stacked bars, one stack segment per category. */
+export function DailySpendChart({ months, cur, hidden = [], activeKey, onOpenRange }: {
   months: { key: string; stmt: MonthStatement }[];
   cur: string;
   hidden?: CatKey[];
+  activeKey?: string;
+  onOpenRange?: (info: SpendRangeOpenInfo) => void;
 }) {
-  const W = 760; const H = 330;
+  const W = 760;
+  const H = 330;
   const PAD = { top: 16, right: 20, bottom: 28, left: 52 };
   const cw = W - PAD.left - PAD.right;
   const ch = H - PAD.top - PAD.bottom;
-
   const hiddenSet = new Set(hidden);
 
-  // hover tooltip: which column, where (px within the rendered chart)
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const [tip, setTip] = useState<{ col: number; x: number; y: number; flipX: boolean; flipY: boolean } | null>(null);
+  const uidRef = useRef(`dsp${Math.random().toString(36).slice(2, 7)}`);
+  const [tip, setTip] = useState<{ col: number; cx: number; cy: number; flipX: boolean; flipY: boolean } | null>(null);
+  const [sel, setSel] = useState<SelState | null>(null);
+  const [focus, setFocus] = useState<{ a: number; b: number } | null>(null);
+  const [preset, setPreset] = useState<"1m" | "3m" | "6m" | "all" | "custom">("all");
+  const [dragTip, setDragTip] = useState<{ xPct: number; label: string } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef<{ anchor: number; anchorY: number; moved: boolean } | null>(null);
+  const trackElRef = useRef<HTMLDivElement | null>(null);
 
-  // concatenate the months' calendars into one day axis, bucketing dated
-  // expenses into day × category (base amounts) and keeping the rows
-  // themselves per day for the hover breakdown
+  useEffect(() => {
+    if (!tip) return;
+    const clear = () => setTip(null);
+    window.addEventListener("scroll", clear, true);
+    return () => window.removeEventListener("scroll", clear, true);
+  }, [tip]);
+
   const days: Partial<Record<CatKey, number>>[] = [];
   const dayItems: SpendItem[][] = [];
   const dayLabel: string[] = [];
@@ -45,12 +75,12 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
       dayLabel.push(months.length > 1 ? `${monthAbbr(key)} ${d}` : `${d}.`);
     }
     for (const e of stmt.expenses) {
-      if (e.savingsPlanId) continue; // savings contributions are transfers, not spending
+      if (e.savingsPlanId) continue;
       if (hiddenSet.has(e.cat)) continue;
       const d = e.date?.startsWith(key) ? Number(e.date.slice(8, 10)) : 0;
       if (d >= 1 && d <= dim) {
         days[base + d - 1][e.cat] = (days[base + d - 1][e.cat] ?? 0) + e.amt;
-        dayItems[base + d - 1].push({ label: e.label, cat: e.cat, amt: e.amt, day: dayLabel[base + d - 1] });
+        dayItems[base + d - 1].push({ id: e.id, label: e.label, cat: e.cat, amt: e.amt, day: dayLabel[base + d - 1] });
       } else {
         undated += e.amt;
       }
@@ -67,12 +97,10 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
     );
   }
 
-  // long ranges (6 months+) get one column per calendar week (Monday-aligned)
-  // instead of per day — daily slivers stop being readable around there
   const weekly = months.length >= 6;
   const [y0, m0] = months[0].key.split("-").map(Number);
   const startDate = new Date(y0, (m0 || 1) - 1, 1);
-  const offset = weekly ? (startDate.getDay() + 6) % 7 : 0; // days since Monday
+  const offset = weekly ? (startDate.getDay() + 6) % 7 : 0;
   const unit = weekly ? 7 : 1;
   const totalCols = Math.ceil((totalDays + offset) / unit);
   const colIdxOf = (dayIdx: number) => Math.floor((dayIdx + offset) / unit);
@@ -86,23 +114,280 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
     }
   });
   const colTotals = cols.map((d) => CAT_KEYS.reduce((s, k) => s + (d[k] ?? 0), 0));
-  // all expense rows behind each column, biggest first (for the hover popup)
   const colItems: SpendItem[][] = Array.from({ length: totalCols }, () => []);
   dayItems.forEach((items, i) => { colItems[colIdxOf(i)].push(...items); });
   for (const items of colItems) items.sort((a, b) => b.amt - a.amt);
 
-  // one handler on the svg: wrapper-relative coords (offsetX on svg children is
-  // relative to the child, not the chart), column derived from the x position —
-  // the popup tracks the mouse anywhere over the chart, gaps included
-  const onSvgMove = (e: React.MouseEvent<SVGSVGElement>) => {
+  const monthKeys = months.map((m) => m.key).join(",");
+  const hiddenKey = hidden.join(",");
+  useEffect(() => { setSel(null); setFocus(null); setPreset("all"); }, [monthKeys, hiddenKey]);
+  useEffect(() => { setSel(null); }, [focus ? `${focus.a}-${focus.b}` : ""]);
+
+  const fA = focus ? Math.max(0, Math.min(focus.a, totalCols - 1)) : 0;
+  const fB = focus ? Math.max(fA, Math.min(focus.b, totalCols - 1)) : totalCols - 1;
+  const visCount = fB - fA + 1;
+  const visTotals = colTotals.slice(fA, fB + 1);
+  const yMaxAll = Math.max(...colTotals, 1);
+  const trueMax = Math.max(...visTotals, 1);
+  let yMax = trueMax;
+  const nz = visTotals.filter((v) => v > 0).sort((a, b) => a - b);
+  if (nz.length >= 5) {
+    const p85 = nz[Math.min(nz.length - 1, Math.floor(nz.length * 0.85))];
+    if (trueMax > p85 * 2.4) yMax = niceCeil(p85 * 1.2);
+  }
+  const axisCapped = trueMax > yMax + 1;
+  const avg = visTotals.reduce((a, b) => a + b, 0) / visCount;
+  const yOf = (v: number) => PAD.top + ch - (Math.min(v, yMax) / yMax) * ch;
+  const slot = cw / visCount;
+  const barW = Math.max(1.5, slot * 0.62);
+  const xOf = (col: number) => PAD.left + (col - fA) * slot + (slot - barW) / 2;
+  const colPosOf = (dayIdx: number) => (dayIdx + offset) / unit;
+
+  const colSegs = cols.map((d) => {
+    const segs: Partial<Record<CatKey, [number, number]>> = {};
+    let acc = 0;
+    for (const k of CAT_KEYS) {
+      const v = d[k] ?? 0;
+      if (v <= 0) continue;
+      const yA = yOf(acc);
+      acc += v;
+      const yB = yOf(acc);
+      segs[k] = [yB, yA];
+    }
+    return segs;
+  });
+
+  const bandHit = (i: number, k: CatKey) => {
+    if (!sel || sel.fullY) return true;
+    const s = colSegs[i][k];
+    return !!s && s[0] <= sel.yB && s[1] >= sel.yT;
+  };
+
+  const itemsInSel = (s: SelState) => {
+    const out: SpendItem[] = [];
+    for (let i = s.a; i <= s.b; i++) {
+      for (const it of colItems[i]) {
+        if (bandHit(i, it.cat)) out.push(it);
+      }
+    }
+    return out;
+  };
+
+  const colAt = (clientX: number) => {
     const rect = wrapRef.current?.getBoundingClientRect();
-    if (!rect || rect.width === 0) return;
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const vx = (x / rect.width) * W; // CSS px → viewBox units
-    const col = Math.floor((vx - PAD.left) / slot);
-    if (col < 0 || col >= totalCols || colTotals[col] <= 0) { setTip(null); return; }
-    setTip({ col, x, y, flipX: x > rect.width * 0.6, flipY: y > rect.height * 0.45 });
+    if (!rect || rect.width === 0) return null;
+    const vx = ((clientX - rect.left) / rect.width) * W;
+    const col = fA + Math.floor((vx - PAD.left) / slot);
+    return col >= fA && col <= fB ? col : null;
+  };
+
+  const pyAt = (clientY: number) => {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (!rect || rect.height === 0) return null;
+    const vy = ((clientY - rect.top) / rect.height) * H;
+    return Math.max(PAD.top, Math.min(PAD.top + ch, vy));
+  };
+
+  const onSvgMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const col = colAt(e.clientX);
+    if (dragRef.current && (e.buttons & 1) && col !== null) {
+      const py = pyAt(e.clientY);
+      if (py === null) return;
+      const d = dragRef.current;
+      if (col !== d.anchor || Math.abs(py - d.anchorY) > 14) d.moved = true;
+      if (d.moved) {
+        const fullY = Math.abs(py - d.anchorY) <= 14;
+        setSel({
+          a: Math.min(d.anchor, col),
+          b: Math.max(d.anchor, col),
+          yT: Math.min(d.anchorY, py),
+          yB: Math.max(d.anchorY, py),
+          fullY,
+        });
+      }
+    }
+    if (col === null) { setTip(null); return; }
+    setTip({
+      col,
+      cx: e.clientX,
+      cy: e.clientY,
+      flipX: e.clientX > window.innerWidth * 0.62,
+      flipY: e.clientY > window.innerHeight * 0.55,
+    });
+  };
+
+  const openSelection = (s: SelState) => {
+    if (!onOpenRange) return;
+    const dayA = unit === 1 ? s.a : Math.max(0, s.a * 7 - offset);
+    const dayB = unit === 1 ? s.b : Math.min(totalDays - 1, s.b * 7 - offset + 6);
+    const locate = (dayIdx: number) => {
+      for (let i = monthStarts.length - 1; i >= 0; i--) {
+        const ms = monthStarts[i];
+        if (dayIdx >= ms.idx) return { key: ms.key, day: dayIdx - ms.idx + 1 };
+      }
+      return { key: monthStarts[0].key, day: 1 };
+    };
+    const A = locate(dayA);
+    const B = locate(dayB);
+    let week: number | null = null;
+    if (A.key === B.key) {
+      const wA = weekOfDate(A.key, dayStr(A.key, A.day));
+      const wB = weekOfDate(B.key, dayStr(B.key, B.day));
+      if (wA === wB) week = wA;
+    }
+    const ids = s.fullY ? null : [...new Set(itemsInSel(s).map((it) => it.id).filter(Boolean))] as string[];
+    onOpenRange({
+      monthKey: A.key,
+      week,
+      startIso: dayStr(A.key, A.day),
+      endIso: dayStr(B.key, B.day),
+      ids: ids?.length ? ids : null,
+    });
+  };
+
+  const onSvgDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (e.button !== 0) return;
+    const col = colAt(e.clientX);
+    if (col === null) return;
+    const py = pyAt(e.clientY);
+    if (py === null) return;
+    dragRef.current = { anchor: col, anchorY: py, moved: false };
+  };
+
+  const onSvgUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d) return;
+    const col = colAt(e.clientX);
+    if (d.moved) return;
+    if (sel && col !== null && col >= sel.a && col <= sel.b) { openSelection(sel); return; }
+    if (col !== null && sel === null) {
+      setSel({ a: col, b: col, fullY: true, yT: PAD.top, yB: PAD.top + ch });
+      return;
+    }
+    setSel(null);
+  };
+
+  // ── period-focus timeline ──
+  const monthBoundaryCols = monthStarts.map((ms) => colIdxOf(ms.idx));
+  const monthColRange = (key: string) => {
+    const ms = monthStarts.find((m) => m.key === key);
+    if (!ms) return null;
+    return { a: colIdxOf(ms.idx), b: Math.min(totalCols - 1, colIdxOf(ms.idx + ms.dim - 1)) };
+  };
+  const applyPreset = (id: "1m" | "3m" | "6m" | "all") => {
+    setPreset(id);
+    if (id === "all") { setFocus(null); return; }
+    if (id === "1m") {
+      const r = (activeKey && monthColRange(activeKey)) || monthColRange(monthStarts[monthStarts.length - 1].key);
+      setFocus(r ?? null);
+      return;
+    }
+    const n = id === "3m" ? 3 : 6;
+    const ms = monthStarts.slice(-n);
+    setFocus(ms.length ? { a: colIdxOf(ms[0].idx), b: totalCols - 1 } : null);
+  };
+  const snapCol = (c: number) => {
+    // magnetise to month boundaries (start cols and range end)
+    const targets = [...monthBoundaryCols, totalCols - 1];
+    for (const t of targets) if (Math.abs(c - t) === 1) return t;
+    return c;
+  };
+
+  const brushColAt = (clientX: number) => {
+    const r = trackElRef.current?.getBoundingClientRect();
+    if (!r || r.width === 0) return 0;
+    const f = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+    return Math.round(f * (totalCols - 1));
+  };
+
+  const onBrushDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const col = brushColAt(e.clientX);
+    const nearA = Math.abs(col - fA);
+    const nearB = Math.abs(col - fB);
+    let mode: "new" | "a" | "b" | "move";
+    if (!focus) mode = "new";
+    else if (nearA <= 1 && nearA <= nearB) mode = "a";
+    else if (nearB <= 1) mode = "b";
+    else if (col > fA && col < fB) mode = "move";
+    else mode = "new";
+    const st = { mode, startCol: col, fA, fB };
+    setDragging(true);
+    const scrub = (clientX: number, c: number) => {
+      const r = trackElRef.current?.getBoundingClientRect();
+      if (r) setDragTip({ xPct: Math.max(2, Math.min(98, ((clientX - r.left) / r.width) * 100)), label: colLabel(c) });
+    };
+    const move = (ev: PointerEvent) => {
+      const c = brushColAt(ev.clientX);
+      scrub(ev.clientX, c);
+      if (st.mode === "new") {
+        const a = Math.min(st.startCol, c);
+        const b = Math.max(st.startCol, c);
+        if (b - a >= 1) { setFocus({ a, b }); setPreset("custom"); }
+      } else if (st.mode === "a") {
+        setFocus({ a: Math.min(c, st.fB - 1), b: st.fB }); setPreset("custom");
+      } else if (st.mode === "b") {
+        setFocus({ a: st.fA, b: Math.max(c, st.fA + 1) }); setPreset("custom");
+      } else {
+        const delta = c - st.startCol;
+        const w = st.fB - st.fA;
+        let a = st.fA + delta;
+        a = Math.max(0, Math.min(a, totalCols - 1 - w));
+        setFocus({ a, b: a + w }); setPreset("custom");
+      }
+    };
+    const up = () => {
+      setDragging(false);
+      setDragTip(null);
+      // month-boundary magnetism on release
+      setFocus((f) => (f ? { a: snapCol(f.a), b: snapCol(f.b) } : f));
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    move(e.nativeEvent);
+  };
+
+  const onBrushWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (totalCols <= 3) return;
+    e.preventDefault();
+    const c = brushColAt(e.clientX);
+    const zoomIn = e.deltaY < 0;
+    const a0 = focus ? fA : 0;
+    const b0 = focus ? fB : totalCols - 1;
+    const w = b0 - a0;
+    const step = Math.max(1, Math.round(w * 0.15));
+    let a: number, b: number;
+    if (zoomIn) {
+      if (w <= 2) return;
+      const bias = (c - a0) / Math.max(w, 1);
+      a = Math.min(c - 1, a0 + Math.round(step * bias));
+      b = Math.max(c + 1, b0 - Math.round(step * (1 - bias)));
+    } else {
+      a = Math.max(0, a0 - step);
+      b = Math.min(totalCols - 1, b0 + step);
+    }
+    if (a === 0 && b === totalCols - 1) { applyPreset("all"); return; }
+    setFocus({ a, b: Math.max(b, a + 1) });
+    setPreset("custom");
+  };
+
+  const onBrushKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!focus) return;
+    const step = e.shiftKey ? 7 : 1;
+    let d = 0;
+    if (e.key === "ArrowLeft") d = -step;
+    else if (e.key === "ArrowRight") d = step;
+    else if (e.key === "Escape") { applyPreset("all"); return; }
+    else return;
+    e.preventDefault();
+    const w = fB - fA;
+    const a = Math.max(0, Math.min(fA + d, totalCols - 1 - w));
+    setFocus({ a, b: a + w });
+    setPreset("custom");
   };
 
   const colLabel = (c: number): string => {
@@ -111,110 +396,243 @@ export function DailySpendChart({ months, cur, hidden = [] }: {
     return `wk of ${monday.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
   };
 
-  // scale to the data: the tallest column IS the top of the chart (no rounded-up headroom)
-  const yMax = Math.max(...colTotals, 1);
-  const avg = rangeTotal / totalCols;
-  const yOf = (v: number) => PAD.top + ch - (v / yMax) * ch;
-  const slot = cw / totalCols;
-  const barW = Math.max(1.5, slot * 0.62);
-  const xOf = (col: number) => PAD.left + col * slot + (slot - barW) / 2;
-  // day-index → fractional column position, for month labels / boundary lines
-  const colPosOf = (dayIdx: number) => (dayIdx + offset) / unit;
-
   const fmt = (v: number) => fmtMoney(v, cur, { abbr: true });
   const avgY = yOf(avg);
   const yTicks = 5;
-  const singleDim = monthStarts[0]?.dim ?? 31;
-  const xLabelDays = [1, 5, 10, 15, 20, 25, singleDim].filter((d, i, a) => d <= singleDim && a.indexOf(d) === i);
+  const tickStep = Math.max(1, Math.ceil(visCount / 8));
+  const dayTicks: number[] = [];
+  for (let c = fA; c <= fB; c += tickStep) dayTicks.push(c);
+  if (dayTicks[dayTicks.length - 1] !== fB) dayTicks.push(fB);
 
   return (
     <div className="dsp-wrap" ref={wrapRef}>
-    <svg className="proj-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" onMouseMove={onSvgMove} onMouseLeave={() => setTip(null)}>
-      <g className="proj-grid">
+      <svg
+        className="proj-svg dsp-svg"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        onMouseMove={onSvgMove}
+        onMouseLeave={() => setTip(null)}
+        onPointerDown={onSvgDown}
+        onPointerUp={onSvgUp}
+      >
+        <g className="proj-grid">
+          {Array.from({ length: yTicks + 1 }, (_, i) => {
+            const v = (yMax / yTicks) * i;
+            return <line key={i} x1={PAD.left} y1={yOf(v)} x2={W - PAD.right} y2={yOf(v)} />;
+          })}
+        </g>
         {Array.from({ length: yTicks + 1 }, (_, i) => {
           const v = (yMax / yTicks) * i;
-          return <line key={i} x1={PAD.left} y1={yOf(v)} x2={W - PAD.right} y2={yOf(v)} />;
+          return <text key={i} className="proj-ylab" x={PAD.left - 6} y={yOf(v) + 4}>{v > 0 ? fmt(v) : "0"}</text>;
         })}
-      </g>
-      {Array.from({ length: yTicks + 1 }, (_, i) => {
-        const v = (yMax / yTicks) * i;
-        return <text key={i} className="proj-ylab" x={PAD.left - 6} y={yOf(v) + 4}>{v > 0 ? fmt(v) : "0"}</text>;
-      })}
-      {months.length === 1
-        ? xLabelDays.map((d) => (
-            <text key={d} className="proj-xlab" x={xOf(d - 1) + barW / 2} y={H - 4}>{d}</text>
-          ))
-        : monthStarts.map((ms) => (
-            <text key={ms.key} className="proj-xlab" x={PAD.left + colPosOf(ms.idx + ms.dim / 2) * slot} y={H - 4}>
-              {monthAbbr(ms.key)}
-            </text>
-          ))}
-      {months.length > 1 && monthStarts.slice(1).map((ms) => (
-        <line
-          key={ms.key}
-          className="dsp-mline"
-          x1={PAD.left + colPosOf(ms.idx) * slot} y1={PAD.top}
-          x2={PAD.left + colPosOf(ms.idx) * slot} y2={PAD.top + ch}
-        />
-      ))}
-      {cols.map((d, i) => {
-        if (colTotals[i] <= 0) return null;
-        let acc = 0;
-        return (
-          <g key={i}>
-            {CAT_KEYS.map((k) => {
-              const v = d[k] ?? 0;
-              if (v <= 0) return null;
-              const yA = yOf(acc);
-              acc += v;
-              const yB = yOf(acc);
+        {months.length === 1
+          ? dayTicks.map((c) => (
+              <text key={c} className="proj-xlab" x={xOf(c) + barW / 2} y={H - 4}>{c + 1}</text>
+            ))
+          : monthStarts.map((ms) => {
+              const px = PAD.left + (colPosOf(ms.idx + ms.dim / 2) - fA) * slot;
+              if (px < PAD.left - 4 || px > W - PAD.right + 4) return null;
               return (
-                <rect
-                  key={k}
-                  className="dsp-rect"
-                  x={xOf(i)} y={yB}
-                  width={barW} height={Math.max(1, yA - yB)}
-                  rx={1.5}
-                  fill={STMT_CATS[k].hue}
-                />
+                <text key={ms.key} className="proj-xlab" x={px} y={H - 4}>
+                  {monthAbbr(ms.key)}
+                </text>
               );
             })}
-          </g>
-        );
-      })}
-      <line className="spend-avgline" x1={PAD.left} y1={avgY} x2={W - PAD.right} y2={avgY} />
-      <text className="spend-avglab" x={PAD.left + 4} y={avgY - 5}>{weekly ? "avg/wk" : "avg/day"}</text>
-      {undated > 0 && (
-        <text className="proj-xlab" x={W - PAD.right} y={PAD.top - 4} style={{ fill: "var(--faint)", textAnchor: "end" }}>
-          +{fmt(undated)} without a date (not shown)
-        </text>
-      )}
-    </svg>
-    {tip && colItems[tip.col]?.length > 0 && (
-      <div
-        className="dsp-tip"
-        style={{
-          left: tip.x + 14,
-          top: tip.y + 14,
-          transform: `${tip.flipX ? "translateX(calc(-100% - 28px))" : ""} ${tip.flipY ? "translateY(calc(-100% - 28px))" : ""}`,
-        }}
-      >
-        <div className="dsp-tip-head">
-          <b>{colLabel(tip.col)}</b>
-          <span>{fmt(colTotals[tip.col])}</span>
-        </div>
-        {colItems[tip.col].slice(0, TIP_MAX_ITEMS).map((it, j) => (
-          <div key={j} className="dsp-tip-row">
-            <span className="dsp-cat-dot" style={{ background: (STMT_CATS[it.cat] || STMT_CATS.other).hue }} />
-            <span className="dsp-tip-lab">{weekly ? `${it.day} · ` : ""}{it.label || "—"}</span>
-            <span className="dsp-tip-amt">{fmt(it.amt)}</span>
-          </div>
-        ))}
-        {colItems[tip.col].length > TIP_MAX_ITEMS && (
-          <div className="dsp-tip-more">…+{colItems[tip.col].length - TIP_MAX_ITEMS} more</div>
+        {months.length > 1 && monthStarts.slice(1).map((ms) => {
+          const px = PAD.left + (colPosOf(ms.idx) - fA) * slot;
+          if (px < PAD.left || px > W - PAD.right) return null;
+          return (
+            <line
+              key={ms.key}
+              className="dsp-mline"
+              x1={px} y1={PAD.top}
+              x2={px} y2={PAD.top + ch}
+            />
+          );
+        })}
+        {sel && (
+          <rect
+            className="dsp-selrect"
+            x={PAD.left + (sel.a - fA) * slot + 1}
+            y={sel.fullY ? PAD.top - 4 : sel.yT}
+            width={(sel.b - sel.a + 1) * slot - 2}
+            height={sel.fullY ? ch + 8 : Math.max(4, sel.yB - sel.yT)}
+            rx={8}
+          />
         )}
-      </div>
-    )}
+        {cols.map((_, i) => {
+          if (i < fA || i > fB) return null;
+          if (colTotals[i] <= 0) return null;
+          const topY = yOf(colTotals[i]);
+          const clipId = `${uidRef.current}-${i}`;
+          const rad = Math.min(barW / 2, 6);
+          const dimmed = sel && (i < sel.a || i > sel.b);
+          return (
+            <g key={i} clipPath={`url(#${clipId})`} style={dimmed ? { opacity: 0.3 } : undefined}>
+              <clipPath id={clipId}>
+                <rect x={xOf(i)} y={topY} width={barW} height={Math.max(2, yOf(0) - topY)} rx={rad} ry={rad} />
+              </clipPath>
+              {CAT_KEYS.map((k) => {
+                const s = colSegs[i][k];
+                if (!s) return null;
+                const miss = sel && !dimmed && !bandHit(i, k);
+                return (
+                  <rect
+                    key={k}
+                    className="dsp-rect"
+                    x={xOf(i)} y={s[0]}
+                    width={barW} height={Math.max(1, s[1] - s[0])}
+                    style={miss ? { opacity: 0.18 } : undefined}
+                    fill={STMT_CATS[k].hue}
+                  />
+                );
+              })}
+            </g>
+          );
+        })}
+        {axisCapped && cols.map((_, i) => {
+          if (i < fA || i > fB || colTotals[i] <= yMax) return null;
+          const cx = xOf(i) + barW / 2;
+          return (
+            <g key={`ov${i}`} style={{ pointerEvents: "none" }}>
+              <path
+                d={`M${cx - 4},${PAD.top + 5} L${cx},${PAD.top + 1} L${cx + 4},${PAD.top + 5}`}
+                fill="none" stroke="var(--fg-2)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.65"
+              />
+            </g>
+          );
+        })}
+        <line className="spend-avgline" x1={PAD.left} y1={avgY} x2={W - PAD.right} y2={avgY} />
+        <text className="spend-avglab" x={PAD.left + 4} y={avgY - 5}>{weekly ? "avg/wk" : "avg/day"}</text>
+        {axisCapped && (
+          <text className="proj-xlab" x={W - PAD.right} y={PAD.top - 4} style={{ fill: "var(--faint)", textAnchor: "end" }}>
+            peak {fmt(trueMax)} ↑ (axis capped)
+          </text>
+        )}
+        {undated > 0 && !axisCapped && (
+          <text className="proj-xlab" x={W - PAD.right} y={PAD.top - 4} style={{ fill: "var(--faint)", textAnchor: "end" }}>
+            +{fmt(undated)} without a date (not shown)
+          </text>
+        )}
+      </svg>
+      {totalCols > 3 && (() => {
+        const visTotal = visTotals.reduce((a, b) => a + b, 0);
+        const visItems = colItems.slice(fA, fB + 1).reduce((a, arr) => a + arr.length, 0);
+        return (
+          <div className="dsp-brush">
+            <div className="dsp-brush-presets" role="group" aria-label="Period presets">
+              {([["1m", "1M"], ["3m", "3M"], ["6m", "6M"], ["all", "ALL"]] as const).map(([id, lab]) => (
+                <button key={id} type="button" className={`dsp-brush-preset${preset === id ? " on" : ""}`} onClick={() => applyPreset(id)}>{lab}</button>
+              ))}
+            </div>
+            <div
+              className={`dsp-brush-track${dragging ? " dragging" : ""}`}
+              ref={trackElRef}
+              tabIndex={0}
+              onKeyDown={onBrushKey}
+              onWheel={onBrushWheel}
+              onPointerDown={onBrushDown}
+              onDoubleClick={() => applyPreset("all")}
+              title="Drag to focus · edges resize · middle pans · double-click resets · ←/→ nudge (⇧ = week)"
+            >
+              <div className="dsp-brush-mini" aria-hidden="true">
+                {colTotals.map((t, i) => (
+                  <span
+                    key={i}
+                    className={focus && i >= fA && i <= fB ? "in" : ""}
+                    style={{ height: `${Math.max(9, (t / yMaxAll) * 100)}%` }}
+                  />
+                ))}
+              </div>
+              {monthStarts.length > 1 && monthStarts.map((ms, i) => {
+                const left = (colIdxOf(ms.idx) / totalCols) * 100;
+                const center = ((colIdxOf(ms.idx) + Math.min(totalCols - 1, colIdxOf(ms.idx + ms.dim - 1))) / 2 / totalCols) * 100;
+                return (
+                  <Fragment key={ms.key}>
+                    {i > 0 && <span className="dsp-brush-msep" style={{ left: `${left}%` }} />}
+                    <span className="dsp-brush-mlab" style={{ left: `${center}%` }}>{monthAbbr(ms.key).split(" ")[0]}</span>
+                  </Fragment>
+                );
+              })}
+              {focus && (
+                <div
+                  className="dsp-brush-win"
+                  style={{ left: `${(fA / totalCols) * 100}%`, width: `${(visCount / totalCols) * 100}%` }}
+                >
+                  <span className="dsp-brush-grip dsp-brush-grip--l" />
+                  <span className="dsp-brush-grip dsp-brush-grip--r" />
+                </div>
+              )}
+              {dragTip && (
+                <span className="dsp-brush-scrub" style={{ left: `${dragTip.xPct}%` }}>{dragTip.label}</span>
+              )}
+            </div>
+            <div className="dsp-brush-side">
+              <span className="dsp-brush-range">
+                {colLabel(fA)}{visCount > 1 ? ` – ${colLabel(fB)}` : ""}
+              </span>
+              <span className="dsp-brush-stats">
+                {fmt(visTotal)} · {fmt(avg)}{weekly ? "/wk" : "/d"} · {visItems} item{visItems === 1 ? "" : "s"}
+              </span>
+              {focus
+                ? <button type="button" className="dsp-brush-reset" onClick={() => applyPreset("all")} title="Show the whole range">Reset</button>
+                : <span className="dsp-brush-hint">drag · scroll · ←→</span>}
+            </div>
+          </div>
+        );
+      })()}
+      {tip && colItems[tip.col] && createPortal(
+        (() => {
+          const inSel = sel && tip.col >= sel.a && tip.col <= sel.b;
+          const items = inSel
+            ? itemsInSel(sel).sort((a, b) => b.amt - a.amt)
+            : colItems[tip.col];
+          const total = inSel
+            ? items.reduce((s, it) => s + it.amt, 0)
+            : colTotals[tip.col];
+          const label = inSel
+            ? `${sel.a === sel.b ? colLabel(sel.a) : `${colLabel(sel.a)} – ${colLabel(sel.b)}`}${sel.fullY ? "" : " · band"}`
+            : colLabel(tip.col);
+          const showDay = weekly || inSel;
+          return (
+            <div
+              className="dsp-tip dsp-tip--fixed"
+              style={{
+                left: tip.cx + 14,
+                top: tip.cy + 14,
+                transform: `${tip.flipX ? "translateX(calc(-100% - 28px))" : ""}${tip.flipY ? " translateY(calc(-100% - 28px))" : ""}`,
+              }}
+            >
+              <div className="dsp-tip-head">
+                <b>{label}</b>
+                <span>{fmt(total)}</span>
+              </div>
+              {items.length === 0 && (
+                <div className="dsp-tip-more">
+                  Nothing spent {inSel ? "in this range" : weekly ? "this week" : "this day"}.
+                </div>
+              )}
+              {items.slice(0, SPEND_TIP_MAX_ITEMS).map((it, j) => (
+                <div key={j} className="dsp-tip-row">
+                  <span className="dsp-cat-dot" style={{ background: (STMT_CATS[it.cat] || STMT_CATS.other).hue }} />
+                  <span className="dsp-tip-lab">{showDay ? `${it.day} · ` : ""}{it.label || "—"}</span>
+                  <span className="dsp-tip-amt">{fmt(it.amt)}</span>
+                </div>
+              ))}
+              {items.length > SPEND_TIP_MAX_ITEMS && (
+                <div className="dsp-tip-more">…+{items.length - SPEND_TIP_MAX_ITEMS} more</div>
+              )}
+              {inSel && onOpenRange && (
+                <div className="dsp-tip-hint">Click to open in the statement editor</div>
+              )}
+              {!inSel && sel === null && (
+                <div className="dsp-tip-hint dsp-tip-hint--dim">Drag to select — across for days, down for an amount band</div>
+              )}
+            </div>
+          );
+        })(),
+        document.body,
+      )}
     </div>
   );
 }
@@ -288,10 +706,10 @@ export function ProjectionChart({
           </text>
         );
       })}
-      <path className="proj-area-total"   d={areaTotal.join(" ")} />
+      <path className="proj-area-total" d={areaTotal.join(" ")} />
       <path className="proj-area-contrib" d={areaContrib.join(" ")} />
       <path className="proj-line-contrib" d={lineContrib.join(" ")} />
-      <path className="proj-line-total"   d={lineTotal.join(" ")} />
+      <path className="proj-line-total" d={lineTotal.join(" ")} />
       <circle className="proj-dot" cx={xOf(pts[pts.length - 1].m)} cy={yOf(pts[pts.length - 1].bal)} r={4} />
     </svg>
   );

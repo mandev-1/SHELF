@@ -17,7 +17,7 @@ export interface StatementImportProps {
   savingsPlans?: SavingsPlan[];
   /** Edit mode: review one month's existing expense rows instead of parsing a
    *  statement. Apply replaces the month's expenses (unchecked rows = removed). */
-  editRows?: { monthKey: string; expenses: ExpenseRow[] };
+  editRows?: { monthKey: string; expenses: ExpenseRow[]; scopeLabel?: string };
   onApplyEdits?: (monthKey: string, expenses: ExpenseRow[]) => void;
   onClose: () => void;
   onImport: (additions: Record<string, MonthStatement>) => void;
@@ -130,6 +130,8 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkLabel, setBulkLabel] = useState("");
   const [bulkCat, setBulkCat] = useState("");
+  // in-app leave confirmation (replaces the browser confirm on Esc / close)
+  const [leaveConfirm, setLeaveConfirm] = useState(false);
   const lastSelIdxRef = useRef<number | null>(null);
   const [colW, setColW] = useState<Record<ResizableCol, number>>({ ...COL_DEFAULTS });
 
@@ -227,17 +229,18 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
     else { setResult(null); setRows([]); }
   }, [rawText, override, runParse, editMode]);
 
-  // own Escape handling (StatementEditor defers while this is open)
+  // own Escape handling (StatementEditor defers while this is open).
+  // Esc opens the in-app leave dialog; a second Esc dismisses that dialog.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.stopPropagation();
       e.preventDefault();
-      if (window.confirm("Are you sure you want to leave? Any unsaved changes will be lost.")) onClose();
+      setLeaveConfirm((open) => !open);
     };
     window.addEventListener("keydown", h, true);
     return () => window.removeEventListener("keydown", h, true);
-  }, [onClose]);
+  }, []);
 
   // "paste anywhere" — while the modal is in its empty state, a global ⌘V/Ctrl+V
   // drops the clipboard text straight into the parser (unless the user is
@@ -486,10 +489,10 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
         <div className="se-head">
           <div className="se-head-l">
             <div className="se-eyebrow"><IcoUpload /> {editMode ? "Bulk edit" : "Import"}</div>
-            <h2 className="se-title">{editMode ? "Review this month's expenses" : "Bring in a bank statement"}</h2>
+            <h2 className="se-title">{editMode ? (editRows?.scopeLabel ? "Review the selected expenses" : "Review this month's expenses") : "Bring in a bank statement"}</h2>
             {editMode ? (
               <p className="se-lede">
-                Sort, drag-select and bulk-rewrite the expense rows of {monthLabel(editRows!.monthKey)}.
+                Sort, drag-select and bulk-rewrite the expense rows of {editRows?.scopeLabel ?? monthLabel(editRows!.monthKey)}.
                 Unchecking a row removes it when you apply. Nothing is saved until you Save the statement.
               </p>
             ) : (
@@ -937,6 +940,23 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
             e.currentTarget.value = "";
           }}
         />
+
+        {leaveConfirm && (
+          <div className="si-leave-veil" onMouseDown={(e) => { if (e.target === e.currentTarget) setLeaveConfirm(false); }}>
+            <div className="si-leave-card" role="alertdialog" aria-modal="true" aria-label="Leave without saving">
+              <div className="si-leave-title">Leave without saving?</div>
+              <div className="si-leave-body">
+                {editMode
+                  ? "Your edits here haven't been applied yet. Leaving discards them — the statement won't change."
+                  : "Anything you've parsed or edited here will be discarded. Nothing has been saved yet."}
+              </div>
+              <div className="si-leave-actions">
+                <button className="se-btn se-btn--ghost" onClick={() => setLeaveConfirm(false)} autoFocus>Keep editing</button>
+                <button className="se-btn se-btn--danger" onClick={() => { setLeaveConfirm(false); onClose(); }}>Discard &amp; leave</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

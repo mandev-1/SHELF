@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Strategie — Monolith</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="monolith/monolith.css" />
+<template id="__bundler_thumbnail">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#0a0a0a"/>
+  <text x="50" y="62" font-family="Arial Black, sans-serif" font-size="34" font-weight="900" fill="#d8ff3e" text-anchor="middle">S</text>
+</svg>
+</template>
+</head>
+<body>
+
+<div class="ticker">
+  <div class="ticker-inner">
+    <span>NET WORTH <b>637 400 KČ</b></span><span>SURPLUS <b>+17 900 /MO</b></span><span>5Y TRAJECTORY <b>1.11M KČ</b></span><span>E-FUND <b>50%</b></span><span>SAVE RATE <b>17%</b></span><span>SPEND APR <b>79 665 KČ</b></span><span>SEQUENCE <b>STEP 4/7</b></span><span>POTS <b>3 ACTIVE</b></span>
+    <span>NET WORTH <b>637 400 KČ</b></span><span>SURPLUS <b>+17 900 /MO</b></span><span>5Y TRAJECTORY <b>1.11M KČ</b></span><span>E-FUND <b>50%</b></span><span>SAVE RATE <b>17%</b></span><span>SPEND APR <b>79 665 KČ</b></span><span>SEQUENCE <b>STEP 4/7</b></span><span>POTS <b>3 ACTIVE</b></span>
+  </div>
+</div>
+
+<div class="page">
+
+  <div class="head rv">
+    <h1>Strat<em>egie</em></h1>
+    <div class="tabs">
+      <button class="tab">USD</button><button class="tab">EUR</button><button class="tab on">CZK</button><button class="tab">↔ EUR</button><button class="tab">STATEMENT · APR</button>
+    </div>
+  </div>
+
+  <div class="hero rv d1">
+    <div class="hero-l">
+      <div class="hero-ghost">637</div>
+      <span class="cap">Net worth · April 2026</span>
+      <div class="hero-num mono">637 400<small> KČ</small></div>
+      <span class="delta">▲ +17 900 KČ / MO</span>
+      <p class="hero-sent">Holding this pace puts you at <b>1.11M Kč by 2031</b> — balanced scenario, 7% p.a. Spending fell 2.3k vs March; income dipped 1.3k.</p>
+    </div>
+    <div class="hero-r">
+      <div class="chart-cap">
+        <span class="cap">Compounding · 10y</span>
+        <div class="scen"><button>4%</button><button class="on">7%</button><button>10%</button><button>S&amp;P</button></div>
+      </div>
+      <svg viewBox="0 0 560 250" style="width:100%;flex:1" fill="none" preserveAspectRatio="none">
+        <g stroke="#1a1a1a"><line x1="0" y1="62" x2="560" y2="62"/><line x1="0" y1="124" x2="560" y2="124"/><line x1="0" y1="186" x2="560" y2="186"/></g>
+        <path class="draw" d="M0,238 C110,232 230,212 340,168 C430,132 510,84 560,38" stroke="#d8ff3e" stroke-width="2.5"/>
+        <path class="draw" style="animation-delay:0.6s" d="M0,240 C130,236 270,226 400,206 C470,196 530,186 560,180" stroke="#3a3a35" stroke-width="1.5" stroke-dasharray="4 4"/>
+        <circle cx="560" cy="38" r="4" fill="#d8ff3e"/>
+        <text x="544" y="24" fill="#d8ff3e" font-family="IBM Plex Mono" font-size="13" text-anchor="end">2 075k</text>
+      </svg>
+      <div style="display:flex;justify-content:space-between;margin-top:10px" class="mono"><span class="cap">now</span><span class="cap">’31</span><span class="cap" style="color:#d8ff3e">’36</span></div>
+    </div>
+  </div>
+
+  <div class="grid rv d2">
+
+    <div class="cell c8">
+      <div class="cell-head"><span class="cell-title">Spending — April</span><span class="cell-num mono">01 / 79 665 KČ · AVG 15.9K/WK</span></div>
+      <div class="row"><span class="l mono" style="width:38px">Wk 1</span><span class="track multi"><i style="width:34%;background:#d8ff3e"></i><i style="width:18%;background:#8aa826"></i><i style="width:14%;background:#5c7019"></i><i style="width:11%;background:#39450f"></i></span><span class="val dn">40.3k</span></div>
+      <div class="row"><span class="l mono" style="width:38px">Wk 2</span><span class="track multi"><i style="width:13%;background:#d8ff3e"></i><i style="width:10%;background:#8aa826"></i><i style="width:8%;background:#5c7019"></i></span><span class="val">16.4k</span></div>
+      <div class="row"><span class="l mono" style="width:38px">Wk 3</span><span class="track multi"><i style="width:10%;background:#d8ff3e"></i><i style="width:7%;background:#8aa826"></i><i style="width:5%;background:#5c7019"></i></span><span class="val">11.2k</span></div>
+      <div class="row"><span class="l mono" style="width:38px">Wk 4</span><span class="track multi"><i style="width:9%;background:#d8ff3e"></i><i style="width:6%;background:#8aa826"></i><i style="width:4%;background:#5c7019"></i></span><span class="val">10.2k</span></div>
+      <div class="row"><span class="l mono" style="width:38px">Wk 5</span><span class="track multi"><i style="width:2%;background:#d8ff3e"></i></span><span class="val">0.8k</span></div>
+    </div>
+
+    <div class="cell c4 last">
+      <div class="cell-head"><span class="cell-title">The method</span><span class="cell-num mono">02 / STEP 4 OF 7</span></div>
+      <div class="step done"><span class="step-n">✓</span><span class="step-name">Starter buffer</span></div>
+      <div class="step done"><span class="step-n">✓</span><span class="step-name">Capture free money</span></div>
+      <div class="step done"><span class="step-n">✓</span><span class="step-name">Kill high-interest debt</span></div>
+      <div class="step"><span class="step-n">04</span><span class="step-name">Full emergency fund</span><span class="track"><i style="width:50%"></i></span><span class="val">50%</span></div>
+      <div class="step"><span class="step-n">05</span><span class="step-name">Tax-advantaged</span><span class="track"><i style="width:35%"></i></span><span class="val">35%</span></div>
+      <div class="step"><span class="step-n">06</span><span class="step-name">Broad index</span><span class="track"><i style="width:82%"></i></span><span class="val">∞</span></div>
+      <div class="step queued"><span class="step-n">07</span><span class="step-name">Goal &amp; taxable</span></div>
+    </div>
+
+    <div class="cell c4 bigstat lift">
+      <div class="cell-head"><span class="cell-title">vs March</span><span class="cell-num mono">03</span></div>
+      <div class="n mono">+1 100 Kč</div>
+      <div class="s">net change</div>
+      <div style="margin-top:18px">
+        <div class="row"><span class="l" style="flex:1">Groceries</span><span class="val up">−2.2k</span></div>
+        <div class="row"><span class="l" style="flex:1">Shopping</span><span class="val up">−1.6k</span></div>
+        <div class="row"><span class="l" style="flex:1">Eating out</span><span class="val dn">+1.1k</span></div>
+      </div>
+    </div>
+
+    <div class="cell c4 bigstat">
+      <div class="cell-head"><span class="cell-title">Programs</span><span class="cell-num mono">04</span></div>
+      <div class="n mono">16.4k Kč</div>
+      <div class="s">contributed to date</div>
+      <div style="margin-top:18px">
+        <div class="row"><span class="l" style="flex:1">Building savings ČS</span><span class="val">4.7k /mo</span></div>
+        <div class="row"><span class="l" style="flex:1">DIP — investiční účet</span><span class="val">3.5k /mo</span></div>
+      </div>
+    </div>
+
+    <div class="cell c4 last">
+      <div class="cell-head"><span class="cell-title">Pots</span><span class="cell-num mono">05</span></div>
+      <div class="pot"><div class="pot-t"><span>Standing desk</span><span class="val">54% · AUG ’26</span></div><div class="track" style="height:5px"><i style="width:54%"></i></div></div>
+      <div class="pot"><div class="pot-t"><span>Japan trip</span><span class="val">35% · FEB ’27</span></div><div class="track" style="height:5px"><i style="width:35%"></i></div></div>
+      <div class="pot"><div class="pot-t"><span>New laptop</span><span class="val">43% · JAN ’27</span></div><div class="track" style="height:5px"><i style="width:43%"></i></div></div>
+    </div>
+
+    <div class="cell c12 last" style="padding:0">
+      <div class="cell-head" style="padding:26px 30px 0"><span class="cell-title">Where it goes</span><span class="cell-num mono">06 / APRIL · HOVER A CATEGORY</span></div>
+      <div class="cats">
+        <div class="cat"><div class="nm">Housing</div><div class="v">30 550</div><div class="pc">38%</div></div>
+        <div class="cat"><div class="nm">Groceries</div><div class="v">12 220</div><div class="pc">15%</div></div>
+        <div class="cat"><div class="nm">Shopping</div><div class="v">8 930</div><div class="pc">11%</div></div>
+        <div class="cat"><div class="nm">Eating out</div><div class="v">6 110</div><div class="pc">8%</div></div>
+        <div class="cat"><div class="nm">Home</div><div class="v">5 170</div><div class="pc">6%</div></div>
+        <div class="cat"><div class="nm">Other</div><div class="v">4 700</div><div class="pc">6%</div></div>
+        <div class="cat"><div class="nm">Transport</div><div class="v">4 230</div><div class="pc">5%</div></div>
+        <div class="cat"><div class="nm">Health</div><div class="v">3 525</div><div class="pc">4%</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

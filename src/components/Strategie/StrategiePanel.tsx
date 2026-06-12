@@ -4,7 +4,7 @@ import { SAVINGS_PLAN_KINDS } from "../../types/grid";
 import {
   daysInMonth as _daysInMonth,
   monthWeeks, weekOfDate,
-  monthLabel, monthAbbr, stepMonth, project,
+  monthLabel, monthAbbr, project,
   fmtMoney, STMT_CATS, CAT_KEYS,
   RETURN_SCENARIOS, DEFAULT_LADDER, DEFAULT_PILLARS,
   DEFAULT_STATEMENTS, CURRENCIES,
@@ -13,9 +13,10 @@ import type { LadderRung } from "./strategie";
 import { IcoCheck, IcoLock, IcoPlus, IcoFile, IcoHopper, IcoUpload, IcoFlip, IcoChev } from "./icons";
 import { StatementEditor } from "./StatementEditor";
 import { totalIncome, totalExpenses, expensesByCat } from "./helpers";
-import { DailySpendChart, ProjectionChart } from "./charts";
+import { DailySpendChart, ProjectionChart, type SpendRangeOpenInfo } from "./charts";
 import { LadderDetail } from "./LadderDetail";
 import { MonthCloseDiff } from "./MonthCloseDiff";
+import { AccountsCard } from "./AccountsCard";
 
 void _daysInMonth;
 
@@ -35,6 +36,7 @@ interface StrategiePanelProps {
   onToggleCompareCurrency: () => void;
   onSetRungAccounts: (rungId: number, rows: RungAccountRef[]) => void;
   onUpsertAccountDictEntry: (entry: AccountDictEntry) => void;
+  onSetAccountsDirectory: (dir: AccountDictEntry[]) => void;
   onAddSavingsPlan: (name: string, kind: SavingsPlanKind) => void;
   onRenameSavingsPlan: (id: string, name: string) => void;
   onRemoveSavingsPlan: (id: string) => void;
@@ -54,6 +56,7 @@ export function StrategiePanel({
   onToggleCompareCurrency,
   onSetRungAccounts,
   onUpsertAccountDictEntry,
+  onSetAccountsDirectory,
   onAddSavingsPlan,
   onRenameSavingsPlan,
   onRemoveSavingsPlan,
@@ -63,14 +66,28 @@ export function StrategiePanel({
   const [spKind, setSpKind] = useState<SavingsPlanKind>("savings");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorImportOpen, setEditorImportOpen] = useState(false);
+  const [editorTarget, setEditorTarget] = useState<{
+    month: string;
+    week: number | null;
+    range: { startIso: string; endIso: string } | null;
+    ids: string[] | null;
+    bulk: boolean;
+  } | null>(null);
   const [potMenuOpen, setPotMenuOpen] = useState(false);
   const potMenuRef = useRef<HTMLDivElement>(null);
+  const ladderRef = useRef<HTMLDivElement>(null);
+  const [rungTip, setRungTip] = useState<{
+    rung: LadderRung;
+    x: number;
+    y: number;
+    flipX: boolean;
+    flipY: boolean;
+  } | null>(null);
 
   const [scenarioId, setScenarioId] = useState("balanced");
   const [horizon, setHorizon] = useState(120);
   const [monthly, setMonthly] = useState(300);
   const [heroFace, setHeroFace] = useState<"grow" | "spend">("grow");
-  const [spendRange, setSpendRange] = useState<1 | 3 | 6 | 0>(1); // months; 0 = all
   const [hiddenCats, setHiddenCats] = useState<CatKey[]>([]);
   const [detailRung, setDetailRung] = useState<LadderRung | null>(null);
 
@@ -123,23 +140,9 @@ export function StrategiePanel({
     onToast?.(`Added program: ${name}`);
   };
 
-  // spend chart range: consecutive calendar months ending at the active month
-  // (1 / 3 / 6, or back to the earliest month on file for "all")
-  const spendMonths = (() => {
-    const earliest = [...sortedKeys, activeKey].sort()[0];
-    const keys: string[] = [];
-    let k = activeKey;
-    while (
-      keys.length < (spendRange === 0 ? 600 : spendRange) &&
-      (spendRange !== 0 || k >= earliest)
-    ) {
-      keys.unshift(k);
-      if (spendRange !== 0 && keys.length >= spendRange) break;
-      if (spendRange === 0 && k <= earliest) break;
-      k = stepMonth(k, -1);
-    }
-    return keys.map((mk) => ({ key: mk, stmt: byMonth[mk] ?? { income: [], expenses: [] } }));
-  })();
+  // spend chart spans the entire statement history; the in-chart timeline
+  // scrubber (1M / 3M / 6M / ALL) handles focusing a sub-period.
+  const spendMonths = sortedKeys.map((mk) => ({ key: mk, stmt: byMonth[mk] ?? { income: [], expenses: [] } }));
   const spendCats = CAT_KEYS.filter((k) =>
     spendMonths.some((m) => m.stmt.expenses.some((e) => !e.savingsPlanId && e.cat === k && e.amt > 0))
   );
@@ -179,6 +182,43 @@ export function StrategiePanel({
     setPotMenuOpen(false);
   }, [onAddPot]);
 
+  const rungRows = useCallback((rung: LadderRung) => {
+    const persisted = state.rungAccounts[rung.id];
+    if (persisted) {
+      return persisted.map((p) => {
+        const d = state.accountsDirectory.find((x) => x.name === p.accountRef);
+        return { name: p.accountRef, tag: d?.tag ?? "", balance: p.balance };
+      });
+    }
+    return (rung.accounts ?? []).map((a) => ({ name: a.name, tag: a.tag, balance: a.balance }));
+  }, [state.rungAccounts, state.accountsDirectory]);
+
+  const ladderGrand = DEFAULT_LADDER.reduce(
+    (s, r) => s + rungRows(r).reduce((a, x) => a + (x.balance || 0), 0),
+    0,
+  );
+
+  const moveRungTip = (e: React.MouseEvent, rung: LadderRung) => {
+    const card = ladderRef.current;
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setRungTip({ rung, x, y, flipX: x > rect.width * 0.45, flipY: y > rect.height * 0.62 });
+  };
+
+  const openRangeInEditor = useCallback((info: SpendRangeOpenInfo) => {
+    const month = byMonth[info.monthKey] ? info.monthKey : activeKey;
+    setEditorTarget({
+      month,
+      week: null,
+      range: month === info.monthKey ? { startIso: info.startIso, endIso: info.endIso } : null,
+      ids: info.ids?.length ? info.ids : null,
+      bulk: true,
+    });
+    setEditorOpen(true);
+  }, [byMonth, activeKey]);
+
   const allWeeks = monthWeeks(activeKey);
 
   return (
@@ -206,13 +246,11 @@ export function StrategiePanel({
             </button>
           )}
           <button
-            className={`ghost-btn${Object.keys(statements.byMonth).length > 0 ? " ok" : ""}`}
+            className="ghost-btn"
             onClick={() => setEditorOpen(true)}
+            title="Open the statement editor"
           >
-            <IcoFile />
-            {Object.keys(statements.byMonth).length > 0
-              ? `Statement · ${monthAbbr(activeKey)}`
-              : "Import statement"}
+            <IcoFile /> Statement
           </button>
         </div>
       </div>
@@ -344,13 +382,6 @@ export function StrategiePanel({
                     )}
                   </div>
                   <div className="dsp-controls">
-                    <div className="seg">
-                      {([[1, "Month"], [3, "3 mo"], [6, "6 mo"], [0, "All"]] as const).map(([v, l]) => (
-                        <button key={v} className={`seg-btn${spendRange === v ? " on" : ""}`} onClick={() => setSpendRange(v)}>
-                          {l}
-                        </button>
-                      ))}
-                    </div>
                     <div className="dsp-cats">
                       {spendCats.map((k) => (
                         <button
@@ -369,7 +400,7 @@ export function StrategiePanel({
                       )}
                     </div>
                   </div>
-                  <DailySpendChart months={spendMonths} cur={cur} hidden={hiddenCats} />
+                  <DailySpendChart months={spendMonths} cur={cur} hidden={hiddenCats} activeKey={activeKey} onOpenRange={openRangeInEditor} />
                 </div>
               </div>
             </div>
@@ -377,19 +408,20 @@ export function StrategiePanel({
         </div>
 
         {/* order of operations — span 4 */}
-        <div className="card span-4">
+        <div className="card span-4 ladder-card" ref={ladderRef}>
           <div className="card-head">
             <div>
               <div className="card-eyebrow">The method</div>
               <div className="card-title">Order of operations</div>
             </div>
           </div>
-          <ol className="ladder">
+          <ol className="ladder" onMouseLeave={() => setRungTip(null)}>
             {DEFAULT_LADDER.map((rung) => (
               <li key={rung.id} className={`rung rung--${rung.status}`}>
                 <button
                   className="rung-hit"
                   onClick={() => setDetailRung(rung)}
+                  onMouseMove={(e) => moveRungTip(e, rung)}
                   aria-label={`Open ${rung.title} details`}
                 >
                   <span className="rung-mark">
@@ -410,6 +442,63 @@ export function StrategiePanel({
               </li>
             ))}
           </ol>
+          {rungTip && (() => {
+            const rows = rungRows(rungTip.rung).slice().sort((a, b) => (b.balance || 0) - (a.balance || 0));
+            const total = rows.reduce((a, r) => a + (r.balance || 0), 0);
+            const share = ladderGrand > 0 ? Math.round((total / ladderGrand) * 100) : 0;
+            const OPS = [1, 0.68, 0.45, 0.3, 0.2];
+            return (
+              <div
+                className="rung-tip"
+                style={{
+                  left: rungTip.x + 14,
+                  top: rungTip.y + 14,
+                  transform: `${rungTip.flipX ? "translateX(calc(-100% - 28px))" : ""} ${rungTip.flipY ? "translateY(calc(-100% - 28px))" : ""}`,
+                  ["--step-hue" as string]: rungTip.rung.hue || "var(--accent)",
+                } as React.CSSProperties}
+              >
+                <div className="rung-tip-head">
+                  <b>Step {rungTip.rung.id} · {rungTip.rung.title}</b>
+                  <span>{fmtMoney(total, cur, { abbr: true })}</span>
+                </div>
+                {rows.length > 0 ? (
+                  <>
+                    {total > 0 && (
+                      <div className="rung-tip-bar">
+                        {rows.map((r, i) => (
+                          <span
+                            key={i}
+                            style={{
+                              width: `${((r.balance || 0) / total) * 100}%`,
+                              background: "var(--step-hue)",
+                              opacity: OPS[i % OPS.length],
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {rows.map((r, i) => (
+                      <div className="rung-tip-row" key={i}>
+                        <span className="rung-tip-dot" style={{ background: "var(--step-hue)", opacity: OPS[i % OPS.length] }} />
+                        <span className="rung-tip-lab">
+                          {r.name}
+                          {r.tag ? <span className="rung-tip-tag"> · {r.tag}</span> : null}
+                        </span>
+                        <span className="rung-tip-pct">{total > 0 ? `${Math.round(((r.balance || 0) / total) * 100)}%` : "—"}</span>
+                        <span className="rung-tip-amt">{fmtMoney(r.balance || 0, cur, { abbr: true })}</span>
+                      </div>
+                    ))}
+                    <div className="rung-tip-foot">
+                      <span className="rung-tip-foot-bar"><span style={{ width: `${share}%` }} /></span>
+                      {share}% of all parked money sits in this step
+                    </div>
+                  </>
+                ) : (
+                  <div className="rung-tip-empty">Nothing parked here yet — unlocks once the earlier steps are funded.</div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* month-close diff — span 4 */}
@@ -713,6 +802,14 @@ export function StrategiePanel({
           </div>
         </div>
 
+        {/* accounts — span 4 */}
+        <AccountsCard
+          accounts={state.accountsDirectory}
+          currency={cur}
+          onChange={onSetAccountsDirectory}
+          onToast={onToast}
+        />
+
         {/* pillars — span 4 */}
         <div className="card span-4">
           <div className="card-head">
@@ -779,13 +876,20 @@ export function StrategiePanel({
       {/* editor modal */}
       {editorOpen && (
         <StatementEditor
-          statements={{ ...statements, byMonth }}
+          statements={{ ...statements, byMonth, current: editorTarget?.month ?? statements.current }}
           currency={cur}
           memberships={state.memberships}
           savingsPlans={savingsPlans}
-          onSave={onSaveStatement}
-          onClose={() => { setEditorOpen(false); setEditorImportOpen(false); }}
+          onSave={(book, order, active, memberships) => {
+            onSaveStatement(book, order, active, memberships);
+            setEditorTarget(null);
+          }}
+          onClose={() => { setEditorOpen(false); setEditorImportOpen(false); setEditorTarget(null); }}
           defaultImportOpen={editorImportOpen}
+          initialWeek={editorTarget?.week ?? null}
+          initialRange={editorTarget?.range ?? null}
+          initialBulk={editorTarget?.bulk ?? false}
+          initialIds={editorTarget?.ids ?? null}
         />
       )}
 

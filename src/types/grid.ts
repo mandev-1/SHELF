@@ -321,6 +321,31 @@ export const SAVINGS_PLAN_KINDS: { id: SavingsPlanKind; label: string }[] = [
 ];
 /** Legend hues cycled through as plans are created. */
 export const SAVINGS_PLAN_HUES = ["#6366f1", "#3b82f6", "#14b8a6", "#f59e0b", "#a384df", "#ec4899", "#22c55e", "#94a3b8"];
+
+// ─── Account kinds (Accounts card + manager) ─────────────────────────────────
+export type AccountKind = "checking" | "savings" | "brokerage" | "pension" | "building" | "crypto" | "cash";
+export const ACCOUNT_KINDS: { id: AccountKind; label: string; hue: string }[] = [
+  { id: "checking",  label: "Checking",  hue: "#5b9cff" },
+  { id: "savings",   label: "Savings",   hue: "#34c891" },
+  { id: "brokerage", label: "Brokerage", hue: "#a384df" },
+  { id: "pension",   label: "Pension",   hue: "#e0905a" },
+  { id: "building",  label: "Building",  hue: "#6595ee" },
+  { id: "crypto",    label: "Crypto",    hue: "#e0a020" },
+  { id: "cash",      label: "Cash",      hue: "#8b8b95" },
+];
+/** Current schema version of the seeded accounts directory. Bumping reseeds the
+ *  starter slice on next load (user statements/pots/etc. are preserved). */
+export const ACCT_SCHEMA_V = 3;
+/** Starter accounts slice (USD-base balances). */
+export const DEFAULT_ACCOUNTS_DIRECTORY: AccountDictEntry[] = [
+  { name: "Air Bank — běžný účet",        kind: "checking",  tag: "Everyday",       balance: 2050, url: "https://www.airbank.cz" },
+  { name: "Air Bank — spořicí účet",      kind: "savings",   tag: "Instant access", balance: 3940, url: "https://www.airbank.cz" },
+  { name: "Money-market fund — Fio",      kind: "savings",   tag: "T+1 access",     balance: 5100 },
+  { name: "DIP — investiční účet",        kind: "brokerage", tag: "Tax-deductible", balance: 3200 },
+  { name: "Penzijní připojištění",        kind: "pension",   tag: "State bonus",    balance: 5890 },
+  { name: "Brokerage — VWCE (all-world)", kind: "brokerage", tag: "Auto-buy 1st",   balance: 9000 },
+  { name: "Coinbase — BTC/ETH",           kind: "crypto",    tag: "Long-term",      balance: 1780 },
+];
 export interface SavingsPlan {
   id: string;
   name: string;
@@ -345,6 +370,10 @@ export interface AccountDictEntry {
   name: string;
   tag: string;
   url?: string;
+  /** Account kind for grouping / allocation. Defaults to "cash" when unset. */
+  kind?: AccountKind;
+  /** Current balance in USD-base. Display converts via the currency table. */
+  balance?: number;
 }
 export interface RungAccountRef {
   accountRef: string;
@@ -361,8 +390,10 @@ export interface StrategieState {
   secondaryCurrency: string | null;
   /** Quick toggle: when true and `secondaryCurrency` is set, KPI values render a secondary subtitle. */
   compareCurrencyOn: boolean;
-  /** Top-level autocomplete dictionary — identity only (name + tag + optional URL). */
+  /** Top-level accounts directory — identity + kind + USD-base balance. */
   accountsDirectory: AccountDictEntry[];
+  /** Schema version of the seeded directory; a bump reseeds the starter slice. */
+  acctSchemaV: number;
   /** Per-rung overrides. When unset for a rung, fall back to DEFAULT_LADDER seed. */
   rungAccounts: Record<number, RungAccountRef[]>;
   /** Savings accounts / programs that expense rows can be tagged as contributions to. */
@@ -392,7 +423,8 @@ function _defaultStrategie(): StrategieState {
     currency: "CZK",
     secondaryCurrency: null,
     compareCurrencyOn: false,
-    accountsDirectory: [],
+    accountsDirectory: DEFAULT_ACCOUNTS_DIRECTORY.map((a) => ({ ...a })),
+    acctSchemaV: ACCT_SCHEMA_V,
     rungAccounts: {},
     savingsPlans: [],
   };
@@ -509,6 +541,7 @@ export function normalizeStrategie(raw: unknown): StrategieState {
   const compareCurrencyOn = Boolean(r["compareCurrencyOn"]);
 
   // accounts directory
+  const ACCT_KIND_IDS = new Set(ACCOUNT_KINDS.map((k) => k.id));
   let accountsDirectory: AccountDictEntry[] = [];
   if (Array.isArray(r["accountsDirectory"])) {
     const seen = new Set<string>();
@@ -518,12 +551,22 @@ export function normalizeStrategie(raw: unknown): StrategieState {
         name: typeof o["name"] === "string" ? o["name"] : "",
         tag:  typeof o["tag"]  === "string" ? o["tag"]  : "",
         url:  typeof o["url"]  === "string" ? o["url"]  : undefined,
+        kind: ACCT_KIND_IDS.has(o["kind"] as AccountKind) ? (o["kind"] as AccountKind) : "cash",
+        balance: typeof o["balance"] === "number" ? o["balance"] : 0,
       }))
       .filter((e) => {
         if (!e.name || seen.has(e.name)) return false;
         seen.add(e.name);
         return true;
       });
+  }
+  // schema version: bumping reseeds the starter slice (statements/pots untouched)
+  const storedAcctV = typeof r["acctSchemaV"] === "number" ? r["acctSchemaV"] : 0;
+  let acctSchemaV = ACCT_SCHEMA_V;
+  if (storedAcctV < ACCT_SCHEMA_V) {
+    accountsDirectory = DEFAULT_ACCOUNTS_DIRECTORY.map((a) => ({ ...a }));
+  } else {
+    acctSchemaV = storedAcctV;
   }
 
   // per-rung account overrides
@@ -560,7 +603,7 @@ export function normalizeStrategie(raw: unknown): StrategieState {
       }));
   }
 
-  return { statements, positions, pots, memberships, currency, secondaryCurrency, compareCurrencyOn, accountsDirectory, rungAccounts, savingsPlans };
+  return { statements, positions, pots, memberships, currency, secondaryCurrency, compareCurrencyOn, accountsDirectory, acctSchemaV, rungAccounts, savingsPlans };
 }
 
 export const ACCENT_COLORS = [

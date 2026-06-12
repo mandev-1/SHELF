@@ -1,0 +1,21 @@
+/* Full-page maturity boards — shared helpers + additions */
+.mfx { padding: 0; }
+.mf-sect { padding: 14px 22px; border-bottom: 1px solid #15181d; }
+.mf-h { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+.mf-title { font-size: 12.5px; font-weight: 650; color: #e8eaed; }
+.mf-2col { display: grid; grid-template-columns: 1.5fr 1fr; gap: 0; }
+.mf-2col > div { padding: 14px 22px; }
+.mf-2col > div + div { border-left: 1px solid #15181d; }
+.mf-table-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #121519; font-size: 11px; }
+.mf-table-row:last-child { border-bottom: 0; }
+.mf-bar { flex: 1; height: 3px; background: #1a1e24; border-radius: 2px; overflow: hidden; }
+.mf-bar span { display: block; height: 100%; border-radius: 2px; }
+.mf-stack { display: flex; height: 10px; border-radius: 3px; overflow: hidden; gap: 1px; margin: 8px 0; }
+.mf-step { display: flex; align-items: center; gap: 9px; padding: 5px 0; font-size: 11px; }
+.mf-stepnum { width: 16px; height: 16px; border-radius: 5px; display: grid; place-items: center; font-size: 9px; font-weight: 700; background: #1a1f26; color: #8a919c; flex-shrink: 0; }
+.mf-stepnum.done { background: rgba(52,211,153,0.16); color: #34d399; }
+.mf-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; padding: 3px 8px; border-radius: 999px; background: #14171c; border: 1px solid #20242c; color: #8a919c; }
+.mf-weekrow { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 10px; }
+.mf-weektrack { flex: 1; height: 8px; background: #14171c; border-radius: 2px; overflow: hidden; display: flex; gap: 1px; }
+.mob-band { background: #101318; border: 1px solid #1d222a; border-radius: 12px; padding: 16px 18px; }
+.moc-sticky { position: sticky; top: 0; display: flex; gap: 8px; padding: 12px 18px; background: rgba(10,12,15,0.9); border-bottom: 1px solid #1d222a; }

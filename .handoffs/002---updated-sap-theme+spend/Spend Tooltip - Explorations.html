@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ShELF — Spend tooltip explorations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --accent: #16b981; --accent-bright: #34d399; --accent-deep: #0c8f66; --accent-ink: #d4f3e7;
+  --bg: #0b0b0d; --panel: #141417; --surface: #161619; --surface-2: #1b1b20; --surface-3: #212128; --inset: #0e0e11;
+  --line: rgba(255,255,255,0.065); --line-strong: rgba(255,255,255,0.11); --line-faint: rgba(255,255,255,0.04);
+  --fg: #f0f0f2; --fg-2: #c9c9cf; --muted: #91919b; --dim: #66666f; --faint: #4b4b53;
+  --r-card: 16px; --r-inner: 11px;
+  --font: "DM Sans", system-ui, sans-serif; --mono: "DM Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { font-family: var(--font); }
+
+/* ====== stages ====== */
+.stp-stage { width: 100%; height: 100%; background: radial-gradient(120% 90% at 50% 0%, #101013 0%, var(--bg) 60%); color: var(--fg); display: grid; place-items: center; }
+.stp-moment { width: 100%; height: 100%; background: var(--bg); color: var(--fg); display: grid; place-items: center; position: relative; }
+.stp-moment-lab { position: absolute; bottom: 12px; left: 0; right: 0; text-align: center; font-size: 10.5px; color: var(--faint); }
+
+/* ====== Strategie-like card ====== */
+.stp-card { width: 1028px; background: linear-gradient(180deg, var(--surface) 0%, var(--panel) 100%); border: 1px solid var(--line-strong); border-radius: var(--r-card); box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 30px 60px -20px rgba(0,0,0,0.6); padding: 22px 0 10px; }
+.stp-card-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 0 24px 14px; }
+.stp-eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent-bright); }
+.stp-title { margin: 7px 0 0; font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
+.stp-hint { font-size: 11px; color: var(--faint); padding-top: 6px; }
+.stp-chart-zone { position: relative; padding: 0 14px; }
+
+/* ====== chart ====== */
+.stp-svg { display: block; }
+.stp-grid { stroke: var(--line-faint); stroke-width: 1; }
+.stp-ylab { font-family: var(--mono); font-size: 9px; fill: var(--dim); text-anchor: end; }
+.stp-xlab { font-family: var(--mono); font-size: 9px; fill: var(--dim); text-anchor: middle; }
+.stp-band { fill: rgba(255,255,255,0.045); }
+.stp-avg { stroke: var(--dim); stroke-width: 1.2; stroke-dasharray: 5 4; opacity: 0.6; }
+.stp-avglab { font-family: var(--mono); font-size: 8.5px; fill: var(--dim); }
+.stp-cap { font-family: var(--mono); font-size: 10px; font-weight: 500; fill: var(--fg); text-anchor: middle; }
+.stp-tick { stroke: var(--fg); stroke-opacity: 0.5; stroke-width: 1.4; }
+
+/* fake cursor dot — design frames only */
+.stp-cursor { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 3px rgba(240,240,242,0.18), 0 2px 8px rgba(0,0,0,0.6); z-index: 7; }
+
+/* ====== popup shared ====== */
+.stp-tip { position: relative; z-index: 6; pointer-events: none; border-radius: 12px; background: var(--surface-3); border: 1px solid var(--line-strong); box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 18px 44px -10px rgba(0,0,0,0.65); padding: 11px 12px 9px; font-size: 11.5px; }
+.stp-tip-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px; }
+.stp-tip-day { display: flex; align-items: baseline; gap: 7px; }
+.stp-tip-day b { font-size: 13px; font-weight: 700; color: var(--fg); letter-spacing: -0.01em; }
+.stp-tip-day i { font-style: normal; font-size: 10.5px; color: var(--dim); }
+.stp-tip-total { font-family: var(--mono); font-size: 14px; font-weight: 500; color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stp-tip-total u { text-decoration: none; font-size: 10px; color: var(--dim); margin-left: 2px; }
+
+/* caret connecting popup → column */
+.stp-tip::before { content: ""; position: absolute; width: 10px; height: 10px; background: var(--surface-3); border-left: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); top: 18px; display: none; }
+.stp-caret--left::before { display: block; left: -6px; transform: rotate(45deg); }
+.stp-caret--right::before { display: block; right: -6px; transform: rotate(225deg); }
+
+/* split strip (A) */
+.stp-split { display: flex; gap: 1.5px; height: 4px; border-radius: 999px; overflow: hidden; margin-bottom: 9px; }
+.stp-split span { display: block; height: 100%; min-width: 3px; }
+
+/* groups (A) */
+.stp-groups { display: flex; flex-direction: column; }
+.stp-group { padding: 5px 0 6px; border-top: 1px solid var(--line-faint); }
+.stp-group:first-child { border-top: 0; }
+.stp-group-head { display: flex; align-items: center; gap: 7px; padding: 2px 0 3px; }
+.stp-group-name { flex: 1; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.stp-group-sum { font-family: var(--mono); font-size: 11px; color: var(--fg-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stp-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.stp-row { display: flex; align-items: center; gap: 7px; padding: 2px 0 2px 14px; }
+.stp-row-lab { flex: 1; min-width: 0; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+.stp-row-amt { font-family: var(--mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stp-more { padding: 6px 0 2px; font-size: 10.5px; color: var(--dim); border-top: 1px solid var(--line-faint); }
+.stp-foot { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 10px; color: var(--faint); }
+
+/* spine rows (B) */
+.stp-tip--b .stp-tip-head--b { display: flex; align-items: baseline; gap: 9px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+.stp-tip-head--b b { font-size: 13px; color: var(--fg); }
+.stp-share { flex: 1; font-size: 10px; color: var(--dim); }
+.stp-row--b { padding: 3px 0; gap: 9px; }
+.stp-bar { width: 3px; height: 15px; border-radius: 999px; flex-shrink: 0; }
+.stp-row-cat { font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap; opacity: 0.85; }
+
+/* receipt rows (C) */
+.stp-row--c { position: relative; padding: 4px 8px; gap: 8px; border-radius: 7px; overflow: hidden; }
+.stp-row--c::before { content: ""; position: absolute; inset: 0; width: var(--share); background: color-mix(in srgb, var(--h) 10%, transparent); border-right: 2px solid color-mix(in srgb, var(--h) 45%, transparent); }
+.stp-row--c > * { position: relative; }
+.stp-row--c:first-of-type .stp-row-lab { font-weight: 600; color: var(--fg); }
+.stp-row--c:first-of-type .stp-row-amt { color: var(--fg); }
+.stp-rank { width: 14px; font-family: var(--mono); font-size: 9px; color: var(--faint); text-align: right; flex-shrink: 0; }
+
+.stp-moment--flip .stp-svg { position: absolute; inset: 40px 20px auto; width: calc(100% - 40px); height: 300px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="spend-tip-art.jsx"></script>
+<script type="text/babel">
+  ReactDOM.createRoot(document.getElementById("root")).render(<SpendTipCanvas />);
+</script>
+</body>
+</html>

@@ -980,11 +980,47 @@ export function useShelfStorage() {
       if (!name) return;
       setStrategieState((prev) => {
         const idx = prev.accountsDirectory.findIndex((d) => d.name === name);
-        const cleaned = { name, tag: entry.tag, url: entry.url?.trim() || undefined };
         const dir = [...prev.accountsDirectory];
-        if (idx >= 0) dir[idx] = cleaned;
-        else dir.push(cleaned);
+        if (idx >= 0) {
+          // preserve the existing kind/balance unless the caller supplies one
+          dir[idx] = {
+            ...dir[idx],
+            name,
+            tag: entry.tag,
+            url: entry.url?.trim() || undefined,
+            ...(entry.kind !== undefined ? { kind: entry.kind } : {}),
+            ...(entry.balance !== undefined ? { balance: entry.balance } : {}),
+          };
+        } else {
+          dir.push({
+            name,
+            tag: entry.tag,
+            url: entry.url?.trim() || undefined,
+            kind: entry.kind ?? "cash",
+            balance: entry.balance ?? 0,
+          });
+        }
         const next: StrategieState = { ...prev, accountsDirectory: dir };
+        getStorage()?.set({ [STRATEGIE_KEY]: next });
+        return next;
+      });
+    },
+    []
+  );
+
+  const strategieSetAccountsDirectory = useCallback(
+    (dir: import("../types/grid").AccountDictEntry[]) => {
+      setStrategieState((prev) => {
+        // de-dupe by name, keep first occurrence
+        const seen = new Set<string>();
+        const cleaned = dir
+          .map((a) => ({ ...a, name: a.name.trim() }))
+          .filter((a) => {
+            if (!a.name || seen.has(a.name)) return false;
+            seen.add(a.name);
+            return true;
+          });
+        const next: StrategieState = { ...prev, accountsDirectory: cleaned };
         getStorage()?.set({ [STRATEGIE_KEY]: next });
         return next;
       });
@@ -1483,6 +1519,7 @@ export function useShelfStorage() {
     strategieToggleCompareCurrency,
     strategieSetRungAccounts,
     strategieUpsertAccountDictEntry,
+    strategieSetAccountsDirectory,
     strategieAddSavingsPlan,
     strategieUpdateSavingsPlan,
     strategieRemoveSavingsPlan,
