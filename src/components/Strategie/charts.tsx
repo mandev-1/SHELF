@@ -9,6 +9,11 @@ import type { CatKey, MonthStatement } from "../../types/grid";
 interface SpendItem { id?: string; label: string; cat: CatKey; amt: number; day: string; }
 
 const SPEND_TIP_MAX_ITEMS = 24;
+/** Vertical drag (in viewBox units, ~px) past which the marquee latches into a
+ *  precise 2D box — selecting an amount band (Y) on top of the day range (X)
+ *  rather than whole-height columns. Kept small so any deliberate vertical pull
+ *  engages the band; a near-flat sideways swipe stays whole-column. */
+const BAND_LOCK_PX = 4;
 
 export interface SpendRangeOpenInfo {
   monthKey: string;
@@ -42,6 +47,7 @@ export function DailySpendChart({ months, cur, hidden = [], activeKey, onOpenRan
   const hiddenSet = new Set(hidden);
 
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const svgElRef = useRef<SVGSVGElement | null>(null);
   const uidRef = useRef(`dsp${Math.random().toString(36).slice(2, 7)}`);
   const [tip, setTip] = useState<{ col: number; cx: number; cy: number; flipX: boolean; flipY: boolean } | null>(null);
   const [sel, setSel] = useState<SelState | null>(null);
@@ -49,7 +55,10 @@ export function DailySpendChart({ months, cur, hidden = [], activeKey, onOpenRan
   const [preset, setPreset] = useState<"1m" | "3m" | "6m" | "all" | "custom">("all");
   const [dragTip, setDragTip] = useState<{ xPct: number; label: string } | null>(null);
   const [dragging, setDragging] = useState(false);
-  const dragRef = useRef<{ anchor: number; anchorY: number; moved: boolean } | null>(null);
+  // `band` latches true once a drag moves vertically past BAND_LOCK_PX, so the
+  // selection stays a precise 2D box (X days × Y amount) for the rest of the drag
+  // instead of flip-flopping back to full-height columns near a threshold.
+  const dragRef = useRef<{ anchor: number; anchorY: number; moved: boolean; band: boolean } | null>(null);
   const trackElRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -173,8 +182,10 @@ export function DailySpendChart({ months, cur, hidden = [], activeKey, onOpenRan
     return out;
   };
 
+  // measure against the SVG plot box (not .dsp-wrap, which also contains the
+  // timeline rail below) so the X column and Y amount map to the cursor exactly
   const colAt = (clientX: number) => {
-    const rect = wrapRef.current?.getBoundingClientRect();
+    const rect = svgElRef.current?.getBoundingClientRect();
     if (!rect || rect.width === 0) return null;
     const vx = ((clientX - rect.left) / rect.width) * W;
     const col = fA + Math.floor((vx - PAD.left) / slot);
@@ -182,7 +193,7 @@ export function DailySpendChart({ months, cur, hidden = [], activeKey, onOpenRan
   };
 
   const pyAt = (clientY: number) => {
-    const rect = wrapRef.current?.getBoundingClientRect();
+    const rect = svgElRef.current?.getBoundingClientRect();
     if (!rect || rect.height === 0) return null;
     const vy = ((clientY - rect.top) / rect.height) * H;
     return Math.max(PAD.top, Math.min(PAD.top + ch, vy));
@@ -194,15 +205,16 @@ export function DailySpendChart({ months, cur, hidden = [], activeKey, onOpenRan
       const py = pyAt(e.clientY);
       if (py === null) return;
       const d = dragRef.current;
-      if (col !== d.anchor || Math.abs(py - d.anchorY) > 14) d.moved = true;
+      const dv = Math.abs(py - d.anchorY);
+      if (col !== d.anchor || dv > 4) d.moved = true;
+      if (dv > BAND_LOCK_PX) d.band = true; // latch into 2D amount-band mode
       if (d.moved) {
-        const fullY = Math.abs(py - d.anchorY) <= 14;
         setSel({
           a: Math.min(d.anchor, col),
           b: Math.max(d.anchor, col),
           yT: Math.min(d.anchorY, py),
           yB: Math.max(d.anchorY, py),
-          fullY,
+          fullY: !d.band,
         });
       }
     }
@@ -251,7 +263,7 @@ export function DailySpendChart({ months, cur, hidden = [], activeKey, onOpenRan
     if (col === null) return;
     const py = pyAt(e.clientY);
     if (py === null) return;
-    dragRef.current = { anchor: col, anchorY: py, moved: false };
+    dragRef.current = { anchor: col, anchorY: py, moved: false, band: false };
   };
 
   const onSvgUp = (e: React.PointerEvent<SVGSVGElement>) => {
@@ -407,6 +419,7 @@ export function DailySpendChart({ months, cur, hidden = [], activeKey, onOpenRan
   return (
     <div className="dsp-wrap" ref={wrapRef}>
       <svg
+        ref={svgElRef}
         className="proj-svg dsp-svg"
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
@@ -626,7 +639,7 @@ export function DailySpendChart({ months, cur, hidden = [], activeKey, onOpenRan
                 <div className="dsp-tip-hint">Click to open in the statement editor</div>
               )}
               {!inSel && sel === null && (
-                <div className="dsp-tip-hint dsp-tip-hint--dim">Drag to select — across for days, down for an amount band</div>
+                <div className="dsp-tip-hint dsp-tip-hint--dim">Drag a box — sideways picks the days, down sets an amount range</div>
               )}
             </div>
           );

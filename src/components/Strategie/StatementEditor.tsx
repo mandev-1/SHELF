@@ -799,11 +799,20 @@ export function StatementEditor({
       const br = bulkFilter?.range ?? null;
       const idSet = bulkFilter?.ids?.length ? new Set(bulkFilter.ids) : null;
       const inBulk = (r: ExpenseRow) => (idSet ? idSet.has(r.id) : (!br || (r.date && r.date >= br.startIso && r.date <= br.endIso)));
-      const scoped = cm.expenses.filter(inBulk);
+      // a chart band can span several months — gather the scoped rows from every
+      // month in the draft, not just the one on screen (otherwise cross-month
+      // selections open the editor with 0 rows)
+      const monthKeysInDraft = keys.length ? keys : Object.keys(draft);
+      const scoped = monthKeysInDraft.flatMap((k) => (draft[k]?.expenses ?? []).filter(inBulk));
+      const dayNum = (iso: string) => Number(iso.slice(8, 10));
+      const startM = br ? br.startIso.slice(0, 7) : "";
+      const endM = br ? br.endIso.slice(0, 7) : "";
       const dayLab = br
-        ? (br.startIso === br.endIso
-            ? `${Number(br.startIso.slice(8, 10))}. ${monthAbbr(viewKey)}`
-            : `${Number(br.startIso.slice(8, 10))}.–${Number(br.endIso.slice(8, 10))}. ${monthAbbr(viewKey)}`)
+        ? (startM === endM
+            ? (br.startIso === br.endIso
+                ? `${dayNum(br.startIso)}. ${monthAbbr(startM)}`
+                : `${dayNum(br.startIso)}.–${dayNum(br.endIso)}. ${monthAbbr(startM)}`)
+            : `${dayNum(br.startIso)}. ${monthAbbr(startM)} – ${dayNum(br.endIso)}. ${monthAbbr(endM)}`)
         : null;
       const scopeLabel = dayLab
         ? `${dayLab}${idSet ? ` · amount band · ${scoped.length} row${scoped.length === 1 ? "" : "s"}` : ""}`
@@ -813,11 +822,27 @@ export function StatementEditor({
           currency={currency}
           savingsPlans={savingsPlans}
           editRows={{ monthKey: viewKey, expenses: scoped, scopeLabel }}
-          onApplyEdits={(mk, expenses) => {
-            setDraft((d) => ({
-              ...d,
-              [mk]: { ...d[mk], expenses: d[mk].expenses.filter((r) => !inBulk(r)).concat(expenses) },
-            }));
+          onApplyEdits={(_mk, expenses) => {
+            // re-file every kept/edited row into its own date's month, and drop
+            // the originally-scoped rows from each month they came from
+            setDraft((d) => {
+              const next = { ...d };
+              const affected = new Set<string>();
+              for (const k of Object.keys(d)) {
+                if ((d[k]?.expenses ?? []).some(inBulk)) affected.add(k);
+              }
+              const byMonth: Record<string, ExpenseRow[]> = {};
+              for (const e of expenses) {
+                const mk = /^\d{4}-\d{2}/.test(e.date || "") ? e.date.slice(0, 7) : viewKey;
+                (byMonth[mk] ||= []).push(e);
+                affected.add(mk);
+              }
+              for (const k of affected) {
+                const kept = (d[k]?.expenses ?? []).filter((r) => !inBulk(r));
+                next[k] = { ...(d[k] ?? { income: [], expenses: [] }), expenses: kept.concat(byMonth[k] ?? []) };
+              }
+              return next;
+            });
             setBulkOpen(false);
             setBulkFilter(null);
           }}

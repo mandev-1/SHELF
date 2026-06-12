@@ -105,7 +105,9 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
       srcId: e.id,
       include: true,
       isoDate: e.date || "",
-      monthKey: editRows.monthKey,
+      // derive each row's month from its own date so a cross-month chart band
+      // groups correctly in the review table (falls back to the scope month)
+      monthKey: /^\d{4}-\d{2}/.test(e.date || "") ? e.date.slice(0, 7) : editRows.monthKey,
       label: e.label,
       counterparty: "",
       kind: "expense" as TxnKind,
