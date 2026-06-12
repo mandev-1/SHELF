@@ -1,52 +1,38 @@
-import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
-import { createPortal } from "react-dom";
-import { ACCOUNT_KINDS, type AccountDictEntry, type AccountKind } from "../../types/grid";
-import { CURRENCIES, fmtMoney } from "./strategie";
+/* ShELF — Accounts: enterprise-grade controls.
+   AccountsCard (compact card, inline edits) + AccountsManager (full table modal:
+   search, kind filter, column sort, multi-select bulk ops, CSV export, inline editing).
+   Loaded BEFORE strategie.jsx; exports to window. */
 
-// ─── icons (inline, matching the reference AmI set) ──────────────────────────
 const AmI = {
-  plus: () => <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>,
-  x: () => <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>,
-  trash: () => <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-14" /></svg>,
-  search: () => <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" /></svg>,
-  dl: () => <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16" /></svg>,
-  table: () => <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M9 10v10" /></svg>,
-  ext: () => <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 4h6v6M20 4l-9 9" /></svg>,
+  plus: () => <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>,
+  x: () => <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>,
+  trash: () => <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M6 6l1 14a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-14"/></svg>,
+  search: () => <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>,
+  dl: () => <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>,
+  table: () => <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/></svg>,
+  ext: () => <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 4h6v6M20 4l-9 9"/></svg>,
 };
 
-function amKindOf(id: string | undefined) {
-  return ACCOUNT_KINDS.find((k) => k.id === id) ?? ACCOUNT_KINDS[ACCOUNT_KINDS.length - 1];
+function amKindOf(id) {
+  const ks = window.ACCOUNT_KINDS;
+  return ks.find((k) => k.id === id) || ks[ks.length - 1];
 }
 
-// ─── click-to-edit cell: Enter/blur commits, Esc cancels ─────────────────────
-function AmEdit({ display, editValue, onCommit, mono, right, title }: {
-  display: ReactNode;
-  editValue: string;
-  onCommit: (v: string) => void;
-  mono?: boolean;
-  right?: boolean;
-  title?: string;
-}) {
+/* click-to-edit cell: Enter/blur commits, Esc cancels */
+function AmEdit({ display, editValue, onCommit, mono, right, title }) {
+  const { useState, useRef } = React;
   const [ed, setEd] = useState(false);
   const [v, setV] = useState("");
   const cancel = useRef(false);
   const cls = (mono ? " am-mono" : "") + (right ? " am-right" : "");
   if (!ed) {
     return (
-      <button
-        className={"am-cell-btn" + cls}
-        title={title || "Click to edit"}
-        onClick={() => { setV(editValue); cancel.current = false; setEd(true); }}
-      >
-        {display}
-      </button>
+      <button className={"am-cell-btn" + cls} title={title || "Click to edit"}
+        onClick={() => { setV(editValue); cancel.current = false; setEd(true); }}>{display}</button>
     );
   }
   return (
-    <input
-      className={"am-cell-in" + cls}
-      autoFocus
-      value={v}
+    <input className={"am-cell-in" + cls} autoFocus value={v}
       onFocus={(e) => e.target.select()}
       onChange={(e) => setV(e.target.value)}
       onBlur={() => { setEd(false); if (!cancel.current) onCommit(v); }}
@@ -54,35 +40,27 @@ function AmEdit({ display, editValue, onCommit, mono, right, title }: {
         if (e.key === "Enter") e.currentTarget.blur();
         else if (e.key === "Escape") { cancel.current = true; e.currentTarget.blur(); }
         e.stopPropagation();
-      }}
-    />
+      }} />
   );
 }
 
-type SortKey = "name" | "kind" | "balance";
-
-// ─── the full manager modal ──────────────────────────────────────────────────
-function AccountsManager({ accounts, currency, onChange, onClose, onToast }: {
-  accounts: AccountDictEntry[];
-  currency: string;
-  onChange: (next: AccountDictEntry[]) => void;
-  onClose: () => void;
-  onToast?: (msg: string) => void;
-}) {
-  const cur = CURRENCIES[currency] || CURRENCIES.USD;
-  const kinds = ACCOUNT_KINDS;
+/* ---------- the full manager modal ---------- */
+function AccountsManager({ accounts, currency, onChange, onClose, onToast }) {
+  const { useState, useEffect, useMemo } = React;
+  const cur = window.CURRENCIES[currency] || window.CURRENCIES.USD;
+  const kinds = window.ACCOUNT_KINDS;
   const [q, setQ] = useState("");
-  const [kf, setKf] = useState<"all" | AccountKind>("all");
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "balance", dir: -1 });
-  const [sel, setSel] = useState<Set<number>>(() => new Set());
+  const [kf, setKf] = useState("all");
+  const [sort, setSort] = useState({ key: "balance", dir: -1 });
+  const [sel, setSel] = useState(() => new Set());
 
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const h = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
 
-  const fmt = (base: number | undefined) => fmtMoney(base || 0, currency, { abbr: false });
+  const fmt = (base) => window.fmtMoney(base || 0, currency, { abbr: false });
   const total = accounts.reduce((a, x) => a + (x.balance || 0), 0);
 
   const rows = useMemo(() => {
@@ -102,17 +80,15 @@ function AccountsManager({ accounts, currency, onChange, onClose, onToast }: {
   const shownSum = rows.reduce((a, x) => a + (x.balance || 0), 0);
   const kindsPresent = kinds.filter((k) => accounts.some((a) => (a.kind || "cash") === k.id));
 
-  const patch = (i: number, p: Partial<AccountDictEntry>) =>
-    onChange(accounts.map((a, ix) => (ix === i ? { ...a, ...p } : a)));
-  const toggleSel = (i: number) =>
-    setSel((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n; });
+  const patch = (i, p) => onChange(accounts.map((a, ix) => (ix === i ? { ...a, ...p } : a)));
+  const toggleSel = (i) => setSel((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; });
   const allVisSel = rows.length > 0 && rows.every((r) => sel.has(r._i));
   const toggleAll = () => setSel(allVisSel ? new Set() : new Set(rows.map((r) => r._i)));
 
-  const bulkKind = (k: string) => {
+  const bulkKind = (k) => {
     if (!k) return;
-    onChange(accounts.map((a, ix) => (sel.has(ix) ? { ...a, kind: k as AccountKind } : a)));
-    onToast?.("Set " + sel.size + " account" + (sel.size === 1 ? "" : "s") + " to " + amKindOf(k).label);
+    onChange(accounts.map((a, ix) => (sel.has(ix) ? { ...a, kind: k } : a)));
+    onToast && onToast("Set " + sel.size + " account" + (sel.size === 1 ? "" : "s") + " to " + amKindOf(k).label);
     setSel(new Set());
   };
   const bulkDelete = () => {
@@ -121,13 +97,13 @@ function AccountsManager({ accounts, currency, onChange, onClose, onToast }: {
     setSel(new Set());
   };
   const addRow = () => {
-    let n = 1, name: string;
+    let n = 1, name;
     do { name = "New account" + (n > 1 ? " " + n : ""); n++; } while (accounts.some((a) => a.name === name));
-    onChange([...accounts, { name, kind: "checking", balance: 0, tag: "" }]);
-    onToast?.("Account added — click its cells to edit");
+    onChange([...accounts, { name, kind: "checking", balance: 0 }]);
+    onToast && onToast("Account added — click its cells to edit");
   };
   const exportCsv = () => {
-    const esc = (v: unknown) => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+    const esc = (v) => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
     const lines = ["name,kind,note,balance_" + cur.code.toLowerCase() + ",url"];
     for (const a of accounts) lines.push([a.name, a.kind || "", a.tag || "", Math.round((a.balance || 0) * cur.rate), a.url || ""].map(esc).join(","));
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });
@@ -135,14 +111,12 @@ function AccountsManager({ accounts, currency, onChange, onClose, onToast }: {
     const el = document.createElement("a");
     el.href = u; el.download = "accounts.csv"; el.click();
     setTimeout(() => URL.revokeObjectURL(u), 4000);
-    onToast?.("Exported " + accounts.length + " accounts");
+    onToast && onToast("Exported " + accounts.length + " accounts");
   };
 
-  const Th = ({ k, children, right }: { k: SortKey; children: ReactNode; right?: boolean }) => (
-    <button
-      className={"am-th" + (sort.key === k ? " on" : "") + (right ? " am-right" : "")}
-      onClick={() => setSort((s) => (s.key === k ? { key: k, dir: (-s.dir) as 1 | -1 } : { key: k, dir: k === "balance" ? -1 : 1 }))}
-    >
+  const Th = ({ k, children, right }) => (
+    <button className={"am-th" + (sort.key === k ? " on" : "") + (right ? " am-right" : "")}
+      onClick={() => setSort((s) => (s.key === k ? { key: k, dir: -s.dir } : { key: k, dir: k === "balance" ? -1 : 1 }))}>
       {children}<span className="am-th-dir">{sort.key === k ? (sort.dir > 0 ? "↑" : "↓") : ""}</span>
     </button>
   );
@@ -164,12 +138,12 @@ function AccountsManager({ accounts, currency, onChange, onClose, onToast }: {
           <div className="am-chips">
             <button className={"am-chip" + (kf === "all" ? " on" : "")} onClick={() => setKf("all")}>All</button>
             {kindsPresent.map((k) => (
-              <button key={k.id} className={"am-chip" + (kf === k.id ? " on" : "")} style={{ ["--k" as string]: k.hue } as React.CSSProperties} onClick={() => setKf(kf === k.id ? "all" : k.id)}>
-                <i />{k.label}
+              <button key={k.id} className={"am-chip" + (kf === k.id ? " on" : "")} style={{ "--k": k.hue }} onClick={() => setKf(kf === k.id ? "all" : k.id)}>
+                <i></i>{k.label}
               </button>
             ))}
           </div>
-          <span className="am-spacer" />
+          <span className="am-spacer"></span>
           <button className="am-tool" onClick={exportCsv}><AmI.dl /> CSV</button>
           <button className="am-tool am-tool--primary" onClick={addRow}><AmI.plus /> Add account</button>
         </div>
@@ -194,7 +168,7 @@ function AccountsManager({ accounts, currency, onChange, onClose, onToast }: {
             <span className="am-th-static">Note</span>
             <Th k="balance" right>Balance · {cur.code}</Th>
             <span className="am-th-static am-right">Share</span>
-            <span />
+            <span></span>
           </div>
           {rows.map((a) => {
             const h = amKindOf(a.kind || "cash");
@@ -208,9 +182,9 @@ function AccountsManager({ accounts, currency, onChange, onClose, onToast }: {
                   {a.url && <a className="am-ext" href={a.url} target="_blank" rel="noreferrer" title={a.url}><AmI.ext /></a>}
                 </span>
                 <span className="am-kind-cell">
-                  <i className="am-dot" style={{ background: h.hue }} />
-                  <select className="am-kind" value={a.kind || "cash"} onChange={(e) => patch(a._i, { kind: e.target.value as AccountKind })}>
-                    {ACCOUNT_KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
+                  <i className="am-dot" style={{ background: h.hue }}></i>
+                  <select className="am-kind" value={a.kind || "cash"} onChange={(e) => patch(a._i, { kind: e.target.value })}>
+                    {window.ACCOUNT_KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
                   </select>
                 </span>
                 <AmEdit display={a.tag || <span className="am-dim">—</span>} editValue={a.tag || ""}
@@ -219,7 +193,7 @@ function AccountsManager({ accounts, currency, onChange, onClose, onToast }: {
                   onCommit={(v) => { const n = parseFloat(String(v).replace(/[^\d.-]/g, "")); if (Number.isFinite(n)) patch(a._i, { balance: Math.round(n / cur.rate) }); }}
                   title="Balance — click to edit" />
                 <span className="am-share">
-                  <i><b style={{ width: Math.min(100, pct) + "%", background: h.hue }} /></i>
+                  <i><b style={{ width: Math.min(100, pct) + "%", background: h.hue }}></b></i>
                   <span className="am-mono">{pct >= 0.5 ? Math.round(pct) + "%" : "·"}</span>
                 </span>
                 <button className="am-del" title={"Remove " + a.name}
@@ -239,16 +213,12 @@ function AccountsManager({ accounts, currency, onChange, onClose, onToast }: {
   );
 }
 
-// ─── compact card ─────────────────────────────────────────────────────────────
-export function AccountsCard({ accounts, currency, onChange, onToast }: {
-  accounts: AccountDictEntry[];
-  currency: string;
-  onChange: (next: AccountDictEntry[]) => void;
-  onToast?: (msg: string) => void;
-}) {
+/* ---------- compact card ---------- */
+function AccountsCard({ accounts, currency, onChange, onToast }) {
+  const { useState } = React;
   const [mgr, setMgr] = useState(false);
-  const cur = CURRENCIES[currency] || CURRENCIES.USD;
-  const kinds = ACCOUNT_KINDS;
+  const cur = window.CURRENCIES[currency] || window.CURRENCIES.USD;
+  const kinds = window.ACCOUNT_KINDS;
   const total = accounts.reduce((a, x) => a + (x.balance || 0), 0);
 
   const indexed = accounts.map((a, i) => ({ a, i }));
@@ -256,8 +226,7 @@ export function AccountsCard({ accounts, currency, onChange, onToast }: {
     .map((k) => ({ k, rows: indexed.filter(({ a }) => (a.kind || "cash") === k.id) }))
     .filter((g) => g.rows.length > 0);
 
-  const patch = (i: number, p: Partial<AccountDictEntry>) =>
-    onChange(accounts.map((x, ix) => (ix === i ? { ...x, ...p } : x)));
+  const patch = (i, p) => onChange(accounts.map((x, ix) => (ix === i ? { ...x, ...p } : x)));
 
   return (
     <div className="card span-4">
@@ -271,13 +240,13 @@ export function AccountsCard({ accounts, currency, onChange, onToast }: {
       <div style={{ padding: "14px 20px 18px" }}>
         <div className="acct-total">
           <span className="acct-total-lab">Total across {accounts.length} account{accounts.length === 1 ? "" : "s"}</span>
-          <span className="acct-total-val">{fmtMoney(total, currency, { abbr: true })}</span>
+          <span className="acct-total-val">{window.fmtMoney(total, currency, { abbr: true })}</span>
         </div>
         {total > 0 && (
           <div className="alloc-bar" style={{ marginTop: 12 }}>
             {groups.map(({ k, rows }) => {
               const sum = rows.reduce((s, { a }) => s + (a.balance || 0), 0);
-              return sum > 0 ? <div key={k.id} className="alloc-seg" style={{ width: (sum / total) * 100 + "%", background: k.hue }} title={k.label + " · " + fmtMoney(sum, currency, { abbr: true })} /> : null;
+              return sum > 0 ? <div key={k.id} className="alloc-seg" style={{ width: (sum / total) * 100 + "%", background: k.hue }} title={k.label + " · " + window.fmtMoney(sum, currency, { abbr: true })}></div> : null;
             })}
           </div>
         )}
@@ -286,26 +255,24 @@ export function AccountsCard({ accounts, currency, onChange, onToast }: {
             <div className="acct-group" key={k.id}>
               <div className="acct-group-head">
                 <span className="acct-group-lab" style={{ color: k.hue }}>{k.label}</span>
-                <span className="acct-group-sum">{fmtMoney(rows.reduce((s, { a }) => s + (a.balance || 0), 0), currency, { abbr: true })}</span>
+                <span className="acct-group-sum">{window.fmtMoney(rows.reduce((s, { a }) => s + (a.balance || 0), 0), currency, { abbr: true })}</span>
               </div>
               {rows.map(({ a, i }) => (
                 <div className="alloc-row sp-row acct-row" key={i}>
-                  <div className="alloc-dot" style={{ background: k.hue }} />
+                  <div className="alloc-dot" style={{ background: k.hue }}></div>
                   <div className="alloc-name">
                     {a.url
-                      ? <a
-                          href={a.url} target="_blank" rel="noreferrer" className="acct-link"
+                      ? <a href={a.url} target="_blank" rel="noreferrer" className="acct-link"
                           onClick={(e) => {
-                            const bank = a.name.split("—")[0].trim() || a.name;
-                            if (!window.confirm(`This will open ${bank} in a new tab. Are you sure?`)) e.preventDefault();
-                          }}
-                        >{a.name}</a>
+                            const bank = (a.name.split("—")[0] || a.name).trim();
+                            if (!window.confirm("This will open " + bank + " in a new tab. Are you sure?")) e.preventDefault();
+                          }}>{a.name}</a>
                       : <span>{a.name}</span>}
                     <span className="sp-kind">{a.tag || k.label}</span>
                   </div>
                   <span className="acct-edit-wrap">
                     <AmEdit mono right title="Balance — click to edit"
-                      display={fmtMoney(a.balance || 0, currency, { abbr: true })}
+                      display={window.fmtMoney(a.balance || 0, currency, { abbr: true })}
                       editValue={String(Math.round((a.balance || 0) * cur.rate))}
                       onCommit={(v) => { const n = parseFloat(String(v).replace(/[^\d.-]/g, "")); if (Number.isFinite(n)) patch(i, { balance: Math.round(n / cur.rate) }); }} />
                   </span>
@@ -318,10 +285,12 @@ export function AccountsCard({ accounts, currency, onChange, onToast }: {
           )}
         </div>
       </div>
-      {mgr && createPortal(
+      {mgr && ReactDOM.createPortal(
         <AccountsManager accounts={accounts} currency={currency} onChange={onChange} onClose={() => setMgr(false)} onToast={onToast} />,
         document.body
       )}
     </div>
   );
 }
+
+Object.assign(window, { AccountsCard, AccountsManager });

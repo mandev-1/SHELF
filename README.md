@@ -4,11 +4,13 @@
 
 Download the latest release from `releases/<version>/` and load that folder unpacked in `chrome://extensions` or `brave://extensions`.
 
-```bash
-npm run release
-npm run release:rebuild
-```
+## How you add a new version
 
+1. `npm run release:new` — bumps the patch in `package.json` + `public/manifest.json`, builds, and creates `releases/<version>/` plus the archives. (For a minor/major bump: `RELEASE_VERSION=1.1.0 npm run release:new`.)
+2. Commit everything: `git add -A && git commit -m "release 1.0.13"`
+3. Tag with `v` + that exact version and push: `git tag v1.0.13 && git push && git push origin v1.0.13`
+
+GitHub Actions then zips just the committed `releases/<version>/` folder (via `scripts/package-latest.sh`) and publishes the GitHub Release with the `.zip` and `.tar.gz` attached — no more manual uploads. The published archive is exactly what you built and committed locally.
 
 A minimal, serverless Chrome/Brave extension that turns your new tab into a bookmark organizer. Built with **HeroUI v3**, **React 19**, and **Tailwind v4**.
 

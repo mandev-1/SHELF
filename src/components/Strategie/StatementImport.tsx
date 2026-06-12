@@ -1,6 +1,6 @@
 import { Fragment, useState, useEffect, useMemo, useRef, useCallback } from "react";
-import type { CatKey, MonthStatement, IncomeRow, ExpenseRow, SavingsPlan } from "../../types/grid";
-import { CURRENCIES, STMT_CATS, CAT_KEYS_BY_LABEL } from "./strategie";
+import type { CatKey, MonthStatement, IncomeRow, ExpenseRow, SavingsPlan, Debt } from "../../types/grid";
+import { CURRENCIES, STMT_CATS, CAT_KEYS_BY_LABEL, debtHue } from "./strategie";
 import {
   parseStatement, toBaseAmount, foldAscii,
   type StatementParseResult, type ColumnMap, type TxnKind,
@@ -15,6 +15,8 @@ export interface StatementImportProps {
   existing?: Record<string, MonthStatement>;
   /** Savings programs rows can be tagged as contributions to. */
   savingsPlans?: SavingsPlan[];
+  /** Tracked debts rows can be tagged as payments toward. */
+  debts?: Debt[];
   /** Edit mode: review one month's existing expense rows instead of parsing a
    *  statement. Apply replaces the month's expenses (unchecked rows = removed). */
   editRows?: { monthKey: string; expenses: ExpenseRow[]; scopeLabel?: string };
@@ -36,6 +38,7 @@ interface ReviewRow {
   currencyCode: string;
   dup: boolean;          // duplicate of an existing/earlier row — excluded by default
   savingsPlanId?: string; // tagged as a contribution to a savings program
+  debtId?: string;        // tagged as a payment toward a tracked debt (exclusive with savingsPlanId)
   srcId?: string;         // edit mode: id of the ExpenseRow this came from
 }
 
@@ -43,7 +46,7 @@ interface ReviewRow {
  *  whether the user has actually changed anything (sorting is not a change). */
 function rowsSignature(rows: ReviewRow[]): string {
   return rows
-    .map((r) => `${r.srcId ?? r.key}|${r.include ? 1 : 0}|${r.kind}|${r.label}|${r.cat}|${r.savingsPlanId ?? ""}|${r.magnitude}`)
+    .map((r) => `${r.srcId ?? r.key}|${r.include ? 1 : 0}|${r.kind}|${r.label}|${r.cat}|${r.savingsPlanId ?? ""}|${r.debtId ?? ""}|${r.magnitude}`)
     .sort()
     .join("¶");
 }
@@ -102,7 +105,7 @@ const ROLE_FIELDS: { key: keyof ColumnMap; label: string }[] = [
   { key: "currency", label: "Currency" },
 ];
 
-export function StatementImport({ currency, existing, savingsPlans = [], editRows, onApplyEdits, onClose, onImport }: StatementImportProps) {
+export function StatementImport({ currency, existing, savingsPlans = [], debts = [], editRows, onApplyEdits, onClose, onImport }: StatementImportProps) {
   const editMode = !!editRows;
   const [rawText, setRawText] = useState("");
   const [result, setResult] = useState<StatementParseResult | null>(null);
@@ -125,6 +128,7 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
       currencyCode: currency,
       dup: false,
       savingsPlanId: e.savingsPlanId,
+      debtId: e.debtId,
     }));
   });
   const [override, setOverride] = useState<Partial<ColumnMap>>({});
@@ -210,10 +214,14 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
           : `i|${baseCents}|${foldAscii(label)}`;
         const dup = seen.has(innerKey) || existingKeys.has(bookKey);
         seen.add(innerKey);
-        // best-effort auto-tag: plan name appearing in the row's text
+        // best-effort auto-tag: plan/debt name appearing in the row's text
+        // (debt only when no savings plan matched — the two are exclusive)
         const hay = foldAscii(`${t.description} ${t.counterparty}`);
         const planAuto = t.kind === "expense"
           ? savingsPlans.find((p) => hay.includes(foldAscii(p.name)))?.id
+          : undefined;
+        const debtAuto = t.kind === "expense" && !planAuto
+          ? debts.find((d) => hay.includes(foldAscii(d.name)))?.id
           : undefined;
         return {
           key: `${i}-${t.isoDate}-${t.amount}-${t.description.slice(0, 8)}`,
@@ -228,10 +236,11 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
           currencyCode: t.currencyCode,
           dup,
           savingsPlanId: prevR ? prevR.savingsPlanId : planAuto,
+          debtId: prevR ? prevR.debtId : debtAuto,
         };
       });
     });
-  }, [currency, existingKeys, savingsPlans]);
+  }, [currency, existingKeys, savingsPlans, debts]);
 
   // single re-parse path: whenever the raw text or column override changes
   useEffect(() => {
@@ -370,6 +379,7 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
       case "cpty": return r.counterparty;
       case "cat":
         if (r.kind === "income") return "";
+        if (r.debtId) return debts.find((d) => d.id === r.debtId)?.name ?? "";
         if (r.savingsPlanId) return savingsPlans.find((p) => p.id === r.savingsPlanId)?.name ?? "";
         return (STMT_CATS[r.cat] || STMT_CATS.other).label;
     }
@@ -459,8 +469,9 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
       const patch: Partial<ReviewRow> = {};
       if (label) patch.label = label;
       if (bulkCat) {
-        if (bulkCat.startsWith("plan:")) patch.savingsPlanId = bulkCat.slice(5);
-        else { patch.cat = bulkCat as CatKey; patch.savingsPlanId = undefined; }
+        if (bulkCat.startsWith("plan:")) { patch.savingsPlanId = bulkCat.slice(5); patch.debtId = undefined; }
+        else if (bulkCat.startsWith("debt:")) { patch.debtId = bulkCat.slice(5); patch.savingsPlanId = undefined; }
+        else { patch.cat = bulkCat as CatKey; patch.savingsPlanId = undefined; patch.debtId = undefined; }
       }
       return { ...r, ...patch };
     }));
@@ -483,6 +494,7 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
       cat: r.cat,
       date: r.isoDate,
       savingsPlanId: r.savingsPlanId || undefined,
+      debtId: r.debtId || undefined,
     }));
     onApplyEdits(editRows.monthKey, out);
   };
@@ -500,6 +512,7 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
         const row: ExpenseRow = {
           id: newId(), label: r.label || r.counterparty || "Expense", amt, cat: r.cat, date: r.isoDate,
           savingsPlanId: r.savingsPlanId || undefined,
+          debtId: r.debtId || undefined,
         };
         additions[r.monthKey].expenses.push(row);
       }
@@ -744,6 +757,11 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
                         {savingsPlans.map((p) => <option key={p.id} value={`plan:${p.id}`}>→ {p.name}</option>)}
                       </optgroup>
                     )}
+                    {debts.length > 0 && (
+                      <optgroup label="Debt payments">
+                        {debts.map((d) => <option key={d.id} value={`debt:${d.id}`}>↓ {d.name}</option>)}
+                      </optgroup>
+                    )}
                   </select>
                   <button
                     className="se-btn se-btn--primary si-bulk-apply"
@@ -878,18 +896,21 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
                               <span
                                 className="si-catdot"
                                 style={{
-                                  background: r.savingsPlanId
-                                    ? (savingsPlans.find((p) => p.id === r.savingsPlanId)?.hue ?? "var(--accent)")
-                                    : (STMT_CATS[r.cat] || STMT_CATS.other).hue,
+                                  background: r.debtId
+                                    ? debtHue(debts.find((d) => d.id === r.debtId))
+                                    : r.savingsPlanId
+                                      ? (savingsPlans.find((p) => p.id === r.savingsPlanId)?.hue ?? "var(--accent)")
+                                      : (STMT_CATS[r.cat] || STMT_CATS.other).hue,
                                 }}
                               />
                               <select
                                 className="se-cat si-cat"
-                                value={r.savingsPlanId ? `plan:${r.savingsPlanId}` : r.cat}
+                                value={r.debtId ? `debt:${r.debtId}` : r.savingsPlanId ? `plan:${r.savingsPlanId}` : r.cat}
                                 onChange={(e) => {
                                   const v = e.target.value;
-                                  if (v.startsWith("plan:")) setRow(r.key, { savingsPlanId: v.slice(5) });
-                                  else setRow(r.key, { cat: v as CatKey, savingsPlanId: undefined });
+                                  if (v.startsWith("plan:")) setRow(r.key, { savingsPlanId: v.slice(5), debtId: undefined });
+                                  else if (v.startsWith("debt:")) setRow(r.key, { debtId: v.slice(5), savingsPlanId: undefined });
+                                  else setRow(r.key, { cat: v as CatKey, savingsPlanId: undefined, debtId: undefined });
                                 }}
                               >
                                 {CAT_KEYS_BY_LABEL.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
@@ -897,6 +918,13 @@ export function StatementImport({ currency, existing, savingsPlans = [], editRow
                                   <optgroup label="Savings plans">
                                     {savingsPlans.map((p) => (
                                       <option key={p.id} value={`plan:${p.id}`}>→ {p.name}</option>
+                                    ))}
+                                  </optgroup>
+                                )}
+                                {debts.length > 0 && (
+                                  <optgroup label="Debt payments">
+                                    {debts.map((d) => (
+                                      <option key={d.id} value={`debt:${d.id}`}>↓ {d.name}</option>
                                     ))}
                                   </optgroup>
                                 )}

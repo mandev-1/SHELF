@@ -84,7 +84,7 @@ export function DailySpendChart({ months, cur, hidden = [], activeKey, onOpenRan
       dayLabel.push(months.length > 1 ? `${monthAbbr(key)} ${d}` : `${d}.`);
     }
     for (const e of stmt.expenses) {
-      if (e.savingsPlanId) continue;
+      if (e.savingsPlanId || e.debtId) continue;
       if (hiddenSet.has(e.cat)) continue;
       const d = e.date?.startsWith(key) ? Number(e.date.slice(8, 10)) : 0;
       if (d >= 1 && d <= dim) {

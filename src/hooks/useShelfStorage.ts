@@ -1113,6 +1113,48 @@ export function useShelfStorage() {
     });
   }, []);
 
+  const strategieSetDebts = useCallback((next: import("../types/grid").Debt[]) => {
+    setStrategieState((prev) => {
+      const ids = new Set(next.map((d) => d.id));
+      // mirror savings-plan cleanup: a removed debt's tagged rows lose the link
+      // (debtId stripped) so they fall back to ordinary spending.
+      let touched = false;
+      const byMonth: Record<string, MonthStatement> = {};
+      for (const [k, mo] of Object.entries(prev.statements.byMonth)) {
+        byMonth[k] = {
+          income: mo.income,
+          expenses: mo.expenses.map((e) => {
+            if (e.debtId && !ids.has(e.debtId)) { touched = true; return { ...e, debtId: undefined }; }
+            return e;
+          }),
+        };
+      }
+      const nextState: StrategieState = {
+        ...prev,
+        debts: next,
+        statements: touched ? { ...prev.statements, byMonth } : prev.statements,
+      };
+      getStorage()?.set({ [STRATEGIE_KEY]: nextState });
+      return nextState;
+    });
+  }, []);
+
+  const strategieSetDebtStrategy = useCallback((v: import("../types/grid").DebtStrategy) => {
+    setStrategieState((prev) => {
+      const next: StrategieState = { ...prev, debtStrategy: v };
+      getStorage()?.set({ [STRATEGIE_KEY]: next });
+      return next;
+    });
+  }, []);
+
+  const strategieSetCardLayout = useCallback((layout: import("../types/grid").CardLayout) => {
+    setStrategieState((prev) => {
+      const next: StrategieState = { ...prev, cardLayout: layout };
+      getStorage()?.set({ [STRATEGIE_KEY]: next });
+      return next;
+    });
+  }, []);
+
   const saveGoals = useCallback((next: ShelfGoalMap) => {
     setGoals(next);
     getStorage()?.set({ [GOALS_KEY]: next });
@@ -1559,6 +1601,9 @@ export function useShelfStorage() {
     strategieAddSavingsPlan,
     strategieUpdateSavingsPlan,
     strategieRemoveSavingsPlan,
+    strategieSetDebts,
+    strategieSetDebtStrategy,
+    strategieSetCardLayout,
     llmConsoleUrl,
     setLlmConsoleUrl,
     showBothNavButtons,

@@ -1,90 +1,35 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
-import type { AccountDictEntry, RungAccountRef } from "../../types/grid";
-import type { LadderRung } from "./strategie";
-import { fmtMoney } from "./strategie";
-import {
-  IcoCheck, IcoLock, IcoPlus, IcoX, IcoClock, IcoTrash, IcoPencil,
-  IcoShield, IcoFlame, IcoGift, IcoVault, IcoGrowth, IcoTarget, IcoLeaf,
-} from "./icons";
+/* ShELF — LadderDetail modal. Port of src/components/Strategie/LadderDetail.tsx. */
 
-export function RungIcon({ icon }: { icon?: string }) {
-  switch (icon) {
-    case "shield": return <IcoShield />;
-    case "flame":  return <IcoFlame />;
-    case "gift":   return <IcoGift />;
-    case "vault":  return <IcoVault />;
-    case "growth": return <IcoGrowth />;
-    case "leaf":   return <IcoLeaf />;
-    case "target": return <IcoTarget />;
-    default:       return null;
-  }
-}
-
-const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-export function fmtLdDate(s: string) {
+const LD_MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function fmtLdDate(s) {
   const [y, m, d] = (s || "").split("-").map(Number);
   if (!y) return "";
-  if (!d) return `${MONTH_ABBR[(m || 1) - 1]} ${y}`;
-  return `${MONTH_ABBR[(m || 1) - 1]} ${d}, ${y}`;
+  if (!d) return LD_MONTH_ABBR[(m || 1) - 1] + " " + y;
+  return LD_MONTH_ABBR[(m || 1) - 1] + " " + d + ", " + y;
 }
 
-/** Live read-only view for the step-3 (debt) ladder rung. */
-export type DebtView = {
-  rows: { name: string; tag: string; balance: number; cleared: boolean }[];
-  history: { date: string; label: string; amt: number }[];
-  paid: number;
-  principal: number;
-};
-
-type DisplayRow = { name: string; tag: string; url?: string; balance: number; cleared?: boolean };
-
-type LadderDetailProps = {
-  rung: LadderRung;
-  currency: string;
-  totalSteps: number;
-  directory: AccountDictEntry[];
-  persistedRows?: RungAccountRef[];
-  /** When set (step 3), the section is read-only and statement-driven. */
-  debtView?: DebtView;
-  onSetRungAccounts: (rungId: number, rows: RungAccountRef[]) => void;
-  onUpsertAccountDictEntry: (entry: AccountDictEntry) => void;
-  onClose: () => void;
-};
-
-type EditRow = {
-  name: string;
-  tag: string;
-  url: string;
-  balance: number;
-};
-
-export function LadderDetail({
-  rung, currency, totalSteps, directory, persistedRows, debtView,
-  onSetRungAccounts, onUpsertAccountDictEntry, onClose,
-}: LadderDetailProps) {
+function LadderDetail({ rung, currency, totalSteps, directory, persistedRows, debtView, onSetRungAccounts, onUpsertAccountDictEntry, onClose }) {
+  const { useState, useEffect, useCallback, useMemo } = React;
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<EditRow[]>([]);
+  const [draft, setDraft] = useState([]);
 
-  const displayRows = useMemo<DisplayRow[]>(() => {
-    if (debtView) return debtView.rows.map((r) => ({ ...r }));
+  const displayRows = useMemo(() => {
+    if (debtView) return debtView.rows;
     if (persistedRows) {
       return persistedRows.map((p) => {
         const d = directory.find((x) => x.name === p.accountRef);
-        return { name: p.accountRef, tag: d?.tag ?? "", url: d?.url, balance: p.balance };
+        return { name: p.accountRef, tag: d ? d.tag : "", url: d ? d.url : undefined, balance: p.balance };
       });
     }
-    return (rung.accounts ?? []).map((a) => ({ name: a.name, tag: a.tag, url: undefined as string | undefined, balance: a.balance }));
+    return (rung.accounts || []).map((a) => ({ name: a.name, tag: a.tag, url: undefined, balance: a.balance }));
   }, [persistedRows, directory, rung, debtView]);
 
   const startEdit = useCallback(() => {
-    setDraft(displayRows.map((r) => ({ name: r.name, tag: r.tag, url: r.url ?? "", balance: r.balance })));
+    setDraft(displayRows.map((r) => ({ name: r.name, tag: r.tag, url: r.url || "", balance: r.balance })));
     setEditing(true);
   }, [displayRows]);
 
-  const cancelEdit = useCallback(() => {
-    setEditing(false);
-    setDraft([]);
-  }, []);
+  const cancelEdit = useCallback(() => { setEditing(false); setDraft([]); }, []);
 
   const saveEdit = useCallback(() => {
     const cleaned = draft
@@ -93,16 +38,13 @@ export function LadderDetail({
     for (const r of cleaned) {
       onUpsertAccountDictEntry({ name: r.name, tag: r.tag.trim(), url: r.url.trim() || undefined });
     }
-    onSetRungAccounts(
-      rung.id,
-      cleaned.map((r) => ({ accountRef: r.name, balance: Number.isFinite(r.balance) ? r.balance : 0 })),
-    );
+    onSetRungAccounts(rung.id, cleaned.map((r) => ({ accountRef: r.name, balance: Number.isFinite(r.balance) ? r.balance : 0 })));
     setEditing(false);
     setDraft([]);
   }, [draft, onSetRungAccounts, onUpsertAccountDictEntry, rung.id]);
 
   useEffect(() => {
-    const h = (e: KeyboardEvent) => {
+    const h = (e) => {
       if (e.key !== "Escape") return;
       if (editing) { cancelEdit(); return; }
       onClose();
@@ -111,25 +53,22 @@ export function LadderDetail({
     return () => window.removeEventListener("keydown", h);
   }, [editing, cancelEdit, onClose]);
 
-  const f = (v: number) => fmtMoney(v, currency);
+  const f = (v) => window.fmtMoney(v, currency);
   const statusLabel = rung.status === "done" ? "Funded" : rung.status === "active" ? "In progress" : "Not started yet";
   const total = displayRows.reduce((a, x) => a + (x.balance || 0), 0);
   const pctOfTarget = rung.target ? Math.min(100, Math.round((total / rung.target) * 100)) : null;
-  const history = debtView ? debtView.history : (rung.history ?? []);
+  const history = debtView ? debtView.history : (rung.history || []);
   const pctPaid = debtView && debtView.principal > 0
-    ? Math.min(100, Math.round((debtView.paid / debtView.principal) * 100))
-    : null;
+    ? Math.min(100, Math.round((debtView.paid / debtView.principal) * 100)) : null;
 
-  // When the user types a name matching a dict entry, prefill empty tag/url fields —
-  // but never overwrite a deliberate edit they've already made.
-  const onDraftName = (idx: number, name: string) => {
+  const onDraftName = (idx, name) => {
     setDraft((prev) => {
       const next = [...prev];
       const row = { ...next[idx], name };
       const hit = directory.find((d) => d.name === name);
       if (hit) {
         if (!row.tag) row.tag = hit.tag;
-        if (!row.url) row.url = hit.url ?? "";
+        if (!row.url) row.url = hit.url || "";
       }
       next[idx] = row;
       return next;
@@ -138,22 +77,17 @@ export function LadderDetail({
 
   return (
     <div className="ld-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div
-        className="ld-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={rung.title}
-        style={{ ["--step-hue" as string]: rung.hue ?? "var(--accent)" }}
-      >
+      <div className="ld-modal" role="dialog" aria-modal="true" aria-label={rung.title}
+        style={{ "--step-hue": rung.hue || "var(--accent)" }}>
         <div className="ld-hero">
-          <div className="ld-hero-wash" aria-hidden="true" />
+          <div className="ld-hero-wash" aria-hidden="true"></div>
           <div className="ld-hero-ghost" aria-hidden="true"><RungIcon icon={rung.icon} /></div>
           <button className="ld-close" onClick={onClose} aria-label="Close"><IcoX /></button>
           <div className="ld-hero-row">
             <span className="ld-hero-badge"><RungIcon icon={rung.icon} /></span>
-            <span className={`ld-status ld-status--${rung.status}`}>
+            <span className={"ld-status ld-status--" + rung.status}>
               {rung.status === "done" ? <IcoCheck /> : rung.status === "queued" ? <IcoLock /> : <IcoClock />}
-              {statusLabel}{rung.status === "active" && typeof rung.pct === "number" ? ` · ${rung.pct}%` : ""}
+              {statusLabel}{rung.status === "active" && typeof rung.pct === "number" ? " · " + rung.pct + "%" : ""}
             </span>
           </div>
           <div className="ld-hero-foot">
@@ -187,26 +121,26 @@ export function LadderDetail({
               <div className="ld-accts">
                 {displayRows.map((a, i) => (
                   <div className="ld-acct" key={i}>
-                    <span className="ld-acct-dot" />
+                    <span className="ld-acct-dot"></span>
                     <span className="ld-acct-meta">
                       {a.url ? (
                         <a className="ld-acct-name ld-acct-link" href={a.url} target="_blank" rel="noopener noreferrer">
                           {a.name}<span className="ld-acct-linkmark" aria-hidden="true">↗</span>
                         </a>
                       ) : (
-                        <span className={`ld-acct-name${a.cleared ? " ld-acct-name--cleared" : ""}`}>{a.name}</span>
+                        <span className={"ld-acct-name" + (a.cleared ? " ld-acct-name--cleared" : "")}>{a.name}</span>
                       )}
                       {a.tag && <span className="ld-acct-tag">{a.tag}</span>}
                     </span>
-                    <span className={`ld-acct-bal${a.cleared ? " ld-acct-bal--cleared" : ""}`}>{a.cleared ? "cleared" : f(a.balance)}</span>
+                    <span className={"ld-acct-bal" + (a.cleared ? " ld-acct-bal--cleared" : "")}>{a.cleared ? "cleared" : f(a.balance)}</span>
                   </div>
                 ))}
                 {pctPaid !== null && (
                   <div className="ld-target">
-                    <div className="ld-target-bar"><span style={{ width: `${pctPaid}%` }} /></div>
+                    <div className="ld-target-bar"><span style={{ width: pctPaid + "%" }}></span></div>
                     <div className="ld-target-foot">
                       <span>{pctPaid}% paid off</span>
-                      <span>{f(debtView!.paid)} of {f(debtView!.principal)}</span>
+                      <span>{f(debtView.paid)} of {f(debtView.principal)}</span>
                     </div>
                   </div>
                 )}
@@ -218,7 +152,7 @@ export function LadderDetail({
                 )}
                 {pctOfTarget !== null && rung.target && (
                   <div className="ld-target">
-                    <div className="ld-target-bar"><span style={{ width: `${pctOfTarget}%` }} /></div>
+                    <div className="ld-target-bar"><span style={{ width: pctOfTarget + "%" }}></span></div>
                     <div className="ld-target-foot">
                       <span>{pctOfTarget}% of target</span>
                       <span>{f(total)} / {f(rung.target)}</span>
@@ -233,7 +167,7 @@ export function LadderDetail({
 
           {editing && (
             <div className="ld-edit">
-              <datalist id={`acct-dict-${rung.id}`}>
+              <datalist id={"acct-dict-" + rung.id}>
                 {directory.map((d) => <option key={d.name} value={d.name} />)}
               </datalist>
               {draft.length === 0 && (
@@ -242,45 +176,26 @@ export function LadderDetail({
               {draft.map((row, i) => (
                 <div className="ld-edit-row" key={i}>
                   <div className="ld-edit-fields">
-                    <input
-                      className="ld-edit-input ld-edit-input--name"
-                      list={`acct-dict-${rung.id}`}
-                      placeholder="Account name"
-                      value={row.name}
-                      onChange={(e) => onDraftName(i, e.target.value)}
-                    />
-                    <input
-                      className="ld-edit-input ld-edit-input--tag"
-                      placeholder="Tag (e.g. Instant access)"
+                    <input className="ld-edit-input ld-edit-input--name" list={"acct-dict-" + rung.id}
+                      placeholder="Account name" value={row.name}
+                      onChange={(e) => onDraftName(i, e.target.value)} />
+                    <input className="ld-edit-input ld-edit-input--tag" placeholder="Tag (e.g. Instant access)"
                       value={row.tag}
-                      onChange={(e) => setDraft((p) => { const n = [...p]; n[i] = { ...n[i], tag: e.target.value }; return n; })}
-                    />
-                    <input
-                      className="ld-edit-input ld-edit-input--bal"
-                      type="number" inputMode="decimal" placeholder="0"
+                      onChange={(e) => setDraft((p) => { const n = [...p]; n[i] = { ...n[i], tag: e.target.value }; return n; })} />
+                    <input className="ld-edit-input ld-edit-input--bal" type="number" inputMode="decimal" placeholder="0"
                       value={Number.isFinite(row.balance) ? row.balance : ""}
-                      onChange={(e) => setDraft((p) => { const n = [...p]; n[i] = { ...n[i], balance: e.target.value === "" ? 0 : Number(e.target.value) }; return n; })}
-                    />
-                    <button
-                      className="ld-edit-trash"
-                      onClick={() => setDraft((p) => p.filter((_, j) => j !== i))}
-                      aria-label="Remove row"
-                    >
+                      onChange={(e) => setDraft((p) => { const n = [...p]; n[i] = { ...n[i], balance: e.target.value === "" ? 0 : Number(e.target.value) }; return n; })} />
+                    <button className="ld-edit-trash" onClick={() => setDraft((p) => p.filter((_, j) => j !== i))} aria-label="Remove row">
                       <IcoTrash />
                     </button>
                   </div>
-                  <input
-                    className="ld-edit-input ld-edit-input--url"
+                  <input className="ld-edit-input ld-edit-input--url"
                     placeholder="https://… (optional — opens when you click the name)"
                     value={row.url}
-                    onChange={(e) => setDraft((p) => { const n = [...p]; n[i] = { ...n[i], url: e.target.value }; return n; })}
-                  />
+                    onChange={(e) => setDraft((p) => { const n = [...p]; n[i] = { ...n[i], url: e.target.value }; return n; })} />
                 </div>
               ))}
-              <button
-                className="ld-edit-add"
-                onClick={() => setDraft((p) => [...p, { name: "", tag: "", url: "", balance: 0 }])}
-              >
+              <button className="ld-edit-add" onClick={() => setDraft((p) => [...p, { name: "", tag: "", url: "", balance: 0 }])}>
                 <IcoPlus /> Add account
               </button>
             </div>
@@ -297,10 +212,10 @@ export function LadderDetail({
             <ol className="ld-time">
               {[...history].reverse().map((h, i) => (
                 <li className="ld-event" key={i}>
-                  <span className="ld-event-node" />
+                  <span className="ld-event-node"></span>
                   <span className="ld-event-date">{fmtLdDate(h.date)}</span>
                   <span className="ld-event-label">{h.label}</span>
-                  <span className={`ld-event-amt ${h.amt > 0 ? "pos" : h.amt < 0 ? "neg" : "zero"}`}>
+                  <span className={"ld-event-amt " + (h.amt > 0 ? "pos" : h.amt < 0 ? "neg" : "zero")}>
                     {h.amt > 0 ? "+" : h.amt < 0 ? "−" : ""}{h.amt ? f(Math.abs(h.amt)) : "—"}
                   </span>
                 </li>
@@ -314,3 +229,5 @@ export function LadderDetail({
     </div>
   );
 }
+
+Object.assign(window, { LadderDetail, fmtLdDate });

@@ -1,4 +1,5 @@
-import type { CatKey, MonthStatement, IncomeRow, ExpenseRow } from "../../types/grid";
+import type { CatKey, MonthStatement, IncomeRow, ExpenseRow, Debt } from "../../types/grid";
+import { DEBT_KINDS } from "../../types/grid";
 
 // ─── Currency table ───────────────────────────────────────────────────────────
 export const CURRENCIES: Record<string, { code: string; locale: string; rate: number }> = {
@@ -60,7 +61,7 @@ export function weekOfDate(key: string, dateStr: string): number {
   return 1;
 }
 
-export function stepMonth(key: string, dir: 1 | -1): string {
+export function stepMonth(key: string, dir: number): string {
   const [y, m] = key.split("-").map(Number);
   const d = new Date(y, m - 1 + dir, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -147,6 +148,24 @@ export function fmtMoney(
   } catch {
     return String(Math.round(val));
   }
+}
+
+// ─── Debt payoff math ────────────────────────────────────────────────────────
+export function debtHue(d: Debt | undefined): string {
+  const k = DEBT_KINDS.find((x) => x.id === d?.kind);
+  return (k ?? DEBT_KINDS[DEBT_KINDS.length - 1]).hue;
+}
+
+/** Standard amortization: months to clear `balance` at `apr`% paying `payment`/mo.
+ *  Returns null when no payment is set, Infinity when the payment can't cover the
+ *  monthly interest, 0 when already cleared, else the integer months remaining. */
+export function debtMonthsLeft(balance: number, payment: number, apr: number): number | null {
+  if (balance <= 0) return 0;
+  if (!payment || payment <= 0) return null;
+  const r = (apr || 0) / 1200;
+  if (r <= 0) return Math.ceil(balance / payment);
+  if (payment <= balance * r) return Infinity;
+  return Math.ceil(-Math.log(1 - (r * balance) / payment) / Math.log(1 + r));
 }
 
 export function niceCeil(x: number): number {

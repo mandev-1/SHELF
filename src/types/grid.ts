@@ -312,6 +312,9 @@ export interface ExpenseRow {
   id: string; label: string; amt: number; cat: CatKey; date: string;
   /** When set, this "expense" is really a contribution to a savings plan. */
   savingsPlanId?: string;
+  /** When set, this "expense" is really a payment toward a tracked debt.
+   *  Mutually exclusive with savingsPlanId. */
+  debtId?: string;
 }
 export interface MonthStatement { income: IncomeRow[]; expenses: ExpenseRow[]; }
 
@@ -360,6 +363,74 @@ export interface SavingsPlan {
   target: number;    // total goal (USD-base), 0 = open-ended
 }
 
+// ─── Debt tracking (Open debt card + statement debt payments) ─────────────────
+export type DebtKind = "consumer" | "student" | "card" | "family" | "mortgage" | "business" | "other";
+export const DEBT_KINDS: { id: DebtKind; label: string; hue: string }[] = [
+  { id: "consumer", label: "Car / consumer loan",     hue: "#e08648" },
+  { id: "student",  label: "Student loan",            hue: "#6595ee" },
+  { id: "card",     label: "Credit card / overdraft", hue: "#e0647a" },
+  { id: "family",   label: "Family & friends",        hue: "#34c891" },
+  { id: "mortgage", label: "Mortgage",                hue: "#a384df" },
+  { id: "business", label: "Business loan",           hue: "#e0a020" },
+  { id: "other",    label: "Other",                   hue: "#8b8b95" },
+];
+export type DebtStrategy = "avalanche" | "snowball";
+export interface Debt {
+  id: string;
+  name: string;
+  kind: DebtKind;
+  /** Starting balance in USD-base. Remaining = principal − Σ rows tagged debtId. */
+  principal: number;
+  /** APR %. 0 = interest-free. */
+  rate: number;
+  /** Planned monthly payment (USD-base), 0 = none set. */
+  payment: number;
+}
+/** Bumping reseeds the starter debts slice on next load (statements/pots preserved). */
+export const DEBT_SCHEMA_V = 1;
+export const DEFAULT_DEBTS: Debt[] = [
+  { id: "dbt-car", name: "Car loan — Škoda",        kind: "consumer", principal: 9800, rate: 6.9,  payment: 260 },
+  { id: "dbt-uni", name: "Student loan",            kind: "student",  principal: 5200, rate: 3.2,  payment: 90  },
+  { id: "dbt-cc",  name: "Credit card — revolving", kind: "card",     principal: 1450, rate: 21.9, payment: 120 },
+  { id: "dbt-fam", name: "Owed to parents",         kind: "family",   principal: 1500, rate: 0,    payment: 100 },
+];
+
+// ─── Dashboard card grid (Strategie 12-col layout) ───────────────────────────
+export type CardId =
+  | "hero" | "ladder" | "diff" | "weekly" | "flow" | "debt"
+  | "programs" | "accounts" | "pots" | "pillars" | "cats";
+export type CardWidth = 4 | 6 | 8 | 12;
+export interface CardLayout {
+  /** Visual order of card ids. */
+  order: string[];
+  /** Column span per card id (4 / 6 / 8 / 12). */
+  w: Record<string, CardWidth>;
+}
+export const DEFAULT_CARD_ORDER: CardId[] = [
+  "hero", "ladder", "diff", "weekly", "flow", "debt", "programs", "accounts", "pots", "pillars", "cats",
+];
+export const DEFAULT_CARD_W: Record<CardId, CardWidth> = {
+  hero: 8, ladder: 4, diff: 4, weekly: 8, flow: 4, debt: 4, programs: 4, accounts: 4, pots: 4, pillars: 4, cats: 8,
+};
+export const CARD_W_SNAPS: CardWidth[] = [4, 6, 8, 12];
+/** Filter unknown ids, append any missing cards, default widths to the snap set. */
+export function normalizeCardLayout(stored: unknown): CardLayout {
+  const s = stored && typeof stored === "object" && !Array.isArray(stored) ? (stored as Record<string, unknown>) : {};
+  const srcOrder = Array.isArray(s["order"])
+    ? (s["order"] as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
+  const allIds = DEFAULT_CARD_ORDER as string[];
+  const kept = srcOrder.filter((id) => allIds.includes(id));
+  const order = [...kept, ...DEFAULT_CARD_ORDER.filter((id) => !kept.includes(id))];
+  const storedW = s["w"] && typeof s["w"] === "object" && !Array.isArray(s["w"]) ? (s["w"] as Record<string, unknown>) : {};
+  const w = {} as Record<string, CardWidth>;
+  for (const id of DEFAULT_CARD_ORDER) {
+    const v = storedW[id];
+    w[id] = CARD_W_SNAPS.includes(v as CardWidth) ? (v as CardWidth) : DEFAULT_CARD_W[id];
+  }
+  return { order, w };
+}
+
 export interface MembershipRow {
   id: string;
   name: string;
@@ -403,8 +474,16 @@ export interface StrategieState {
   rungAccounts: Record<number, RungAccountRef[]>;
   /** Savings accounts / programs that expense rows can be tagged as contributions to. */
   savingsPlans: SavingsPlan[];
+  /** Tracked open liabilities. Remaining balance is statement-driven (debtId tags). */
+  debts: Debt[];
+  /** Payoff ordering for the Open debt card. */
+  debtStrategy: DebtStrategy;
+  /** Schema version of the seeded debts; a bump reseeds the starter slice. */
+  debtSchemaV: number;
   /** Which face of the projection hero flip-card is showing. */
   heroFace: "grow" | "spend";
+  /** 12-col dashboard card placement (order + per-card span). */
+  cardLayout: CardLayout;
 }
 
 function _defaultStrategie(): StrategieState {
@@ -434,7 +513,11 @@ function _defaultStrategie(): StrategieState {
     acctSchemaV: ACCT_SCHEMA_V,
     rungAccounts: {},
     savingsPlans: [],
+    debts: DEFAULT_DEBTS.map((d) => ({ ...d })),
+    debtStrategy: "avalanche",
+    debtSchemaV: DEBT_SCHEMA_V,
     heroFace: "grow",
+    cardLayout: { order: [...DEFAULT_CARD_ORDER], w: { ...DEFAULT_CARD_W } },
   };
 }
 
@@ -611,9 +694,36 @@ export function normalizeStrategie(raw: unknown): StrategieState {
       }));
   }
 
-  const heroFace = r["heroFace"] === "spend" ? "spend" : "grow";
+  // debts
+  const DEBT_KIND_IDS = new Set(DEBT_KINDS.map((k) => k.id));
+  let debts: Debt[] = [];
+  if (Array.isArray(r["debts"])) {
+    debts = (r["debts"] as unknown[])
+      .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+      .filter((o) => typeof o["id"] === "string" && typeof o["name"] === "string")
+      .map((o) => ({
+        id:        o["id"] as string,
+        name:      o["name"] as string,
+        kind:      DEBT_KIND_IDS.has(o["kind"] as DebtKind) ? (o["kind"] as DebtKind) : "other",
+        principal: typeof o["principal"] === "number" ? o["principal"] : 0,
+        rate:      typeof o["rate"]      === "number" ? o["rate"]      : 0,
+        payment:   typeof o["payment"]   === "number" ? o["payment"]   : 0,
+      }));
+  }
+  // schema version: bumping reseeds the starter debts slice (statements untouched)
+  const storedDebtV = typeof r["debtSchemaV"] === "number" ? r["debtSchemaV"] : 0;
+  let debtSchemaV = DEBT_SCHEMA_V;
+  if (storedDebtV < DEBT_SCHEMA_V) {
+    debts = DEFAULT_DEBTS.map((d) => ({ ...d }));
+  } else {
+    debtSchemaV = storedDebtV;
+  }
+  const debtStrategy: DebtStrategy = r["debtStrategy"] === "snowball" ? "snowball" : "avalanche";
 
-  return { statements, positions, pots, memberships, currency, secondaryCurrency, compareCurrencyOn, accountsDirectory, acctSchemaV, rungAccounts, savingsPlans, heroFace };
+  const heroFace = r["heroFace"] === "spend" ? "spend" : "grow";
+  const cardLayout = normalizeCardLayout(r["cardLayout"]);
+
+  return { statements, positions, pots, memberships, currency, secondaryCurrency, compareCurrencyOn, accountsDirectory, acctSchemaV, rungAccounts, savingsPlans, debts, debtStrategy, debtSchemaV, heroFace, cardLayout };
 }
 
 export const ACCENT_COLORS = [

@@ -7,6 +7,10 @@ https://github.com/mandev-1/SHELF/releases
 
 ## Cutting a release
 
+**One command:** `npm run release:ship` does all of the steps below — bump, build,
+commit, tag, push — and asks for confirmation before pushing the tag. For a
+minor/major bump: `npm run release:ship -- 1.1.0`. The manual steps:
+
 1. **Bump + build locally**
 
    ```sh
@@ -36,8 +40,13 @@ https://github.com/mandev-1/SHELF/releases
    git push && git push origin v1.0.13
    ```
 
-CI takes it from there — it verifies the tag, runs `npm ci`, rebuilds the same version
-with `npm run release:rebuild`, and attaches the archives to the GitHub Release.
+CI takes it from there — it verifies the tag matches `package.json`, zips just the
+committed `releases/<version>/` folder with `scripts/package-latest.sh`, and attaches
+`releases/<version>.zip` / `.tar.gz` to the GitHub Release. Nothing is rebuilt on the
+runner: what you built and committed locally is exactly what gets published.
+
+`scripts/package-latest.sh` also works locally — with no argument it zips the highest
+version folder in `releases/`; pass a version to package a specific one.
 
 ## Guard rails
 

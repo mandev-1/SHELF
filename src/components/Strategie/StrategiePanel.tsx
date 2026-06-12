@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import type { StrategieState, MonthStatement, BuylistItem, MembershipRow, AccountDictEntry, RungAccountRef, SavingsPlanKind, CatKey } from "../../types/grid";
+import type { StrategieState, MonthStatement, BuylistItem, MembershipRow, AccountDictEntry, RungAccountRef, SavingsPlanKind, CatKey, Debt, DebtStrategy, CardLayout } from "../../types/grid";
 import { SAVINGS_PLAN_KINDS } from "../../types/grid";
+import { useCardGrid } from "../../hooks/useCardGrid";
+import { CardSlot, LayoutUndoChip } from "./CardSlot";
+import { DebtCard } from "./DebtCard";
 import {
   daysInMonth as _daysInMonth,
   monthWeeks, weekOfDate,
@@ -43,6 +46,9 @@ interface StrategiePanelProps {
   onAddSavingsPlan: (name: string, kind: SavingsPlanKind) => void;
   onRenameSavingsPlan: (id: string, name: string) => void;
   onRemoveSavingsPlan: (id: string) => void;
+  onSetDebts: (next: Debt[]) => void;
+  onSetDebtStrategy: (v: DebtStrategy) => void;
+  onSetCardLayout: (layout: CardLayout) => void;
   onToast?: (msg: string) => void;
 }
 
@@ -65,8 +71,12 @@ export function StrategiePanel({
   onAddSavingsPlan,
   onRenameSavingsPlan,
   onRemoveSavingsPlan,
+  onSetDebts,
+  onSetDebtStrategy,
+  onSetCardLayout,
   onToast,
 }: StrategiePanelProps) {
+  const grid = useCardGrid(state.cardLayout, onSetCardLayout);
   const [spName, setSpName] = useState("");
   const [spKind, setSpKind] = useState<SavingsPlanKind>("savings");
   const [editorOpen, setEditorOpen] = useState(false);
@@ -125,24 +135,36 @@ export function StrategiePanel({
   const nextKey = activeIdx >= 0 && activeIdx < sortedKeys.length - 1 ? sortedKeys[activeIdx + 1] : undefined;
 
   const inc = totalIncome(stmt);
-  const expAll = totalExpenses(stmt);                 // everything, incl. savings transfers
+  const expAll = totalExpenses(stmt);                 // everything, incl. transfers
   const toPlansMonth = stmt.expenses.reduce((s, e) => s + (e.savingsPlanId ? e.amt : 0), 0);
-  const exp = expAll - toPlansMonth;                  // true spending (transfers excluded)
+  const toDebtMonth = stmt.expenses.reduce((s, e) => s + (e.debtId ? e.amt : 0), 0);
+  const exp = expAll - toPlansMonth - toDebtMonth;    // true spending (transfers excluded)
   const surplus = inc - expAll;                       // cash left after everything
   void Math.min(200, surplus > 0 ? surplus : 0); // toPots removed from KPI
 
-  // savings-plan contributions: active month + all time, per plan
+  // savings-plan + debt contributions: active month + all time, per id
   const savingsPlans = state.savingsPlans;
+  const debts = state.debts;
   const planMonth: Record<string, number> = {};
   const planTotal: Record<string, number> = {};
+  const debtMonth: Record<string, number> = {};
+  const debtTotal: Record<string, number> = {};
   for (const [mk, mo] of Object.entries(byMonth)) {
     for (const e of mo.expenses) {
-      if (!e.savingsPlanId) continue;
-      planTotal[e.savingsPlanId] = (planTotal[e.savingsPlanId] ?? 0) + e.amt;
-      if (mk === activeKey) planMonth[e.savingsPlanId] = (planMonth[e.savingsPlanId] ?? 0) + e.amt;
+      if (e.savingsPlanId) {
+        planTotal[e.savingsPlanId] = (planTotal[e.savingsPlanId] ?? 0) + e.amt;
+        if (mk === activeKey) planMonth[e.savingsPlanId] = (planMonth[e.savingsPlanId] ?? 0) + e.amt;
+      } else if (e.debtId) {
+        debtTotal[e.debtId] = (debtTotal[e.debtId] ?? 0) + e.amt;
+        if (mk === activeKey) debtMonth[e.debtId] = (debtMonth[e.debtId] ?? 0) + e.amt;
+      }
     }
   }
   const plansContribTotal = Object.values(planTotal).reduce((a, b) => a + b, 0);
+
+  // statement-driven debt balances + net worth
+  const debtRemaining = (d: Debt) => Math.max(0, (d.principal || 0) - (debtTotal[d.id] || 0));
+  const openDebtTotal = debts.reduce((s, d) => s + debtRemaining(d), 0);
 
   const addPlan = () => {
     const name = spName.trim();
@@ -156,7 +178,7 @@ export function StrategiePanel({
   // scrubber (1M / 3M / 6M / ALL) handles focusing a sub-period.
   const spendMonths = sortedKeys.map((mk) => ({ key: mk, stmt: byMonth[mk] ?? { income: [], expenses: [] } }));
   const spendCats = CAT_KEYS.filter((k) =>
-    spendMonths.some((m) => m.stmt.expenses.some((e) => !e.savingsPlanId && e.cat === k && e.amt > 0))
+    spendMonths.some((m) => m.stmt.expenses.some((e) => !e.savingsPlanId && !e.debtId && e.cat === k && e.amt > 0))
   );
   const toggleCat = (k: CatKey) =>
     setHiddenCats((h) => (h.includes(k) ? h.filter((x) => x !== k) : [...h, k]));
@@ -169,7 +191,7 @@ export function StrategiePanel({
   const totalExp = exp || 1;
   const emergencyPct = Math.min(100, Math.round((positions.emergencySaved / positions.emergencyTarget) * 100));
 
-  const netWorth = positions.invested + positions.emergencySaved + extraAssets;
+  const netWorth = positions.invested + positions.emergencySaved + extraAssets - openDebtTotal;
 
   useEffect(() => {
     if (!potMenuOpen) return;
@@ -194,7 +216,43 @@ export function StrategiePanel({
     setPotMenuOpen(false);
   }, [onAddPot]);
 
+  // ladder step-3 tie-in: goes live whenever any debt ≥8% APR is still open
+  const hiDebts = debts.filter((d) => (d.rate || 0) >= 8);
+  const hiOpen = hiDebts.reduce((s, d) => s + debtRemaining(d), 0);
+  const hiPrincipal = hiDebts.reduce((s, d) => s + (d.principal || 0), 0);
+
+  // every statement row tagged as a debt payment, oldest first — feeds step-3 detail
+  const debtHistory = (() => {
+    const out: { date: string; label: string; amt: number }[] = [];
+    for (const [mk, mo] of Object.entries(byMonth)) {
+      for (const e of mo.expenses) {
+        if (!e.debtId) continue;
+        const d = debts.find((x) => x.id === e.debtId);
+        out.push({ date: e.date || `${mk}-01`, label: `${e.label || "Payment"}${d ? ` — ${d.name}` : ""}`, amt: e.amt });
+      }
+    }
+    out.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    return out;
+  })();
+
+  const rungLive = useCallback((rung: LadderRung): LadderRung => {
+    if (rung.id !== 3 || hiOpen <= 0) return rung;
+    return {
+      ...rung,
+      status: "active",
+      pct: hiPrincipal > 0 ? Math.round(((hiPrincipal - hiOpen) / hiPrincipal) * 100) : 0,
+      note: `${fmtMoney(hiOpen, cur, { abbr: true })} open above 8% APR — pay down first`,
+      blurb: "Expensive debt grows faster than any investment. Clear everything above ~8% APR before putting more into the market — payments you tag in your statement track the progress here.",
+    };
+  }, [hiOpen, hiPrincipal, cur]);
+
+  // live rung rows: step 3 lists open high-interest debts; else persisted edits, else seed
   const rungRows = useCallback((rung: LadderRung) => {
+    if (rung.id === 3 && hiOpen > 0) {
+      return hiDebts
+        .filter((d) => debtRemaining(d) > 0)
+        .map((d) => ({ name: d.name, tag: `${d.rate || 0}% APR`, balance: debtRemaining(d) }));
+    }
     const persisted = state.rungAccounts[rung.id];
     if (persisted) {
       return persisted.map((p) => {
@@ -203,10 +261,12 @@ export function StrategiePanel({
       });
     }
     return (rung.accounts ?? []).map((a) => ({ name: a.name, tag: a.tag, balance: a.balance }));
-  }, [state.rungAccounts, state.accountsDirectory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.rungAccounts, state.accountsDirectory, hiOpen, hiDebts]);
 
+  // step-3 high-interest balances are excluded from the "all parked money" grand total
   const ladderGrand = DEFAULT_LADDER.reduce(
-    (s, r) => s + rungRows(r).reduce((a, x) => a + (x.balance || 0), 0),
+    (s, r) => (r.id === 3 && hiOpen > 0 ? s : s + rungRows(r).reduce((a, x) => a + (x.balance || 0), 0)),
     0,
   );
 
@@ -320,7 +380,7 @@ export function StrategiePanel({
           <div className="kpi-lab">Net worth</div>
           <div className="kpi-val">{fmtMoney(netWorth, cur, { abbr: true })}</div>
           {compareOn && cur2 && <div className="kpi-cmp">≈ {fmtMoney(netWorth, cur2, { abbr: true })}</div>}
-          <div className="kpi-sub">Invested + emergency{extraAssets > 0 ? " + assets" : ""}</div>
+          <div className="kpi-sub">Invested + emergency{extraAssets > 0 ? " + assets" : ""}{openDebtTotal > 0 ? " − debt" : ""}</div>
         </div>
         <div className="kpi accent">
           <div className="kpi-lab">Monthly surplus</div>
@@ -342,9 +402,10 @@ export function StrategiePanel({
       </div>
 
       {/* main grid */}
-      <div className="strat-grid">
+      <div className={`strat-grid${grid.active ? " is-sorting" : ""}`} ref={grid.gridRef}>
 
         {/* projection — span 8 */}
+        <CardSlot grid={grid} id="hero">
         <div className="card span-8">
           <div className="card-head">
             <div>
@@ -439,6 +500,11 @@ export function StrategiePanel({
                         {fmtMoney(toPlansMonth, cur, { abbr: true })} to savings
                       </div>
                     )}
+                    {toDebtMonth > 0 && (
+                      <div className="split-item" title="Statement rows tagged as debt payments — not counted as spending">
+                        {fmtMoney(toDebtMonth, cur, { abbr: true })} to debt
+                      </div>
+                    )}
                   </div>
                   <div className="dsp-controls">
                     <div className="dsp-cats">
@@ -465,8 +531,10 @@ export function StrategiePanel({
             </div>
           </div>
         </div>
+        </CardSlot>
 
         {/* order of operations — span 4 */}
+        <CardSlot grid={grid} id="ladder">
         <div className="card span-4 ladder-card" ref={ladderRef}>
           <div className="card-head">
             <div>
@@ -475,7 +543,9 @@ export function StrategiePanel({
             </div>
           </div>
           <ol className="ladder" onMouseLeave={() => setRungTip(null)}>
-            {DEFAULT_LADDER.map((rung) => (
+            {DEFAULT_LADDER.map((rung0) => {
+              const rung = rungLive(rung0);
+              return (
               <li key={rung.id} className={`rung rung--${rung.status}`}>
                 <button
                   className="rung-hit"
@@ -499,7 +569,8 @@ export function StrategiePanel({
                   <span className="rung-chev"><IcoChev dir="down" /></span>
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ol>
           {rungTip && (() => {
             const rows = rungRows(rungTip.rung).slice().sort((a, b) => (b.balance || 0) - (a.balance || 0));
@@ -547,10 +618,14 @@ export function StrategiePanel({
                         <span className="rung-tip-amt">{fmtMoney(r.balance || 0, cur, { abbr: true })}</span>
                       </div>
                     ))}
-                    <div className="rung-tip-foot">
-                      <span className="rung-tip-foot-bar"><span style={{ width: `${share}%` }} /></span>
-                      {share}% of all parked money sits in this step
-                    </div>
+                    {rungTip.rung.id === 3 && hiOpen > 0 ? (
+                      <div className="rung-tip-foot">Open balances above 8% APR — clear these before investing more.</div>
+                    ) : (
+                      <div className="rung-tip-foot">
+                        <span className="rung-tip-foot-bar"><span style={{ width: `${share}%` }} /></span>
+                        {share}% of all parked money sits in this step
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="rung-tip-empty">Nothing parked here yet — unlocks once the earlier steps are funded.</div>
@@ -559,8 +634,10 @@ export function StrategiePanel({
             );
           })()}
         </div>
+        </CardSlot>
 
         {/* month-close diff — span 4 */}
+        <CardSlot grid={grid} id="diff">
         <MonthCloseDiff
           prevKey={prevKey}
           currKey={activeKey}
@@ -568,8 +645,10 @@ export function StrategiePanel({
           currStmt={stmt}
           currency={cur}
         />
+        </CardSlot>
 
         {/* weekly spending — span 8 */}
+        <CardSlot grid={grid} id="weekly">
         <div className="card span-8">
           <div
             className="card-head"
@@ -606,7 +685,7 @@ export function StrategiePanel({
                   <div className="wk-track">
                     <div className="wk-bar" style={{ width: `${(wTotal / trackMax) * 100}%` }}>
                       {CAT_KEYS.map((cat) => {
-                        const catAmt = wExp.filter((e) => e.cat === cat).reduce((s, e) => s + e.amt, 0);
+                        const catAmt = wExp.filter((e) => e.cat === cat && !e.savingsPlanId && !e.debtId).reduce((s, e) => s + e.amt, 0);
                         if (!catAmt) return null;
                         return (
                           <div
@@ -642,8 +721,10 @@ export function StrategiePanel({
             </div>
           </div>
         </div>
+        </CardSlot>
 
         {/* cash flow — span 4 */}
+        <CardSlot grid={grid} id="flow">
         <div className="card span-4">
           <div className="card-head">
             <div>
@@ -682,8 +763,25 @@ export function StrategiePanel({
             </div>
           </div>
         </div>
+        </CardSlot>
+
+        {/* open debt — span 4 */}
+        <CardSlot grid={grid} id="debt">
+        <DebtCard
+          debts={debts}
+          paidTotal={debtTotal}
+          paidMonth={debtMonth}
+          strategy={state.debtStrategy}
+          activeKey={activeKey}
+          currency={cur}
+          onChange={onSetDebts}
+          onStrategy={onSetDebtStrategy}
+          onToast={onToast}
+        />
+        </CardSlot>
 
         {/* portfolio: savings programs — span 4 */}
+        <CardSlot grid={grid} id="programs">
         <div className="card span-4">
           <div className="card-head">
             <div>
@@ -797,8 +895,10 @@ export function StrategiePanel({
             </div>
           </div>
         </div>
+        </CardSlot>
 
         {/* savings pots — span 4 */}
+        <CardSlot grid={grid} id="pots">
         <div className="card span-4">
           <div className="card-head">
             <div>
@@ -860,16 +960,20 @@ export function StrategiePanel({
             )}
           </div>
         </div>
+        </CardSlot>
 
         {/* accounts — span 4 */}
+        <CardSlot grid={grid} id="accounts">
         <AccountsCard
           accounts={state.accountsDirectory}
           currency={cur}
           onChange={onSetAccountsDirectory}
           onToast={onToast}
         />
+        </CardSlot>
 
         {/* pillars — span 4 */}
+        <CardSlot grid={grid} id="pillars">
         <div className="card span-4">
           <div className="card-head">
             <div>
@@ -893,8 +997,10 @@ export function StrategiePanel({
             ))}
           </div>
         </div>
+        </CardSlot>
 
         {/* expense categories — span 8 */}
+        <CardSlot grid={grid} id="cats">
         <div className="card span-8">
           <div className="card-head">
             <div>
@@ -929,8 +1035,12 @@ export function StrategiePanel({
             </div>
           </div>
         </div>
+        </CardSlot>
 
       </div>
+
+      {/* layout undo chip (drag/resize) */}
+      <LayoutUndoChip chip={grid.undoChip} onUndo={grid.undoNow} />
 
       {/* editor modal */}
       {editorOpen && (
@@ -939,6 +1049,7 @@ export function StrategiePanel({
           currency={cur}
           memberships={state.memberships}
           savingsPlans={savingsPlans}
+          debts={debts}
           onSave={(book, order, active, memberships) => {
             onSaveStatement(book, order, active, memberships);
             setEditorTarget(null);
@@ -960,6 +1071,17 @@ export function StrategiePanel({
           totalSteps={DEFAULT_LADDER.length}
           directory={state.accountsDirectory}
           persistedRows={state.rungAccounts[detailRung.id]}
+          debtView={detailRung.id === 3 ? {
+            rows: debts.map((d) => ({
+              name: d.name,
+              tag: `${d.rate || 0}% APR`,
+              balance: debtRemaining(d),
+              cleared: debtRemaining(d) <= 0,
+            })),
+            history: debtHistory,
+            paid: debts.reduce((s, d) => s + Math.min(d.principal || 0, debtTotal[d.id] || 0), 0),
+            principal: debts.reduce((s, d) => s + (d.principal || 0), 0),
+          } : undefined}
           onSetRungAccounts={onSetRungAccounts}
           onUpsertAccountDictEntry={onUpsertAccountDictEntry}
           onClose={() => setDetailRung(null)}

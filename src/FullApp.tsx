@@ -149,6 +149,9 @@ export default function FullApp() {
     strategieAddSavingsPlan,
     strategieUpdateSavingsPlan,
     strategieRemoveSavingsPlan,
+    strategieSetDebts,
+    strategieSetDebtStrategy,
+    strategieSetCardLayout,
     showStrategieTab,
     showHopperTab,
     showInventoryTab,
@@ -610,6 +613,9 @@ export default function FullApp() {
                 onAddSavingsPlan={strategieAddSavingsPlan}
                 onRenameSavingsPlan={(id, name) => strategieUpdateSavingsPlan(id, { name })}
                 onRemoveSavingsPlan={strategieRemoveSavingsPlan}
+                onSetDebts={strategieSetDebts}
+                onSetDebtStrategy={strategieSetDebtStrategy}
+                onSetCardLayout={strategieSetCardLayout}
               />
             </div>
           ) : dashboardView === "buylist" ? (

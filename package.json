@@ -9,7 +9,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "release:new": "node scripts/release.js release",
-    "release:rebuild": "node scripts/release.js update"
+    "release:rebuild": "node scripts/release.js update",
+    "release:ship": "bash scripts/ship-release.sh"
   },
   "dependencies": {
     "@heroui/react": "rc",

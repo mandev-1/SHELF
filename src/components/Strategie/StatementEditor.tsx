@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import type {
-  StrategieState, MonthStatement, CatKey, IncomeRow, ExpenseRow, MembershipRow, SavingsPlan,
+  StrategieState, MonthStatement, CatKey, IncomeRow, ExpenseRow, MembershipRow, SavingsPlan, Debt,
 } from "../../types/grid";
 import {
   dayStr, daysInMonth, monthWeeks, weekOfDate, stepMonth, monthLabel, monthAbbr,
-  cloneMonth, fmtMoney, CURRENCIES, STMT_CATS, CAT_KEYS_BY_LABEL,
+  cloneMonth, fmtMoney, CURRENCIES, STMT_CATS, CAT_KEYS_BY_LABEL, debtHue,
 } from "./strategie";
 import { brandMatch, BrandMark, BRAND_COLORS } from "./brandLogos";
 import {
@@ -33,6 +33,7 @@ export interface StatementEditorProps {
   currency: string;
   memberships: MembershipRow[];
   savingsPlans?: SavingsPlan[];
+  debts?: Debt[];
   onSave: (
     book: Record<string, MonthStatement>,
     order: string[],
@@ -60,7 +61,7 @@ type MemEditorState = {
 };
 
 export function StatementEditor({
-  statements, currency, memberships, savingsPlans = [],
+  statements, currency, memberships, savingsPlans = [], debts = [],
   onSave, onClose, defaultImportOpen = false,
   initialWeek = null, initialRange = null, initialBulk = false, initialIds = null,
 }: StatementEditorProps) {
@@ -673,9 +674,11 @@ export function StatementEditor({
                   <span
                     className="se-catdot"
                     style={{
-                      background: r.savingsPlanId
-                        ? (savingsPlans.find((p) => p.id === r.savingsPlanId)?.hue ?? "var(--accent)")
-                        : (STMT_CATS[r.cat] || STMT_CATS.other).hue,
+                      background: r.debtId
+                        ? debtHue(debts.find((d) => d.id === r.debtId))
+                        : r.savingsPlanId
+                          ? (savingsPlans.find((p) => p.id === r.savingsPlanId)?.hue ?? "var(--accent)")
+                          : (STMT_CATS[r.cat] || STMT_CATS.other).hue,
                     }}
                   />
                   <input
@@ -688,11 +691,12 @@ export function StatementEditor({
                     onChange={(e) => e.target.value && editExpense(r.id, { date: e.target.value })}
                   />
                   <select
-                    className="se-cat" value={r.savingsPlanId ? `plan:${r.savingsPlanId}` : r.cat}
+                    className="se-cat" value={r.debtId ? `debt:${r.debtId}` : r.savingsPlanId ? `plan:${r.savingsPlanId}` : r.cat}
                     onChange={(e) => {
                       const v = e.target.value;
-                      if (v.startsWith("plan:")) editExpense(r.id, { savingsPlanId: v.slice(5) });
-                      else editExpense(r.id, { cat: v as CatKey, savingsPlanId: undefined });
+                      if (v.startsWith("plan:")) editExpense(r.id, { savingsPlanId: v.slice(5), debtId: undefined });
+                      else if (v.startsWith("debt:")) editExpense(r.id, { debtId: v.slice(5), savingsPlanId: undefined });
+                      else editExpense(r.id, { cat: v as CatKey, savingsPlanId: undefined, debtId: undefined });
                     }}
                   >
                     {CAT_KEYS_BY_LABEL.map((k) => <option key={k} value={k}>{STMT_CATS[k].label}</option>)}
@@ -700,6 +704,13 @@ export function StatementEditor({
                       <optgroup label="Savings plans">
                         {savingsPlans.map((p) => (
                           <option key={p.id} value={`plan:${p.id}`}>→ {p.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {debts.length > 0 && (
+                      <optgroup label="Debt payments">
+                        {debts.map((d) => (
+                          <option key={d.id} value={`debt:${d.id}`}>↓ {d.name}</option>
                         ))}
                       </optgroup>
                     )}
@@ -791,6 +802,7 @@ export function StatementEditor({
         currency={currency}
         existing={draft}
         savingsPlans={savingsPlans}
+        debts={debts}
         onClose={() => setImportOpen(false)}
         onImport={handleImport}
       />
@@ -821,6 +833,7 @@ export function StatementEditor({
         <StatementImport
           currency={currency}
           savingsPlans={savingsPlans}
+          debts={debts}
           editRows={{ monthKey: viewKey, expenses: scoped, scopeLabel }}
           onApplyEdits={(_mk, expenses) => {
             // re-file every kept/edited row into its own date's month, and drop

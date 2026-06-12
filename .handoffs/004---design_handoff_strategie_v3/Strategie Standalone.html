@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ShELF — Strategie</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="strategie-v2.css" />
+<template id="__bundler_thumbnail">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#0b0b0d"/>
+  <path d="M30 62 L42 52 L52 56 L70 38" fill="none" stroke="#34d399" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="70" cy="38" r="4" fill="#34d399"/>
+</svg>
+</template>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="data.js"></script>
+<script src="strategie-data.js"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="cardgrid.jsx"></script>
+<script type="text/babel" src="strategie-icons.jsx"></script>
+<script type="text/babel" src="strategie-charts.jsx"></script>
+<script type="text/babel" src="strategie-ladder-detail.jsx"></script>
+<script type="text/babel" src="strategie-month-diff.jsx"></script>
+<script type="text/babel" src="strategie-import.jsx"></script>
+<script type="text/babel" src="strategie-accounts.jsx"></script>
+<script type="text/babel" src="strategie-debt.jsx"></script>
+<script type="text/babel" src="strategie.jsx"></script>
+
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+const STRAT_TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "sap",
+  "accent": "#0070f2",
+  "surface": "solid",
+  "density": "compact",
+  "radius": 8,
+  "currency": "CZK"
+}/*EDITMODE-END*/;
+
+const THEME_ACCENT = { dark: "#16b981", day: "#d97706", sap: "#0070f2" };
+const ACCENTS = {
+  "#16b981": { bright: "#34d399", deep: "#0c8f66", ink: "#d4f3e7" },
+  "#5b9cff": { bright: "#8bb8ff", deep: "#3a6fd0", ink: "#d6e6ff" },
+  "#c98bff": { bright: "#dcb0ff", deep: "#9d5fd6", ink: "#eedcff" },
+  "#e0905a": { bright: "#f2ad7d", deep: "#bf6f3c", ink: "#f8e3d3" },
+  "#d97706": { bright: "#f59e0b", deep: "#b45309", ink: "#7c4a0c" },
+  "#0070f2": { bright: "#1b90ff", deep: "#0058c4", ink: "#084298" },
+};
+
+function CheckIco() {
+  return <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>;
+}
+
+function App() {
+  const [t, setTweak] = useTweaks(STRAT_TWEAK_DEFAULTS);
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 1900);
+  };
+
+  useEffect(() => {
+    const r = document.documentElement;
+    r.classList.add("no-transition");
+    const a = ACCENTS[t.accent] || ACCENTS["#16b981"];
+    r.style.setProperty("--accent", t.accent);
+    r.style.setProperty("--accent-bright", a.bright);
+    r.style.setProperty("--accent-deep", a.deep);
+    r.style.setProperty("--accent-ink", a.ink);
+    r.style.setProperty("--r-card", t.radius + "px");
+    r.style.setProperty("--r-inner", Math.max(6, t.radius - 5) + "px");
+    r.dataset.surface = t.surface;
+    r.dataset.density = t.density;
+    if (t.theme && t.theme !== "dark") r.dataset.theme = t.theme;
+    else r.removeAttribute("data-theme");
+    const id = requestAnimationFrame(() => requestAnimationFrame(() => r.classList.remove("no-transition")));
+    return () => cancelAnimationFrame(id);
+  }, [t.accent, t.surface, t.density, t.radius, t.theme]);
+
+  const pickTheme = (theme) => setTweak({ theme: theme, accent: THEME_ACCENT[theme] });
+
+  return (
+    <React.Fragment>
+      <div className="bg-diffuse" aria-hidden="true"></div>
+      <div className="office-paper" aria-hidden="true"></div>
+      <div className="shell">
+      <div className="main">
+        <div className="topbar">
+          <div className="topbar-inner">
+            <h1 className="greeting">Strategie</h1>
+          </div>
+        </div>
+        <div className="canvas">
+          <div className="canvas-inner">
+            <StrategiePanel currency={t.currency} onCurrency={(c) => setTweak("currency", c)} onToast={showToast} />
+          </div>
+        </div>
+      </div>
+
+      {toast ? <div className="toast"><CheckIco /> {toast}</div> : null}
+
+      <TweaksPanel>
+        <TweakSection label="Theme" />
+        <TweakRadio label="Theme" value={t.theme} options={["dark", "day", "sap"]} onChange={pickTheme} />
+        <TweakSection label="Accent" />
+        <TweakColor label="Accent" value={t.accent}
+          options={["#16b981", "#5b9cff", "#c98bff", "#e0905a", "#d97706", "#0070f2"]}
+          onChange={(v) => setTweak("accent", v)} />
+        <TweakSection label="Money" />
+        <TweakRadio label="Currency" value={t.currency} options={["USD", "EUR", "CZK"]} onChange={(v) => setTweak("currency", v)} />
+        <TweakSection label="Surfaces" />
+        <TweakRadio label="Cards" value={t.surface} options={["solid", "glass"]} onChange={(v) => setTweak("surface", v)} />
+        <TweakRadio label="Density" value={t.density} options={["compact", "regular", "comfy"]} onChange={(v) => setTweak("density", v)} />
+        <TweakSlider label="Corner radius" value={t.radius} min={6} max={22} step={1} unit="px" onChange={(v) => setTweak("radius", v)} />
+      </TweaksPanel>
+      </div>
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

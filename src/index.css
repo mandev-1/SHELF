@@ -2892,6 +2892,7 @@ body {
 .strat-grid {
   display: grid; grid-template-columns: repeat(12, 1fr);
   gap: 16px;
+  align-items: start; grid-auto-flow: row dense;
 }
 
 /* ── KPI row ──────────────────────────────────────────────── */
@@ -5404,4 +5405,135 @@ body {
 .sba-commit { display: inline-flex; align-items: center; gap: 7px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; padding: 9px 16px; border-radius: 9px; border: 0; color: #fff; background: linear-gradient(135deg, #3b82f6, #2563eb); box-shadow: 0 8px 22px -8px rgba(37, 99, 235, 0.6); transition: filter 0.14s, transform 0.12s, opacity 0.14s; }
 .sba-commit:hover:not(:disabled) { filter: brightness(1.07); }
 .sba-commit:active:not(:disabled) { transform: translateY(1px); }
+
+/* ─── Strategie dashboard card grid (v3) ─────────────────────────────────────
+   Drag to place (top-center grip), edge-resize (⅓ · ½ · ⅔ · full), undo. */
+.card-slot { position: relative; min-width: 0; grid-column: span var(--cw, 4); }
+.card-grip {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  z-index: 6; width: 56px; height: 18px; padding: 0; border: 0;
+  background: transparent; cursor: grab; opacity: 0;
+  transition: opacity 0.15s ease; touch-action: none;
+}
+.card-grip::before {
+  content: ""; display: block; margin: 7px auto 0; width: 28px; height: 4px;
+  border-radius: 2px; background: var(--dim); opacity: 0.55;
+}
+.card-slot:hover .card-grip { opacity: 0.8; }
+.card-grip:hover { opacity: 1; }
+.card-grip:hover::before { background: var(--accent); opacity: 0.9; }
+.card-grip:active { cursor: grabbing; }
+.card-slot.is-dragging { z-index: 60; opacity: 0.95; }
+.card-slot.is-dragging > .card { box-shadow: var(--sh-3), 0 18px 44px rgba(0, 0, 0, 0.22); }
+.card-slot.is-dragging .card-grip { opacity: 1; cursor: grabbing; }
+.card-resize {
+  position: absolute; top: 50%; right: -3px; transform: translateY(-50%);
+  width: 14px; height: 56px; z-index: 6; cursor: ew-resize;
+  opacity: 0; transition: opacity 0.15s ease; touch-action: none;
+}
+.card-resize::before {
+  content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 4px; height: 34px; border-radius: 2px; background: var(--dim); opacity: 0.55;
+}
+.card-slot:hover .card-resize { opacity: 0.8; }
+.card-resize:hover { opacity: 1; }
+.card-resize:hover::before { background: var(--accent); opacity: 0.9; }
+.card-slot.is-resizing { z-index: 55; }
+.card-slot.is-resizing > .card { outline: 1.5px dashed var(--accent); outline-offset: 3px; }
+.card-size-tag {
+  position: absolute; top: 8px; right: 16px; z-index: 7;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--fg); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 99px; padding: 3px 9px;
+  pointer-events: none;
+}
+body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabbing; }
+.strat-grid.is-sorting .card-grip, .strat-grid.is-sorting .card-resize { opacity: 0; }
+.strat-grid.is-sorting .card-slot.is-dragging .card-grip { opacity: 1; }
+.layout-undo {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  z-index: 80; display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 99px;
+  box-shadow: var(--sh-3); padding: 7px 9px 7px 16px;
+  font-size: 12px; color: var(--fg-2);
+  animation: undo-in 0.18s ease;
+}
+@keyframes undo-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+.layout-undo button {
+  border: 0; border-radius: 99px; padding: 5px 12px; cursor: pointer;
+  background: var(--accent); color: #fff; font-size: 12px; font-weight: 600;
+}
+.layout-undo button:hover { background: var(--accent-deep); }
+.layout-undo-kbd {
+  font-size: 10px; color: var(--dim); border: 1px solid var(--line);
+  border-radius: 5px; padding: 1px 5px;
+}
+@media (max-width: 1100px) {
+  .card-slot { grid-column: span 12; }
+  .card-resize { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-grip, .card-resize { transition: none; }
+  .layout-undo { animation: none; }
+}
+
+/* ─── Open debt card (v3) ────────────────────────────────────────────────── */
+.debt-body { padding: 4px 20px 16px; }
+.debt-sum { padding: 6px 0 12px; border-bottom: 1px solid var(--line); }
+.debt-sum-val { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; color: var(--fg); font-variant-numeric: tabular-nums; }
+.debt-sum-cap { font-size: 11px; color: var(--dim); margin-top: 2px; }
+.debt-list { display: flex; flex-direction: column; }
+.debt { padding: 10px 0 9px; border-bottom: 1px solid var(--line); }
+.debt:last-child { border-bottom: 0; }
+.debt-top { display: flex; align-items: center; gap: 8px; }
+.debt-name { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--fg); }
+.debt-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.debt-amt { font-size: 12.5px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
+.debt-first-tag {
+  font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 99px; padding: 1px 6px; white-space: nowrap;
+}
+.debt-edit-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border: 0; border-radius: 6px; cursor: pointer;
+  background: transparent; color: var(--dim); opacity: 0; transition: opacity 0.13s, background-color 0.13s, color 0.13s;
+}
+.debt:hover .debt-edit-btn { opacity: 0.7; }
+.debt-edit-btn:hover { opacity: 1; background: var(--surface-2); color: var(--fg); }
+.debt-edit-btn.on { opacity: 1; color: var(--accent); }
+.debt-bar { margin: 7px 0 5px; }
+.debt-foot { display: flex; justify-content: space-between; gap: 10px; font-size: 10.5px; color: var(--dim); }
+.debt-paidmo { font-size: 10.5px; color: var(--accent); margin-top: 3px; }
+.debt-editor {
+  margin-top: 9px; display: grid; grid-template-columns: 1.2fr 0.7fr 0.9fr 1.2fr auto;
+  gap: 7px; align-items: end; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 9px; padding: 9px 10px;
+}
+.debt-editor label {
+  display: flex; flex-direction: column; gap: 3px; font-size: 9.5px; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--dim);
+}
+.debt-editor input, .debt-editor select {
+  font: inherit; font-size: 12px; color: var(--fg); background: var(--inset);
+  border: 1px solid var(--line); border-radius: 7px; padding: 5px 7px; width: 100%;
+}
+.debt-editor input:focus, .debt-editor select:focus { outline: none; border-color: var(--accent); }
+.debt-del { align-self: center; }
+.debt-cleared { padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.debt-cleared-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--dim); }
+.debt-cleared-name { flex: 1; min-width: 0; text-decoration: line-through; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.debt-cleared-tag { font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.debt-add-bal {
+  font: inherit; font-size: 12.5px; color: var(--fg); background: var(--inset);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 90px;
+  font-variant-numeric: tabular-nums;
+}
+.debt-add-bal:focus { outline: none; border-color: var(--accent); }
+
+/* ── Ladder detail: debt (step 3) read-only styles ── */
+.ld-acct-name--cleared { text-decoration: line-through; color: var(--dim); }
+.ld-acct-bal--cleared { color: var(--accent); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.ld-debt-hint { font-size: 11px; color: var(--dim); margin-top: 10px; line-height: 1.5; }
+.ld-debt-hint em { font-style: normal; font-weight: 600; color: var(--fg-2); }
 .sba-commit:disabled { opacity: 0.45; cursor: default; box-shadow: none; }

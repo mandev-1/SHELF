@@ -15,12 +15,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
       - name: Verify tag matches package.json version
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
@@ -30,24 +24,19 @@ jobs:
             exit 1
           fi
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build release bundle
-        run: npm run release:rebuild
-        env:
-          RELEASE_VERSION: ${{ github.ref_name }}
-
-      - name: Read release version
-        id: version
-        run: echo "version=$(cat .release-version)" >> "$GITHUB_OUTPUT"
+      - name: Zip the tagged releases/<version> folder
+        id: pkg
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          bash scripts/package-latest.sh "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: SHeLF v${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.pkg.outputs.version }}
+          name: SHeLF v${{ steps.pkg.outputs.version }}
           generate_release_notes: true
           files: |
-            releases/${{ steps.version.outputs.version }}.zip
-            releases/${{ steps.version.outputs.version }}.tar.gz
+            releases/${{ steps.pkg.outputs.version }}.zip
+            releases/${{ steps.pkg.outputs.version }}.tar.gz

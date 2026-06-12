@@ -2404,6 +2404,171 @@ function VisualFlowPanelInner({
     [currentPlaneAdd, currentPlaneEdit, customPlaneItems, isCustomPlane, plane, onUpdateVisualFlow, onTodoLog, canvasItems, setNodes, setEdges]
   );
 
+  // Move or duplicate the highlighted node(s) onto another plane (sheet).
+  // Carries each node's text/fields, its live position + size, and any edges
+  // internal to the selection (both endpoints moving). Item arrays for the
+  // built-in planes live outside `visualFlow` (pillarTodos / grazelandItems /
+  // binItems), so those go through onAdd*/onDelete*; everything inside
+  // `visualFlow` (positions, edges, sizes, and custom-plane items) lands in ONE
+  // functional onUpdateVisualFlow write to dodge the stale-closure clobber.
+  const relocateItemsToPlane = useCallback(
+    (ids: string[], target: VisualFlowPlane, mode: "move" | "duplicate") => {
+      if (!ids.length || target === plane) return;
+      const liveNodes = getNodes();
+      const picked = ids
+        .map((id) => {
+          const item = canvasItems.find((t) => t.id === id);
+          if (!item) return null;
+          const live = liveNodes.find((n) => n.id === id);
+          const p = live?.position ?? storedNodePositions?.[id] ?? { x: 0, y: 0 };
+          return { item, pos: { x: p.x, y: p.y }, size: storedNodeSizes?.[id] };
+        })
+        .filter((x): x is { item: ShelfPillarTodoItem; pos: { x: number; y: number }; size?: VisualFlowNodeSize } => Boolean(x));
+      if (!picked.length) return;
+
+      const movingIds = new Set(picked.map((p) => p.item.id));
+      const internalEdges = (storedFlowEdges ?? []).filter(
+        (e) => movingIds.has(e.source) && movingIds.has(e.target)
+      );
+
+      // Duplicate gets fresh ids (the original stays put); move keeps ids.
+      const idMap = new Map<string, string>();
+      for (const p of picked) idMap.set(p.item.id, mode === "duplicate" ? crypto.randomUUID() : p.item.id);
+      const remap = (id: string) => idMap.get(id) ?? id;
+
+      const newItems = picked.map((p) => ({ ...p.item, id: remap(p.item.id) }));
+      const newPositions: Record<string, { x: number; y: number }> = {};
+      const newSizes: Record<string, VisualFlowNodeSize> = {};
+      for (const p of picked) {
+        const nid = remap(p.item.id);
+        newPositions[nid] = { ...p.pos };
+        if (p.size) newSizes[nid] = p.size;
+      }
+      const newEdges: VisualFlowEdge[] = internalEdges.map((e) => ({
+        ...e,
+        source: remap(e.source),
+        target: remap(e.target),
+      }));
+      const hasSizes = Object.keys(newSizes).length > 0;
+
+      // 1) Target item-store add (built-in planes only; custom items ride the vf write).
+      if (target === "main") newItems.forEach((it) => onAddTodo?.(it));
+      else if (target === "grazeland") newItems.forEach((it) => onAddGrazelandItem?.(it));
+      else if (target === "bin") newItems.forEach((it) => onAddBinItem?.(it));
+
+      // 2) Source item-store removal on move (built-in planes only).
+      if (mode === "move" && !isCustomPlane) {
+        if (plane === "main") ids.forEach((id) => onDeleteTodo?.(id));
+        else if (plane === "grazeland") ids.forEach((id) => onDeleteGrazelandItem?.(id));
+        else if (plane === "bin") ids.forEach((id) => onDeleteBinItem?.(id));
+      }
+
+      // 3) One atomic visualFlow write — target positions/edges/sizes (+ custom items),
+      //    then source removal of the same on a move.
+      onUpdateVisualFlow((prev) => {
+        const next: VisualFlowData = { ...prev };
+
+        if (target === "main") {
+          next.nodePositions = { ...(prev.nodePositions ?? {}), ...newPositions };
+          next.edges = [...(prev.edges ?? []), ...newEdges];
+        } else if (target === "grazeland") {
+          next.grazelandNodePositions = { ...(prev.grazelandNodePositions ?? {}), ...newPositions };
+          next.grazelandEdges = [...(prev.grazelandEdges ?? []), ...newEdges];
+          if (hasSizes) next.grazelandNodeSizes = { ...(prev.grazelandNodeSizes ?? {}), ...newSizes };
+        } else if (target === "bin") {
+          next.binNodePositions = { ...(prev.binNodePositions ?? {}), ...newPositions };
+          next.binEdges = [...(prev.binEdges ?? []), ...newEdges];
+          if (hasSizes) next.binNodeSizes = { ...(prev.binNodeSizes ?? {}), ...newSizes };
+        } else {
+          next.customPlaneItems = {
+            ...(prev.customPlaneItems ?? {}),
+            [target]: [...(prev.customPlaneItems?.[target] ?? []), ...newItems],
+          };
+          next.customPlaneNodePositions = {
+            ...(prev.customPlaneNodePositions ?? {}),
+            [target]: { ...(prev.customPlaneNodePositions?.[target] ?? {}), ...newPositions },
+          };
+          next.customPlaneEdges = {
+            ...(prev.customPlaneEdges ?? {}),
+            [target]: [...(prev.customPlaneEdges?.[target] ?? []), ...newEdges],
+          };
+          if (hasSizes) {
+            next.customPlaneNodeSizes = {
+              ...(prev.customPlaneNodeSizes ?? {}),
+              [target]: { ...(prev.customPlaneNodeSizes?.[target] ?? {}), ...newSizes },
+            };
+          }
+        }
+
+        if (mode === "move") {
+          const rm = movingIds;
+          const stripPos = (m?: Record<string, { x: number; y: number }>) =>
+            m ? Object.fromEntries(Object.entries(m).filter(([k]) => !rm.has(k))) : m;
+          const stripSize = (m?: Record<string, VisualFlowNodeSize>) =>
+            m ? Object.fromEntries(Object.entries(m).filter(([k]) => !rm.has(k))) : m;
+          const stripEdges = (es?: VisualFlowEdge[]) =>
+            es ? es.filter((e) => !rm.has(e.source) && !rm.has(e.target)) : es;
+
+          if (plane === "main") {
+            next.nodePositions = stripPos(next.nodePositions);
+            next.edges = stripEdges(next.edges);
+          } else if (plane === "grazeland") {
+            next.grazelandNodePositions = stripPos(next.grazelandNodePositions);
+            next.grazelandEdges = stripEdges(next.grazelandEdges);
+            next.grazelandNodeSizes = stripSize(next.grazelandNodeSizes);
+          } else if (plane === "bin") {
+            next.binNodePositions = stripPos(next.binNodePositions);
+            next.binEdges = stripEdges(next.binEdges);
+            next.binNodeSizes = stripSize(next.binNodeSizes);
+          } else {
+            next.customPlaneItems = {
+              ...(next.customPlaneItems ?? {}),
+              [plane]: (next.customPlaneItems?.[plane] ?? []).filter((t) => !rm.has(t.id)),
+            };
+            next.customPlaneNodePositions = {
+              ...(next.customPlaneNodePositions ?? {}),
+              [plane]: stripPos(next.customPlaneNodePositions?.[plane]) ?? {},
+            };
+            next.customPlaneEdges = {
+              ...(next.customPlaneEdges ?? {}),
+              [plane]: stripEdges(next.customPlaneEdges?.[plane]) ?? [],
+            };
+            const curSizes = next.customPlaneNodeSizes?.[plane];
+            if (curSizes) {
+              next.customPlaneNodeSizes = {
+                ...(next.customPlaneNodeSizes ?? {}),
+                [plane]: stripSize(curSizes)!,
+              };
+            }
+          }
+        }
+
+        return next;
+      });
+
+      setNodeMenu(null);
+      const targetName =
+        target === "main" ? "Main"
+          : target === "grazeland" ? "Grazeland"
+            : target === "bin" ? "Bin"
+              : visualFlow.customPlanes?.find((pl) => pl.id === target)?.name ?? "sheet";
+      onTodoLog?.(
+        `${getVisualFlowPlaneLogLabel(plane)}: ${mode === "move" ? "moved" : "duplicated"} ${picked.length} ${picked.length === 1 ? "item" : "items"} to ${targetName}`
+      );
+      setExportToast(`${mode === "move" ? "Moved" : "Duplicated"} ${picked.length} ${picked.length === 1 ? "item" : "items"} to ${targetName}`);
+      if (exportToastTimerRef.current !== null) window.clearTimeout(exportToastTimerRef.current);
+      exportToastTimerRef.current = window.setTimeout(() => {
+        setExportToast(null);
+        exportToastTimerRef.current = null;
+      }, 2200);
+    },
+    [
+      plane, isCustomPlane, canvasItems, storedNodePositions, storedNodeSizes, storedFlowEdges,
+      getNodes, onAddTodo, onAddGrazelandItem, onAddBinItem, onDeleteTodo, onDeleteGrazelandItem,
+      onDeleteBinItem, onUpdateVisualFlow, onTodoLog, visualFlow.customPlanes,
+    ]
+  );
+
   const applySectorColorByName = useCallback(
     (sectorName: string, color: SectorColorKey | undefined) => {
       const trimmed = sectorName.trim();
@@ -3159,6 +3324,59 @@ function VisualFlowPanelInner({
               const menuW = 200;
               const left = Math.max(8, Math.min(nodeMenu.x, window.innerWidth - menuW));
 
+              // Other planes (sheets) this selection can be sent to.
+              const relocateTargets: { id: VisualFlowPlane; label: string }[] = [
+                ...(plane !== "main" ? [{ id: "main" as VisualFlowPlane, label: "Main" }] : []),
+                ...(plane !== "grazeland" ? [{ id: "grazeland" as VisualFlowPlane, label: "Grazeland" }] : []),
+                ...(plane !== "bin" ? [{ id: "bin" as VisualFlowPlane, label: "Bin" }] : []),
+                ...(visualFlow.customPlanes ?? [])
+                  .filter((pl) => pl.id !== plane)
+                  .map((pl) => ({ id: pl.id as VisualFlowPlane, label: pl.name })),
+              ];
+              const relocateBlock = relocateTargets.length > 0 && (
+                <>
+                  <div className="my-1 border-t border-white/10" />
+                  <div className="px-3 py-2">
+                    <label className="mb-1 block text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
+                      Move to sheet
+                    </label>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        if (e.target.value) relocateItemsToPlane(ids, e.target.value, "move");
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-zinc-200 focus:outline-none"
+                      aria-label="Move selection to another sheet"
+                    >
+                      <option value="" disabled>Choose sheet…</option>
+                      {relocateTargets.map((t) => (
+                        <option key={t.id} value={t.id}>{t.label}</option>
+                      ))}
+                    </select>
+                    <label className="mb-1 mt-2 block text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
+                      Duplicate to sheet
+                    </label>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        if (e.target.value) relocateItemsToPlane(ids, e.target.value, "duplicate");
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-zinc-200 focus:outline-none"
+                      aria-label="Duplicate selection to another sheet"
+                    >
+                      <option value="" disabled>Choose sheet…</option>
+                      {relocateTargets.map((t) => (
+                        <option key={t.id} value={t.id}>{t.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              );
+
               if (ids.length > 1) {
                 const present = ids
                   .map((id) => canvasItems.find((t) => t.id === id))
@@ -3271,6 +3489,7 @@ function VisualFlowPanelInner({
                         </>
                       );
                     })()}
+                    {relocateBlock}
                   </div>
                 );
               }
@@ -3468,6 +3687,7 @@ function VisualFlowPanelInner({
                       </div>
                     </>
                   )}
+                  {relocateBlock}
                   {canDelete && (
                     <>
                       <div className="my-1 border-t border-white/10" />
