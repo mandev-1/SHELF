@@ -121,10 +121,11 @@ export const CAT_KEYWORDS: { cat: CatKey; keywords: string[] }[] = [
   { cat: "housing", keywords: ["najem", "najemne", "rent", "podnajem", "svj", "spolecenstvi vlastniku", "fond oprav", "bytove druzstvo", "druzstvo", "sprava nemovitosti", "hypoteka", "mortgage", "hypotecni", "energie", "elektrina", "cez", "cez prodej", "prazska energetika", "innogy", "rwe", "e.on", "eon", "prazska plynarenska", "plyn", "plynarenska", "teplo", "teplarny", "vodne", "stocne", "vodarny", "pvk", "prazske vodovody", "centropol", "bohemia energy", "mnd", "lumius", "ubytovani"] },
   { cat: "home", keywords: ["o2", "t-mobile", "tmobile", "t mobile", "vodafone", "vodafone tv", "internet", "upc", "nordic telecom", "poda", "cetin", "tarif", "pausal", "mobilni tarif", "kabelova televize", "pojisteni", "insurance", "pojistovna", "kooperativa", "ceska pojistovna", "generali", "allianz", "uniqa", "axa", "direct pojistovna", "slavia pojistovna", "pojistne", "alza domacnost", "ikea", "jysk", "kika", "xxxlutz", "asko nabytek", "sconto", "mobelix", "siko", "obi", "hornbach", "bauhaus", "baumax", "unihobby", "drogerie", "rossmann", "dm drogerie", "teta drogerie", "domacnost", "praci prostredky", "nabytek", "kvetiny", "zahrada"] },
   { cat: "fun", keywords: ["netflix", "spotify", "hbo max", "max.com", "hbo", "disney+", "disney plus", "disney", "apple tv", "appletv", "apple.com/bill", "amazon prime video", "paramount", "skyshowtime", "voyo", "oneplay", "steam", "steampowered", "playstation", "psn", "xbox", "xbox live", "nintendo", "epic games", "epicgames", "gog.com", "twitch", "patreon", "youtube premium", "youtubepremium", "kino", "cinema city", "cinemacity", "cinestar", "premiere cinemas", "imax", "divadlo", "koncert", "festival", "ticketportal", "ticketmaster", "goout", "go out", "smsticket", "bar", "pub", "hospoda", "hostinec", "pivnice", "nightclub", "diskoteka", "zoo", "aquapark", "aquapalace", "bowling", "laser game", "lasergame", "escape room", "audible", "muzeum", "galerie", "casino", "sazka", "tipsport", "fortuna", "betano"] },
-  { cat: "health", keywords: ["lekarna", "pharmacy", "dr.max", "dr max", "drmax", "benu lekarna", "benu", "pilulka", "magistra", "doktor", "lekar", "klinika", "poliklinika", "ordinace", "nemocnice", "zubar", "stomatolog", "dental", "zubni", "ocni", "optika", "fokus optik", "grandoptical", "vasecocky", "multisport", "multi sport", "fitness", "posilovna", "fitcentrum", "form factory", "formfactory", "bigone", "yoga", "joga", "pilates", "bazen", "plavani", "wellness", "masaz", "fyzioterapie", "rehabilitace", "vzp", "zdravotni pojisteni", "zdravotni pojistovna", "decathlon", "doplnky stravy", "vitaminy"] },
+  { cat: "sport", keywords: ["decathlon", "decasport", "sportisimo", "intersport", "hervis", "a3 sport", "a3sport", "gigasport", "alpine pro", "alpinepro", "rock point", "rockpoint", "hudy", "nike", "adidas", "fitness", "fitko", "posilovna", "fitcentrum", "form factory", "formfactory", "bigone", "big one", "multisport", "multi sport", "gym", "yoga", "joga", "pilates", "crossfit", "bazen", "plavani", "sport"] },
+  { cat: "health", keywords: ["lekarna", "pharmacy", "dr.max", "dr max", "drmax", "benu lekarna", "benu", "pilulka", "magistra", "doktor", "lekar", "klinika", "poliklinika", "ordinace", "nemocnice", "zubar", "stomatolog", "dental", "zubni", "ocni", "optika", "fokus optik", "grandoptical", "vasecocky", "wellness", "masaz", "fyzioterapie", "rehabilitace", "vzp", "zdravotni pojisteni", "zdravotni pojistovna", "doplnky stravy", "vitaminy"] },
   { cat: "electronics", keywords: ["alza", "alza.cz", "czc.cz", "tsbohemia", "ts bohemia", "datart", "electroworld", "electro world", "euronics", "okay elektro", "planeo", "megapixel", "fotolab", "istyle", "mobil pohotovost", "mobilpohotovost"] },
   { cat: "clothing", keywords: ["zalando", "about you", "aboutyou", "zara", "h&m", "hm.com", "reserved", "cropp", "sinsay", "mohito", "new yorker", "newyorker", "c&a", "takko", "kik", "primark", "ccc", "deichmann", "bata", "humanic", "answear", "footshop", "bonprix", "shein", "obuv", "obleceni"] },
-  { cat: "shopping", keywords: ["notino", "mall.cz", "mall group", "sportisimo", "amazon.de", "amazon", "amzn", "aliexpress", "ali express", "temu", "wish", "ebay", "allegro", "bonami", "mountfield", "eshop", "e-shop", "kosmetika", "parfumy", "sephora", "douglas", "marionnaud", "fann", "klenoty", "hodinky"] },
+  { cat: "shopping", keywords: ["notino", "mall.cz", "mall group", "amazon.de", "amazon", "amzn", "aliexpress", "ali express", "temu", "wish", "ebay", "allegro", "bonami", "mountfield", "eshop", "e-shop", "kosmetika", "parfumy", "sephora", "douglas", "marionnaud", "fann", "klenoty", "hodinky"] },
   { cat: "vending", keywords: ["delikomat", "dallmayr", "vending", "kavomat", "prodejni automat", "napojovy automat", "samoobsluzny automat", "automat na kavu"] },
   { cat: "cash", keywords: ["vyber z bankomatu", "vyber hotovosti", "bankomat", "atm", "cash withdrawal", "withdrawal", "cashback"] },
   { cat: "fees", keywords: ["bankovni poplatek", "mesicni poplatek", "poplatek za vedeni", "poplatek", "poplatky", "provize", "bank charge", "service charge", "card fee", "account fee", "maintenance fee", "fee", "fees"] },
@@ -141,6 +142,8 @@ export const AIRBANK_CAT_MAP: Record<string, CatKey> = {
   "domacnost": "home",
   "zabava": "fun",
   "zdravi": "health",
+  "sport": "sport",
+  "sport a volny cas": "sport",
   "nakupy": "shopping",
   "elektronika": "electronics",
   "restaurace": "eating",
@@ -153,7 +156,7 @@ export const AIRBANK_CAT_MAP: Record<string, CatKey> = {
 
 // Short tokens that need a word boundary to avoid false positives.
 // ("fee"/"fees" would otherwise substring-match "coffee", "feed", …)
-const BOUNDED = new Set(["o2", "hbo", "cez", "eon", "dpp", "pid", "mhd", "mol", "omv", "atm", "vzp", "bata", "cd.cz", "ikea", "obi", "kik", "fee", "fees"]);
+const BOUNDED = new Set(["o2", "hbo", "cez", "eon", "dpp", "pid", "mhd", "mol", "omv", "atm", "vzp", "bata", "cd.cz", "ikea", "obi", "kik", "fee", "fees", "sport", "gym"]);
 
 // Specific multi-word phrases only — a bare "zustatek"/"balance" would wrongly
 // drop real transactions like "Úrok ze zůstatku" (interest credited).

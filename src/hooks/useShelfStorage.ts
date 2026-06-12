@@ -943,6 +943,16 @@ export function useShelfStorage() {
     });
   }, []);
 
+  // step the active statement month (edge arrows on the Strategie panel)
+  const strategieSetCurrentMonth = useCallback((key: string) => {
+    setStrategieState((prev) => {
+      if (!(key in prev.statements.byMonth) || prev.statements.current === key) return prev;
+      const next: StrategieState = { ...prev, statements: { ...prev.statements, current: key } };
+      getStorage()?.set({ [STRATEGIE_KEY]: next });
+      return next;
+    });
+  }, []);
+
   const strategieSetSecondaryCurrency = useCallback((c: string | null) => {
     setStrategieState((prev) => {
       // Turning the secondary off should also clear the compare toggle.
@@ -1515,6 +1525,7 @@ export function useShelfStorage() {
     strategieSaveStatement,
     strategieAddPot,
     strategieSetCurrency,
+    strategieSetCurrentMonth,
     strategieSetSecondaryCurrency,
     strategieToggleCompareCurrency,
     strategieSetRungAccounts,

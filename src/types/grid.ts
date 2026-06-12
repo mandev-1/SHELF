@@ -300,7 +300,7 @@ export interface ShelfBackupData {
 
 export type CatKey =
   | "housing" | "food" | "eating" | "taxi" | "transport" | "home" | "electronics"
-  | "clothing" | "fun" | "health" | "shopping" | "vending" | "cash" | "fees"
+  | "clothing" | "fun" | "health" | "sport" | "shopping" | "vending" | "cash" | "fees"
   | "charity" | "credit" | "other";
 
 export interface IncomeRow { id: string; label: string; amt: number; kind: string; }
@@ -323,9 +323,10 @@ export const SAVINGS_PLAN_KINDS: { id: SavingsPlanKind; label: string }[] = [
 export const SAVINGS_PLAN_HUES = ["#6366f1", "#3b82f6", "#14b8a6", "#f59e0b", "#a384df", "#ec4899", "#22c55e", "#94a3b8"];
 
 // ─── Account kinds (Accounts card + manager) ─────────────────────────────────
-export type AccountKind = "checking" | "savings" | "brokerage" | "pension" | "building" | "crypto" | "cash";
+export type AccountKind = "checking" | "fintech" | "savings" | "brokerage" | "pension" | "building" | "crypto" | "cash";
 export const ACCOUNT_KINDS: { id: AccountKind; label: string; hue: string }[] = [
   { id: "checking",  label: "Checking",  hue: "#5b9cff" },
+  { id: "fintech",   label: "Fintech",   hue: "#22d3ee" },
   { id: "savings",   label: "Savings",   hue: "#34c891" },
   { id: "brokerage", label: "Brokerage", hue: "#a384df" },
   { id: "pension",   label: "Pension",   hue: "#e0905a" },

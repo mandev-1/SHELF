@@ -5204,3 +5204,65 @@ body {
 .si-leave-title { font-size: 15.5px; font-weight: 700; color: var(--fg); margin-bottom: 7px; }
 .si-leave-body { font-size: 12.5px; line-height: 1.55; color: var(--dim); margin-bottom: 18px; }
 .si-leave-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ── Strategie edge month steppers (fixed; ↖ prev / ↗ next) ── */
+.strat-monthnav {
+  position: fixed; top: 50%; transform: translateY(-50%); z-index: 60;
+  display: grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 13px; cursor: pointer;
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  border: 1px solid var(--line); color: var(--fg-2);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.55);
+  opacity: 0.5;
+  transition: opacity 0.16s, background-color 0.16s, color 0.16s, border-color 0.16s, transform 0.12s;
+}
+.strat-monthnav:hover:not(:disabled) { opacity: 1; background: var(--surface-2); color: var(--fg); border-color: var(--line-strong); }
+.strat-monthnav:active:not(:disabled) { transform: translateY(-50%) scale(0.95); }
+.strat-monthnav:disabled { opacity: 0.14; cursor: default; }
+.strat-monthnav svg { width: 20px; height: 20px; }
+.strat-monthnav--prev { left: 322px; }
+.strat-monthnav--next { right: 14px; }
+@media (max-width: 1100px) {
+  .strat-monthnav--prev { left: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .strat-monthnav { transition: opacity 0.16s; }
+}
+
+/* ── month-switch toast (Strategie edge steppers) ── */
+.strat-month-toast {
+  position: fixed; right: 24px; top: 80px; z-index: 320; pointer-events: none;
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 11px 17px; border-radius: 15px;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 20px 48px -18px rgba(0, 0, 0, 0.62), 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(130%); backdrop-filter: blur(14px) saturate(130%);
+  animation: strat-month-toast-in 0.46s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.strat-month-toast.is-leaving {
+  animation: strat-month-toast-out 0.36s cubic-bezier(0.5, 0, 0.78, 0) both;
+}
+@keyframes strat-month-toast-in {
+  from { opacity: 0; transform: translateX(46px) scale(0.94); filter: blur(2px); }
+  to   { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+}
+@keyframes strat-month-toast-out {
+  from { opacity: 1; transform: translateX(0) scale(1); }
+  to   { opacity: 0; transform: translateX(52px) scale(0.96); }
+}
+.strat-month-toast-eyebrow {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--accent-bright);
+}
+[data-theme="day"] .strat-month-toast-eyebrow, [data-theme="sap"] .strat-month-toast-eyebrow { color: var(--accent-deep); }
+.strat-month-toast-label {
+  font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--fg);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.01em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .strat-month-toast { animation: strat-month-toast-fade 0.2s ease-out both; }
+  .strat-month-toast.is-leaving { animation: strat-month-toast-fade 0.2s ease-in reverse both; }
+  @keyframes strat-month-toast-fade { from { opacity: 0; } to { opacity: 1; } }
+}

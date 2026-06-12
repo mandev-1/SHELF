@@ -138,6 +138,7 @@ export default function FullApp() {
     strategieSaveStatement,
     strategieAddPot,
     strategieSetCurrency,
+    strategieSetCurrentMonth,
     strategieToggleCompareCurrency,
     strategieSetRungAccounts,
     strategieUpsertAccountDictEntry,
@@ -597,6 +598,7 @@ export default function FullApp() {
                 onSaveStatement={strategieSaveStatement}
                 onAddPot={strategieAddPot}
                 onSetCurrency={strategieSetCurrency}
+                onSetActiveMonth={strategieSetCurrentMonth}
                 onToggleCompareCurrency={strategieToggleCompareCurrency}
                 onSetRungAccounts={strategieSetRungAccounts}
                 onUpsertAccountDictEntry={strategieUpsertAccountDictEntry}

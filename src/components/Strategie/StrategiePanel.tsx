@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import type { StrategieState, MonthStatement, BuylistItem, MembershipRow, AccountDictEntry, RungAccountRef, SavingsPlanKind, CatKey } from "../../types/grid";
 import { SAVINGS_PLAN_KINDS } from "../../types/grid";
 import {
@@ -33,6 +34,7 @@ interface StrategiePanelProps {
   ) => void;
   onAddPot: (name: string) => void;
   onSetCurrency: (c: string) => void;
+  onSetActiveMonth: (key: string) => void;
   onToggleCompareCurrency: () => void;
   onSetRungAccounts: (rungId: number, rows: RungAccountRef[]) => void;
   onUpsertAccountDictEntry: (entry: AccountDictEntry) => void;
@@ -53,6 +55,7 @@ export function StrategiePanel({
   onSaveStatement,
   onAddPot,
   onSetCurrency,
+  onSetActiveMonth,
   onToggleCompareCurrency,
   onSetRungAccounts,
   onUpsertAccountDictEntry,
@@ -90,6 +93,11 @@ export function StrategiePanel({
   const [heroFace, setHeroFace] = useState<"grow" | "spend">("grow");
   const [hiddenCats, setHiddenCats] = useState<CatKey[]>([]);
   const [detailRung, setDetailRung] = useState<LadderRung | null>(null);
+  // month-switch toast (top-right, slides in then away)
+  const [monthToast, setMonthToast] = useState<{ seq: number; label: string } | null>(null);
+  const [toastLeaving, setToastLeaving] = useState(false);
+  const toastSeqRef = useRef(0);
+  const toastTimersRef = useRef<number[]>([]);
 
   const { statements, positions, pots, currency, secondaryCurrency, compareCurrencyOn } = state;
   const cur = currency;
@@ -111,6 +119,8 @@ export function StrategiePanel({
   const activeIdx = sortedKeys.indexOf(activeKey);
   const prevKey = activeIdx > 0 ? sortedKeys[activeIdx - 1] : undefined;
   const prevStmt = prevKey ? byMonth[prevKey] : undefined;
+  // edge arrows step the active month through the months on file
+  const nextKey = activeIdx >= 0 && activeIdx < sortedKeys.length - 1 ? sortedKeys[activeIdx + 1] : undefined;
 
   const inc = totalIncome(stmt);
   const expAll = totalExpenses(stmt);                 // everything, incl. savings transfers
@@ -219,10 +229,57 @@ export function StrategiePanel({
     setEditorOpen(true);
   }, [byMonth, activeKey]);
 
+  // pop a brief top-right toast naming the month we just moved to
+  const showMonthToast = useCallback((key: string) => {
+    const seq = (toastSeqRef.current += 1);
+    toastTimersRef.current.forEach((t) => window.clearTimeout(t));
+    setToastLeaving(false);
+    setMonthToast({ seq, label: monthLabel(key) });
+    toastTimersRef.current = [
+      window.setTimeout(() => { if (toastSeqRef.current === seq) setToastLeaving(true); }, 1450),
+      window.setTimeout(() => { if (toastSeqRef.current === seq) { setMonthToast(null); setToastLeaving(false); } }, 1450 + 380),
+    ];
+  }, []);
+  useEffect(() => () => { toastTimersRef.current.forEach((t) => window.clearTimeout(t)); }, []);
+
+  const stepMonthTo = useCallback((key: string | undefined) => {
+    if (!key) return;
+    onSetActiveMonth(key);
+    showMonthToast(key);
+  }, [onSetActiveMonth, showMonthToast]);
+
   const allWeeks = monthWeeks(activeKey);
 
   return (
     <div className="strat">
+      {/* edge month steppers — page the whole panel through the months on file */}
+      <button
+        type="button"
+        className="strat-monthnav strat-monthnav--prev"
+        disabled={!prevKey}
+        onClick={() => stepMonthTo(prevKey)}
+        title={prevKey ? `Previous month · ${monthAbbr(prevKey)}` : "No earlier month on file"}
+        aria-label="Previous month"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M16 16 8 8" />
+          <path d="M8 15V8h7" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className="strat-monthnav strat-monthnav--next"
+        disabled={!nextKey}
+        onClick={() => stepMonthTo(nextKey)}
+        title={nextKey ? `Next month · ${monthAbbr(nextKey)}` : "No later month on file"}
+        aria-label="Next month"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M8 16 16 8" />
+          <path d="M9 8h7v7" />
+        </svg>
+      </button>
+
       {/* header */}
       <div className="strat-head">
         <div>
@@ -905,6 +962,20 @@ export function StrategiePanel({
           onUpsertAccountDictEntry={onUpsertAccountDictEntry}
           onClose={() => setDetailRung(null)}
         />
+      )}
+
+      {/* month-switch toast — top-right, slides in then away */}
+      {monthToast && createPortal(
+        <div
+          key={monthToast.seq}
+          className={`strat-month-toast${toastLeaving ? " is-leaving" : ""}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="strat-month-toast-eyebrow">Statement</span>
+          <span className="strat-month-toast-label">{monthToast.label}</span>
+        </div>,
+        document.body,
       )}
     </div>
   );
