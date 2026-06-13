@@ -300,6 +300,8 @@ export interface ShelfBackupData {
   hopperFace?: "buy" | "sell";
   strategie?: StrategieState;
   saleItems?: SaleItem[];
+  /** Visual Flow goals layer ("camps"). */
+  vfGoals?: VfGoal[];
 }
 
 export type CatKey =
@@ -395,6 +397,94 @@ export const DEFAULT_DEBTS: Debt[] = [
   { id: "dbt-fam", name: "Owed to parents",         kind: "family",   principal: 1500, rate: 0,    payment: 100 },
 ];
 
+// ─── Visual Flow goals layer ("camps") ───────────────────────────────────────
+export type VfGoalStatus = "notstarted" | "ontrack" | "atrisk" | "done";
+export interface VfGoalMilestone { id: string; label: string; done: boolean; }
+export interface VfGoalLink { type: "pot" | "debt"; id: string; }
+export interface VfGoal {
+  id: string;
+  title: string;
+  outcome: string;            // "Point B"
+  status: VfGoalStatus;
+  /** Target month, "YYYY-MM". */
+  due?: string;
+  /** "Supplies" — wired to a savings pot or a tracked debt. */
+  link: VfGoalLink | null;
+  /** Cascading subgoals. */
+  milestones: VfGoalMilestone[];
+  notes: string;              // field journal
+}
+/** Max campsites pitched along the trail. */
+export const VF_MAX_GOALS = 6;
+/** Seed goals shown on first load (links reference the Strategie seed pot/debt ids). */
+export const DEFAULT_VF_GOALS: VfGoal[] = [
+  {
+    id: "g-pm", title: "Become a product manager",
+    outcome: "Hired as PM for a B2B product by next summer",
+    status: "ontrack", link: null, due: "2027-06",
+    milestones: [
+      { id: "m1", label: "Ship a side project end-to-end", done: true },
+      { id: "m2", label: "Lead one cross-team feature at work", done: true },
+      { id: "m3", label: "Do 5 PM-style case interviews", done: false },
+      { id: "m4", label: "Apply to 10 PM roles", done: false },
+    ],
+    notes: "Strength: technical background. Gap: stakeholder storytelling — practice weekly.",
+  },
+  {
+    id: "g-japan", title: "Japan trip — spring",
+    outcome: "Three weeks in Japan, fully paid from the pot",
+    status: "ontrack", link: { type: "pot", id: "pot-japan" }, due: "2027-04",
+    milestones: [
+      { id: "m1", label: "Set the budget", done: true },
+      { id: "m2", label: "Book flights 6 months out", done: false },
+    ],
+    notes: "",
+  },
+  {
+    id: "g-cc", title: "Kill the credit card",
+    outcome: "Revolving balance at zero, card kept for emergencies only",
+    status: "atrisk", link: { type: "debt", id: "dbt-cc" }, due: "2026-12",
+    milestones: [
+      { id: "m1", label: "Stop new spending on the card", done: true },
+      { id: "m2", label: "Overpay every month", done: true },
+    ],
+    notes: "21.9% APR — first target per avalanche.",
+  },
+];
+export function normalizeVfGoals(raw: unknown): VfGoal[] {
+  if (!Array.isArray(raw)) return DEFAULT_VF_GOALS.map((g) => ({ ...g, milestones: g.milestones.map((m) => ({ ...m })) }));
+  const STATUSES: VfGoalStatus[] = ["notstarted", "ontrack", "atrisk", "done"];
+  return (raw as unknown[])
+    .filter((x): x is Record<string, unknown> => !!x && typeof x === "object")
+    .filter((o) => typeof o["id"] === "string")
+    .slice(0, VF_MAX_GOALS)
+    .map((o) => {
+      const linkRaw = o["link"];
+      let link: VfGoalLink | null = null;
+      if (linkRaw && typeof linkRaw === "object" && !Array.isArray(linkRaw)) {
+        const l = linkRaw as Record<string, unknown>;
+        if ((l["type"] === "pot" || l["type"] === "debt") && typeof l["id"] === "string") {
+          link = { type: l["type"], id: l["id"] };
+        }
+      }
+      const milestones: VfGoalMilestone[] = Array.isArray(o["milestones"])
+        ? (o["milestones"] as unknown[])
+            .filter((m): m is Record<string, unknown> => !!m && typeof m === "object" && typeof (m as Record<string, unknown>)["id"] === "string")
+            .map((m) => ({ id: m["id"] as string, label: typeof m["label"] === "string" ? m["label"] : "", done: Boolean(m["done"]) }))
+        : [];
+      return {
+        id: o["id"] as string,
+        title: typeof o["title"] === "string" ? o["title"] : "",
+        outcome: typeof o["outcome"] === "string" ? o["outcome"] : "",
+        status: STATUSES.includes(o["status"] as VfGoalStatus) ? (o["status"] as VfGoalStatus) : "notstarted",
+        due: typeof o["due"] === "string" ? o["due"] : undefined,
+        link,
+        milestones,
+        notes: typeof o["notes"] === "string" ? o["notes"] : "",
+      };
+    });
+}
+
 // ─── Dashboard card grid (Strategie 12-col layout) ───────────────────────────
 export type CardId =
   | "hero" | "ladder" | "diff" | "weekly" | "flow" | "debt"
@@ -410,7 +500,8 @@ export const DEFAULT_CARD_ORDER: CardId[] = [
   "hero", "ladder", "diff", "weekly", "flow", "debt", "programs", "accounts", "pots", "pillars", "cats",
 ];
 export const DEFAULT_CARD_W: Record<CardId, CardWidth> = {
-  hero: 8, ladder: 4, diff: 4, weekly: 8, flow: 4, debt: 4, programs: 4, accounts: 4, pots: 4, pillars: 4, cats: 8,
+  // rows tile to a full 12 cols each: 8+4 · 4+8 · 4+4+4 · 4+4+4 · 12
+  hero: 8, ladder: 4, diff: 4, weekly: 8, flow: 4, debt: 4, programs: 4, accounts: 4, pots: 4, pillars: 4, cats: 12,
 };
 export const CARD_W_SNAPS: CardWidth[] = [4, 6, 8, 12];
 /** Filter unknown ids, append any missing cards, default widths to the snap set. */

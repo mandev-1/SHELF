@@ -1,4 +1,4 @@
-import type { SectorColorKey, ShelfPillarTodoItem, VisualFlowEdge } from "../../types/grid";
+import type { SectorColorKey, ShelfPillarTodoItem, VisualFlowEdge, VfGoal } from "../../types/grid";
 import type { PlaneId } from "./visualFlowWriter";
 
 /**
@@ -33,6 +33,33 @@ export interface FlowExportInput {
   items: ShelfPillarTodoItem[];
   edges?: VisualFlowEdge[];
   sectorColors?: Record<string, SectorColorKey>;
+  /** Visual Flow goals layer ("camps") — global, rendered once when present. */
+  vfGoals?: VfGoal[];
+}
+
+const VF_STATUS_LABEL: Record<VfGoal["status"], string> = {
+  notstarted: "Not started",
+  ontrack: "On track",
+  atrisk: "At risk",
+  done: "Reached",
+};
+
+function renderGoals(goals: VfGoal[]): string {
+  if (!goals.length) return "";
+  const blocks = goals.map((g) => {
+    const done = g.milestones.filter((m) => m.done).length;
+    const lines = [
+      `### ${g.title || "(untitled goal)"} — ${VF_STATUS_LABEL[g.status]}`,
+      g.outcome ? `- **Point B:** ${g.outcome}` : null,
+      g.due ? `- **By when:** ${g.due}` : null,
+      g.link ? `- **Wired to:** ${g.link.type} \`${g.link.id}\`` : null,
+      g.milestones.length ? `- **Subgoals (${done}/${g.milestones.length}):**` : null,
+      ...g.milestones.map((m) => `  - [${m.done ? "x" : " "}] ${m.label || "(untitled)"}`),
+      g.notes.trim() ? `- **Journal:** ${g.notes.trim()}` : null,
+    ].filter(Boolean);
+    return lines.join("\n");
+  });
+  return `\n---\n\n## Goals (Visual Flow camps)\n\n${blocks.join("\n\n")}\n`;
 }
 
 /** Compact ID — first 8 chars of the UUID for human-readable references. */
@@ -146,5 +173,7 @@ export function exportFlowAsMarkdown(input: FlowExportInput): string {
   const taskSection =
     `\n---\n\n## ${planeDisplay} — Tasks\n\n${renderTasks(items)}\n\n### Relationships\n\n${renderRelationships(edges, byId)}\n`;
 
-  return header + sectorBlock + taskSection;
+  const goalsSection = renderGoals(input.vfGoals ?? []);
+
+  return header + sectorBlock + taskSection + goalsSection;
 }

@@ -2892,7 +2892,7 @@ body {
 .strat-grid {
   display: grid; grid-template-columns: repeat(12, 1fr);
   gap: 16px;
-  align-items: start; grid-auto-flow: row dense;
+  align-items: stretch; grid-auto-flow: row dense;
 }
 
 /* ── KPI row ──────────────────────────────────────────────── */
@@ -5409,6 +5409,8 @@ body {
 /* ─── Strategie dashboard card grid (v3) ─────────────────────────────────────
    Drag to place (top-center grip), edge-resize (⅓ · ½ · ⅔ · full), undo. */
 .card-slot { position: relative; min-width: 0; grid-column: span var(--cw, 4); }
+/* stretch the card to fill its row's height so shorter cards don't leave gaps */
+.card-slot > .card { height: 100%; }
 .card-grip {
   position: absolute; top: 0; left: 50%; transform: translateX(-50%);
   z-index: 6; width: 56px; height: 18px; padding: 0; border: 0;
@@ -5537,3 +5539,181 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 .ld-debt-hint { font-size: 11px; color: var(--dim); margin-top: 10px; line-height: 1.5; }
 .ld-debt-hint em { font-style: normal; font-weight: 600; color: var(--fg-2); }
 .sba-commit:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
+
+/* ─── Visual Flow goals layer ("camps") + view transitions (v4 handoff) ─────
+   Ported verbatim from handoff 005 styles.css lines 1130–1302; the .nf-*
+   node-flow mock is intentionally omitted (the real VisualFlowPanel is the
+   node layer). */
+.vf { position: relative; min-height: 540px; height: calc(100vh - 240px); }
+.vf-trail-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.vf-trail-under { fill: none; stroke: var(--line); stroke-width: 7px; stroke-linecap: round; opacity: 0.55; }
+.vf-trail { fill: none; stroke: var(--accent); stroke-width: 2px; stroke-linecap: round; stroke-dasharray: 1 9; opacity: 0.8; animation: vf-march 70s linear infinite; }
+@keyframes vf-march { to { stroke-dashoffset: -600; } }
+.vf-head { position: absolute; top: 0; left: 0; z-index: 3; max-width: 380px; }
+.vf-eyebrow { font-size: 10px; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; color: var(--dim); }
+.vf-title-row { display: flex; align-items: baseline; gap: 10px; margin-top: 4px; }
+.vf-title { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: var(--fg); margin: 0; }
+.vf-count { font-size: 11px; color: var(--dim); }
+.vf-hint { font-size: 12px; color: var(--dim); line-height: 1.55; margin: 6px 0 0; text-wrap: pretty; }
+.vf-you { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 5px; z-index: 2; pointer-events: none; }
+.vf-you-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent); animation: vf-pulse 2.2s ease-in-out infinite; }
+@keyframes vf-pulse { 50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--accent) 12%, transparent); } }
+.vf-you-lab { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
+.vf-horizon { position: absolute; transform: translate(-50%, -160%); font-size: 10px; font-weight: 600; color: var(--dim); letter-spacing: 0.12em; text-transform: uppercase; pointer-events: none; }
+.vf-dist { position: absolute; transform: translate(-50%, 0); font-size: 10.5px; color: var(--dim); font-style: italic; opacity: 0.75; pointer-events: none; }
+.camp { position: absolute; transform: translate(-50%, -24px); display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; padding: 0; cursor: pointer; z-index: 2; transition: transform 0.15s ease; font-family: inherit; }
+.camp:hover { transform: translate(-50%, -28px); z-index: 4; }
+.camp-marker { position: relative; display: block; }
+.camp-tent { width: 40px; height: 30px; display: block; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.18)); }
+.camp-fire {
+  position: absolute; right: -7px; bottom: -2px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--st-hue); color: #fff; font-size: 9px; line-height: 14px; font-weight: 800; text-align: center;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 10px color-mix(in srgb, var(--st-hue) 70%, transparent);
+  animation: vf-flicker 1.8s ease-in-out infinite;
+}
+.camp--notstarted .camp-fire { animation: none; box-shadow: 0 0 0 2px var(--surface); opacity: 0.55; }
+.camp-fire--done { animation: none; }
+@keyframes vf-flicker { 50% { box-shadow: 0 0 0 2px var(--surface), 0 0 16px color-mix(in srgb, var(--st-hue) 95%, transparent); } }
+.camp-label { display: flex; flex-direction: column; align-items: center; gap: 3px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; box-shadow: var(--sh-2); min-width: 110px; max-width: 178px; }
+.camp:hover .camp-label { box-shadow: var(--sh-3); }
+.camp-name { font-size: 11.5px; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 156px; }
+.camp-bar { width: 86px; height: 3px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.camp-bar > span { display: block; height: 100%; border-radius: 2px; }
+.camp-sub { font-size: 9.5px; color: var(--dim); letter-spacing: 0.04em; }
+.camp--done .camp-name { color: #34c891; }
+.camp-add { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; padding: 0; cursor: pointer; z-index: 2; opacity: 0.7; transition: opacity 0.15s ease; font-family: inherit; }
+.camp-add:hover { opacity: 1; }
+.camp-add-ring { width: 34px; height: 34px; border-radius: 50%; border: 1.5px dashed var(--dim); color: var(--dim); display: flex; align-items: center; justify-content: center; font-size: 16px; background: color-mix(in srgb, var(--surface) 60%, transparent); }
+.camp-add:hover .camp-add-ring { border-color: var(--accent); color: var(--accent); }
+.camp-add-lab { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+@media (prefers-reduced-motion: reduce) { .vf-trail, .vf-you-dot, .camp-fire { animation: none; } }
+
+/* campsite editor overlay */
+.vfg-backdrop { position: fixed; inset: 0; z-index: 200; background: rgba(8, 10, 14, 0.45); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.vfg-modal { width: min(720px, 100%); max-height: min(86vh, 760px); overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--sh-3); padding: 20px 22px 16px; position: relative; }
+.vfg-modal .se-close { position: absolute; top: 14px; right: 14px; }
+.vfg-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; padding-right: 44px; }
+.vfg-eyebrow { font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+.vfg-title { border: 0; background: transparent; color: var(--fg); font-size: 20px; font-weight: 700; letter-spacing: -0.02em; padding: 2px 0; font-family: inherit; width: 100%; }
+.vfg-title:focus { outline: none; }
+.vfg-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; }
+.vfg-sec + .vfg-sec { margin-top: 14px; }
+.vfg-lab { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+.vfg-input { width: 100%; min-width: 0; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; font-family: inherit; }
+.vfg-input:focus { outline: none; border-color: var(--accent); }
+.vfg-wps { display: flex; flex-direction: column; gap: 2px; }
+.vfg-wp { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px; }
+.vfg-wp:hover { background: var(--surface-2); }
+.vfg-wp input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; flex-shrink: 0; margin: 0; }
+.vfg-wp-label { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--fg); font-size: 12.5px; font-family: inherit; padding: 2px 0; }
+.vfg-wp-label:focus { outline: none; }
+.vfg-wp.done .vfg-wp-label { color: var(--dim); text-decoration: line-through; }
+.vfg-wp-rm { border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 13px; opacity: 0; padding: 0 4px; font-family: inherit; }
+.vfg-wp:hover .vfg-wp-rm { opacity: 0.8; }
+.vfg-wp-rm:hover { color: #ef4444; opacity: 1; }
+.vfg-wp-add { display: flex; gap: 8px; margin-top: 8px; }
+.vfg-empty { font-size: 12px; color: var(--dim); padding: 4px 6px; }
+.vfg-notes { width: 100%; resize: vertical; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; font-family: inherit; }
+.vfg-notes:focus { outline: none; border-color: var(--accent); }
+.vfg-status { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.vfg-st { display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg-2); border-radius: 8px; padding: 7px 9px; font-size: 11.5px; cursor: pointer; font-family: inherit; }
+.vfg-st-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-hue); flex-shrink: 0; }
+.vfg-st.on { border-color: var(--st-hue); color: var(--fg); box-shadow: inset 0 0 0 1px var(--st-hue); }
+.vfg-auto { font-size: 11px; color: #34c891; margin-top: 7px; }
+.vfg-link { width: 100%; }
+.vfg-prog { margin-top: 9px; }
+.vfg-prog-bar { height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.vfg-prog-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.vfg-prog-foot { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--dim); margin-top: 4px; }
+.vfg-ws { display: flex; flex-direction: column; gap: 4px; }
+.vfg-ws-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--dim); }
+.vfg-ws-row.ok { color: var(--fg-2); }
+.vfg-ws-mark { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--dim); flex-shrink: 0; }
+.vfg-ws-row.ok .vfg-ws-mark { background: var(--accent); border-color: var(--accent); color: #fff; }
+.vfg-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); }
+.vfg-break { border: 0; background: transparent; color: #ef4444; font-size: 12px; cursor: pointer; font-family: inherit; padding: 6px 8px; border-radius: 7px; }
+.vfg-break:hover { background: color-mix(in srgb, #ef4444 10%, transparent); }
+
+/* cylindrical shift — map ⇄ goal screen */
+.vf-stage { position: relative; }
+.vf-cyl-hide > .vf-view { visibility: hidden; }
+.vf-cyl { position: absolute; left: 0; top: 0; right: 0; z-index: 50; pointer-events: none; perspective: 1500px; overflow: visible; }
+.vf-cyl-cam { position: absolute; inset: 0; transform-style: preserve-3d; }
+.vf-cyl-slat { position: absolute; top: 0; overflow: hidden; backface-visibility: hidden; will-change: transform, opacity, filter; contain: layout paint; }
+.vf-cyl-sheen {
+  position: absolute; inset: 0; z-index: 2;
+  background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, 0.15) 50%, transparent 68%);
+  mix-blend-mode: screen;
+}
+
+/* goal screen — SMART goal at the top, cascading subgoals beneath */
+.gs { display: flex; flex-direction: column; gap: 14px; }
+.gs-top { display: flex; align-items: center; gap: 12px; }
+.gs-crumb { flex: 1; font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+.gs-goal { padding: 18px 20px 14px; }
+.gs-goal-row { display: flex; gap: 24px; align-items: flex-start; }
+.gs-goal-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.gs-title { font-size: 24px; }
+.gs-goal-side { display: flex; flex-direction: column; gap: 10px; width: 250px; flex-shrink: 0; }
+.gs-due .vfg-lab { margin-bottom: 4px; }
+.gs-smart { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }
+.gs-smart-score { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-2); margin-right: 4px; }
+.gs-smart-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--dim); border: 1px solid var(--line); border-radius: 99px; padding: 3px 9px; }
+.gs-smart-chip b { font-size: 10px; opacity: 0.7; }
+.gs-smart-chip.ok { color: var(--fg); border-color: color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.gs-smart-chip.ok b { color: var(--accent); opacity: 1; }
+.gs-body { display: grid; grid-template-columns: 1fr 290px; gap: 22px; align-items: start; }
+.gs-cascade-wrap { min-width: 0; }
+.gs-cascade { position: relative; margin-top: 10px; }
+.gs-wires { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.gs-wires path { fill: none; stroke: var(--accent); stroke-width: 1.6px; stroke-dasharray: 1 7; stroke-linecap: round; opacity: 0.75; }
+.gs-node {
+  position: absolute; width: min(380px, 58%); display: flex; align-items: center; gap: 9px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 12px; box-shadow: var(--sh-2);
+}
+.gs-node:hover { box-shadow: var(--sh-3); }
+.gs-node-idx { width: 18px; height: 18px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--line); color: var(--dim); font-size: 9.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.gs-node.done .gs-node-idx { background: var(--accent); border-color: var(--accent); color: #fff; }
+.gs-node input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; flex-shrink: 0; margin: 0; }
+.gs-node-label { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--fg); font-size: 12.5px; font-weight: 500; font-family: inherit; padding: 2px 0; }
+.gs-node-label:focus { outline: none; }
+.gs-node.done .gs-node-label { color: var(--dim); text-decoration: line-through; }
+.gs-node-rm { border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 13px; opacity: 0; padding: 0 2px; font-family: inherit; flex-shrink: 0; }
+.gs-node:hover .gs-node-rm { opacity: 0.8; }
+.gs-node-rm:hover { color: #ef4444; opacity: 1; }
+.gs-node--add { border-style: dashed; background: color-mix(in srgb, var(--surface) 65%, transparent); box-shadow: none; }
+.gs-side { display: flex; flex-direction: column; gap: 14px; }
+@media (max-width: 900px) {
+  .gs-body { grid-template-columns: 1fr; }
+  .gs-goal-row { flex-direction: column; }
+  .gs-goal-side { width: 100%; }
+  .gs-node { width: min(380px, 72%); }
+}
+
+/* the cylindrical shift — map ⇄ goal screen (WAAPI overlay; see visual-flow.jsx) */
+.vf-stage { position: relative; }
+.vf-view { transform-origin: center center; }
+.vf-stage.vf-cyl-hide > .vf-view { visibility: hidden; }
+/* depth-zoom overlay (parent ⇄ child) */
+.vf-zoom { position: absolute; top: 0; left: 0; right: 0; z-index: 50; overflow: hidden; pointer-events: none; transform-origin: center center; }
+.vf-zoom > * { pointer-events: none; }
+/* single card flip (turn the canvas over) */
+.vf-flip3d { position: absolute; top: 0; left: 0; right: 0; z-index: 50; perspective: 2200px; overflow: hidden; pointer-events: none; }
+.vf-flip3d-cam { position: absolute; inset: 0; transform-style: preserve-3d; }
+.vf-flip3d-card { position: absolute; inset: 0; transform-style: preserve-3d; }
+.vf-flip3d-face { position: absolute; inset: 0; overflow: hidden; background: var(--bg); backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.vf-flip3d-back { transform: rotateY(180deg); }
+.vf-cyl {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 50;
+  perspective: 1400px; pointer-events: none; overflow: hidden;
+}
+.vf-cyl-cam { position: absolute; inset: 0; transform-style: preserve-3d; }
+.vf-cyl-slat { position: absolute; top: 0; overflow: hidden; will-change: transform, opacity, filter; }
+.vf-cyl-slat > * { pointer-events: none; }
+.vf-cyl-sheen {
+  position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 32%, rgba(255, 255, 255, 0.09) 50%, transparent 68%);
+}
+.vf-flip { margin-top: 10px; }
+

@@ -17,6 +17,9 @@ function prefetchVisualFlow() {
   return _visualFlowPromise;
 }
 const VisualFlowPanel = lazy(prefetchVisualFlow);
+const VisualFlowSurface = lazy(() =>
+  import("./components/VisualFlow/camps/VisualFlowSurface").then((m) => ({ default: m.VisualFlowSurface }))
+);
 import { BuylistPanel } from "./components/Hopper/BuylistPanel";
 import { StrategiePanel } from "./components/Strategie/StrategiePanel";
 import { InventoryPanel } from "./components/Inventory/InventoryPanel";
@@ -152,6 +155,8 @@ export default function FullApp() {
     strategieSetDebts,
     strategieSetDebtStrategy,
     strategieSetCardLayout,
+    vfGoals,
+    setVfGoals,
     showStrategieTab,
     showHopperTab,
     showInventoryTab,
@@ -660,39 +665,49 @@ export default function FullApp() {
           ) : dashboardView === "visual-flow" ? (
             <div className="max-w-[1640px] mx-auto">
               <Suspense fallback={<div className="py-20 text-center text-sm text-slate-500">Loading Visual Flow…</div>}>
-              <VisualFlowPanel
-                todos={pillarTodos}
-                grazelandItems={grazelandItems}
-                binItems={binItems}
-                showTodoDates={showTodoDates}
-                visualFlow={visualFlow}
-                onUpdateVisualFlow={updateVisualFlow}
-                focusDesynced={focusDesynced}
-                setPillarTodoPins={setPillarTodoPins}
-                onEditTodo={handleVisualFlowEditTodo}
-                onDeleteTodo={handleVisualFlowDeleteTodo}
-                onAddTodo={(todo) =>
-                  setPillarTodos((prev) => [...prev, todo])
-                }
-                onEditGrazelandItem={handleVisualFlowEditGrazeland}
-                onDeleteGrazelandItem={handleVisualFlowDeleteGrazeland}
-                onAddGrazelandItem={(todo) =>
-                  setGrazelandItems((prev) => [...prev, todo])
-                }
-                onEditBinItem={handleVisualFlowEditBin}
-                onDeleteBinItem={handleVisualFlowDeleteBin}
-                onAddBinItem={(todo) =>
-                  setBinItems((prev) => [...prev, todo])
-                }
-                onTaskCompleted={showTaskCelebration}
-                onTodoLog={(entry) => {
-                  const time = new Date().toTimeString().slice(0, 5);
-                  const formatted =
-                    entry.includes("\n") ? `- ${time} - ${entry.split("\n")[0]}\n${entry.split("\n").slice(1).join("\n")}` : `- ${time} - ${entry}`;
-                  appendTaskLog(formatted);
-                  if (obsidianLog.enabled) logToObsidian(formatted);
-                }}
-                fullPage
+              <VisualFlowSurface
+                goals={vfGoals}
+                onSetGoals={setVfGoals}
+                strategie={strategieState}
+                currency={strategieState.currency}
+                renderNodes={(onOpenCamps) => (
+                  <VisualFlowPanel
+                    todos={pillarTodos}
+                    grazelandItems={grazelandItems}
+                    binItems={binItems}
+                    showTodoDates={showTodoDates}
+                    visualFlow={visualFlow}
+                    onUpdateVisualFlow={updateVisualFlow}
+                    focusDesynced={focusDesynced}
+                    setPillarTodoPins={setPillarTodoPins}
+                    onEditTodo={handleVisualFlowEditTodo}
+                    onDeleteTodo={handleVisualFlowDeleteTodo}
+                    onAddTodo={(todo) =>
+                      setPillarTodos((prev) => [...prev, todo])
+                    }
+                    onEditGrazelandItem={handleVisualFlowEditGrazeland}
+                    onDeleteGrazelandItem={handleVisualFlowDeleteGrazeland}
+                    onAddGrazelandItem={(todo) =>
+                      setGrazelandItems((prev) => [...prev, todo])
+                    }
+                    onEditBinItem={handleVisualFlowEditBin}
+                    onDeleteBinItem={handleVisualFlowDeleteBin}
+                    onAddBinItem={(todo) =>
+                      setBinItems((prev) => [...prev, todo])
+                    }
+                    onTaskCompleted={showTaskCelebration}
+                    onTodoLog={(entry) => {
+                      const time = new Date().toTimeString().slice(0, 5);
+                      const formatted =
+                        entry.includes("\n") ? `- ${time} - ${entry.split("\n")[0]}\n${entry.split("\n").slice(1).join("\n")}` : `- ${time} - ${entry}`;
+                      appendTaskLog(formatted);
+                      if (obsidianLog.enabled) logToObsidian(formatted);
+                    }}
+                    onOpenCamps={onOpenCamps}
+                    vfGoals={vfGoals}
+                    fullPage
+                  />
+                )}
               />
               </Suspense>
               <BookmarkGrid bodyHidden />

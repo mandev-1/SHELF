@@ -36,6 +36,7 @@ import {
   type VisualFlowData,
   type VisualFlowEdge,
   type VisualFlowNodeSize,
+  type VfGoal,
   resolveVisualFlowSectorColor,
 } from "../../types/grid";
 import { NoteContent, linkifyText } from "../NoteContent";
@@ -1249,6 +1250,8 @@ function VisualFlowPanelInner({
   onAddBinItem,
   onTaskCompleted,
   onTodoLog,
+  onOpenCamps,
+  vfGoals,
   fullPage = false,
 }: {
   todos: ShelfPillarTodoItem[];
@@ -1274,6 +1277,10 @@ function VisualFlowPanelInner({
   onAddBinItem?: (todo: ShelfPillarTodoItem) => void;
   onTaskCompleted?: () => void;
   onTodoLog?: (entry: string) => void;
+  /** Flip up to the camps (goals) layer; renders a "⛺ Camps" toolbar button when set. */
+  onOpenCamps?: () => void;
+  /** Goals included in the "Copy for AI" markdown export when present. */
+  vfGoals?: VfGoal[];
   fullPage?: boolean;
 }) {
   const { screenToFlowPosition, getNodes, getViewport, setViewport, setCenter, fitView } = useReactFlow();
@@ -1504,6 +1511,7 @@ function VisualFlowPanelInner({
       items: canvasItems,
       edges: storedFlowEdges,
       sectorColors: visualFlow.sectorColors,
+      vfGoals,
     });
     try {
       await navigator.clipboard.writeText(md);
@@ -1524,7 +1532,7 @@ function VisualFlowPanelInner({
       setExportToast(null);
       exportToastTimerRef.current = null;
     }, 1900);
-  }, [canvasItems, isCustomPlane, plane, storedFlowEdges, visualFlow.customPlanes, visualFlow.sectorColors]);
+  }, [canvasItems, isCustomPlane, plane, storedFlowEdges, visualFlow.customPlanes, visualFlow.sectorColors, vfGoals]);
 
   const flushCanvasToVisualFlow = useCallback(
     (targetPlane: VisualFlowPlane, nodeList: Node[], edgeList: Edge[]) => {
@@ -2423,7 +2431,7 @@ function VisualFlowPanelInner({
           const p = live?.position ?? storedNodePositions?.[id] ?? { x: 0, y: 0 };
           return { item, pos: { x: p.x, y: p.y }, size: storedNodeSizes?.[id] };
         })
-        .filter((x): x is { item: ShelfPillarTodoItem; pos: { x: number; y: number }; size?: VisualFlowNodeSize } => Boolean(x));
+        .filter((x): x is { item: ShelfPillarTodoItem; pos: { x: number; y: number }; size: VisualFlowNodeSize | undefined } => Boolean(x));
       if (!picked.length) return;
 
       const movingIds = new Set(picked.map((p) => p.item.id));
@@ -2986,6 +2994,16 @@ function VisualFlowPanelInner({
               <span className="ml-1 text-[10.5px] text-[var(--accent-bright)]">· {exportToast}</span>
             )}
           </button>
+          {onOpenCamps && (
+            <button
+              type="button"
+              onClick={onOpenCamps}
+              title="Flip up to the campsite layer — your top goals down the road"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] bg-[var(--surface)] px-2.5 py-1.5 text-[11.5px] font-medium text-[var(--fg-2)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)] transition-colors"
+            >
+              ⛺ Camps
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2 min-w-0">
           <div className="vf-search">

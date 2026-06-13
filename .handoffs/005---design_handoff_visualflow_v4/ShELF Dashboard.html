@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ShELF — grounded</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="strategie-v2.css" />
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="data.js"></script>
+<script src="strategie-data.js"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="dragsort.jsx"></script>
+<script type="text/babel" src="cardgrid.jsx"></script>
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="strategie-icons.jsx"></script>
+<script type="text/babel" src="strategie-charts.jsx"></script>
+<script type="text/babel" src="strategie-ladder-detail.jsx"></script>
+<script type="text/babel" src="strategie-month-diff.jsx"></script>
+<script type="text/babel" src="strategie-import.jsx"></script>
+<script type="text/babel" src="strategie-accounts.jsx"></script>
+<script type="text/babel" src="strategie-debt.jsx"></script>
+<script type="text/babel" src="visual-flow.jsx"></script>
+<script type="text/babel" src="strategie.jsx"></script>
+
+<script type="text/babel">
+const { useState, useMemo, useRef, useEffect } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "accent": "#16b981",
+  "surface": "solid",
+  "density": "compact",
+  "radius": 14,
+  "greeting": "Hey Jimmy, smile",
+  "currency": "CZK"
+}/*EDITMODE-END*/;
+
+const THEME_ACCENT = { dark: "#16b981", day: "#d97706", sap: "#0070f2" };
+
+const ACCENTS = {
+  "#16b981": { bright: "#34d399", deep: "#0c8f66", ink: "#d4f3e7" },
+  "#5b9cff": { bright: "#8bb8ff", deep: "#3a6fd0", ink: "#d6e6ff" },
+  "#c98bff": { bright: "#dcb0ff", deep: "#9d5fd6", ink: "#eedcff" },
+  "#e0905a": { bright: "#f2ad7d", deep: "#bf6f3c", ink: "#f8e3d3" },
+  "#d97706": { bright: "#f59e0b", deep: "#b45309", ink: "#7c4a0c" },
+  "#0070f2": { bright: "#1b90ff", deep: "#0058c4", ink: "#084298" },
+};
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const D = window.SHELF_DATA;
+  const [tab, setTab] = useState("shelf");
+  const [query, setQuery] = useState("");
+  const [todos, setTodos] = useState(D.todos);
+  const [folders, setFolders] = useState(D.folders);
+  const folderSort = useSortable(folders, setFolders, (f) => f.id);
+  const [toast, setToast] = useState(null);
+  const searchRef = useRef(null);
+  const toastTimer = useRef(null);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 1900);
+  };
+
+  // apply tweaks to :root
+  useEffect(() => {
+    const r = document.documentElement;
+    r.classList.add("no-transition");
+    const a = ACCENTS[t.accent] || ACCENTS["#16b981"];
+    r.style.setProperty("--accent", t.accent);
+    r.style.setProperty("--accent-bright", a.bright);
+    r.style.setProperty("--accent-deep", a.deep);
+    r.style.setProperty("--accent-ink", a.ink);
+    r.style.setProperty("--r-card", t.radius + "px");
+    r.style.setProperty("--r-inner", Math.max(6, t.radius - 5) + "px");
+    r.dataset.surface = t.surface;
+    r.dataset.density = t.density;
+    if (t.theme && t.theme !== "dark") r.dataset.theme = t.theme;
+    else r.removeAttribute("data-theme");
+    const id = requestAnimationFrame(() => requestAnimationFrame(() => r.classList.remove("no-transition")));
+    return () => cancelAnimationFrame(id);
+  }, [t.accent, t.surface, t.density, t.radius, t.theme]);
+
+  const pickTheme = (theme) => setTweak({ theme: theme, accent: THEME_ACCENT[theme] });
+
+  // ⌘K focus
+  useEffect(() => {
+    const h = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); searchRef.current && searchRef.current.focus(); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+
+  // search index
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+    const out = [];
+    D.folders.forEach((f) => f.bookmarks.forEach((b) => {
+      if (b.sep) return;
+      if ((b.title + " " + (b.host || "")).toLowerCase().includes(q))
+        out.push({ ...b, folder: f.title });
+    }));
+    D.pins.forEach((p) => {
+      if ((p.title + " " + p.host).toLowerCase().includes(q)) out.push({ ...p, folder: "Top 6" });
+    });
+    return out;
+  }, [query]);
+
+  const greet = t.greeting || D.shelfName;
+
+  return (
+    <React.Fragment>
+      <div className="bg-diffuse" aria-hidden="true"></div>
+      <div className="office-paper" aria-hidden="true"></div>
+      <div className="shell">
+      <Pillar data={{ ...D, shelfName: greet }} todos={todos} setTodos={setTodos} onToast={showToast} />
+
+      <div className="main">
+        <div className="topbar">
+          <div className="topbar-inner">
+            <h1 className="greeting">{greet.replace(/smile/i, "")}<span className="smile">{/smile/i.test(greet) ? "smile" : ""}</span></h1>
+            <div className="search">
+              <I.search />
+              <input ref={searchRef} placeholder="Search bookmarks…" value={query} onChange={(e) => setQuery(e.target.value)} />
+              <kbd>⌘K</kbd>
+            </div>
+            <nav className="nav">
+              {[["shelf", "Shelf"], ["flow", "Visual Flow"], ["strategie", "Strategie"], ["hopper", "Hopper"]].map(([id, label]) => (
+                <button key={id} className={"nav-btn" + (tab === id ? " nav-btn--on" : "")} onClick={() => { setTab(id); setQuery(""); }}>{label}</button>
+              ))}
+            </nav>
+          </div>
+        </div>
+
+        <div className="canvas">
+          <div className="canvas-inner">
+            {query ? (
+              <div className="results">
+                <div className="result-head">{results.length} result{results.length === 1 ? "" : "s"} for “{query}”</div>
+                {results.map((r, i) => (
+                  <a className="result" key={i} href={r.url} target="_blank" rel="noreferrer">
+                    <Favicon host={r.host} cls="result-fav" />
+                    <span className="result-meta">
+                      <span className="result-title">{r.title}</span>
+                      <span className="result-url">{(r.url || "").replace(/^https?:\/\//, "")}</span>
+                    </span>
+                    <span className="result-folder">{r.folder}</span>
+                  </a>
+                ))}
+                {results.length === 0 && <div className="empty-state"><div className="big">Nothing on the shelf matches that.</div>Try another word.</div>}
+              </div>
+            ) : tab === "shelf" ? (
+              <React.Fragment>
+                <PromptCard data={D} onToast={showToast} />
+                <div className="grid-bar">
+                  <span className="grid-hint">{folders.length} folders · drag to rearrange</span>
+                  <div className="grid-actions">
+                    <button className="ghost-btn"><I.plus /> New folder</button>
+                  </div>
+                </div>
+                <div className="grid" ref={folderSort.ref}>
+                  {folders.map((f) => <FolderCard key={f.id} folder={f} dragProps={folderSort.bind(f.id)} dragging={folderSort.dragKey === f.id} />)}
+                  <GoalCard goal={D.goal} />
+                </div>
+              </React.Fragment>
+            ) : tab === "hopper" ? (
+              <Hopper data={D} onToast={showToast} />
+            ) : tab === "strategie" ? (
+              <StrategiePanel currency={t.currency} onCurrency={(c) => setTweak("currency", c)} onToast={showToast} />
+            ) : (
+              <VisualFlow currency={t.currency} onToast={showToast} />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {toast ? <div className="toast"><I.check /> {toast}</div> : null}
+
+      <TweaksPanel>
+        <TweakSection label="Theme" />
+        <TweakRadio label="Theme" value={t.theme} options={["dark", "day", "sap"]} onChange={pickTheme} />
+        <TweakSection label="Identity" />
+        <TweakText label="Greeting" value={t.greeting} onChange={(v) => setTweak("greeting", v)} />
+        <TweakSection label="Accent" />
+        <TweakColor label="Accent" value={t.accent}
+          options={["#16b981", "#5b9cff", "#c98bff", "#e0905a", "#d97706", "#0070f2"]}
+          onChange={(v) => setTweak("accent", v)} />
+        <TweakSection label="Money" />
+        <TweakRadio label="Currency" value={t.currency} options={["USD", "EUR", "CZK"]} onChange={(v) => setTweak("currency", v)} />
+        <TweakSection label="Surfaces" />
+        <TweakRadio label="Cards" value={t.surface} options={["solid", "glass"]} onChange={(v) => setTweak("surface", v)} />
+        <TweakRadio label="Density" value={t.density} options={["compact", "regular", "comfy"]} onChange={(v) => setTweak("density", v)} />
+        <TweakSlider label="Corner radius" value={t.radius} min={6} max={22} step={1} unit="px" onChange={(v) => setTweak("radius", v)} />
+      </TweaksPanel>
+      </div>
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

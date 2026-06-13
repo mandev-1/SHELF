@@ -31,7 +31,9 @@ import {
   type SaleStatus,
   type InventoryItem,
   type InvCategory,
+  type VfGoal,
   normalizeStrategie,
+  normalizeVfGoals,
   SAVINGS_PLAN_HUES,
 } from "../types/grid";
 void (undefined as unknown as SaleStatus);
@@ -81,6 +83,7 @@ const HOPPER_FACE_KEY = "shelf-hopper-face";
 const SALE_ITEMS_KEY = "shelf-sale-items";
 const INVENTORY_KEY = "shelf-inventory";
 const STRATEGIE_KEY = "shelf-strategie";
+const VF_GOALS_KEY = "shelf-vf-goals";
 
 function normalizeBuylist(raw: unknown): BuylistItem[] {
   if (!Array.isArray(raw)) return [];
@@ -362,6 +365,7 @@ export function useShelfStorage() {
   const [saleItems, setSaleItemsState] = useState<SaleItem[]>([]);
   const [inventoryItems, setInventoryItemsState] = useState<InventoryItem[]>([]);
   const [strategieState, setStrategieState] = useState<StrategieState>(() => normalizeStrategie(null));
+  const [vfGoals, setVfGoalsState] = useState<VfGoal[]>(() => normalizeVfGoals(undefined));
   const [ready, setReady] = useState(false);
 
   const load = useCallback(() => {
@@ -410,6 +414,7 @@ export function useShelfStorage() {
         SALE_ITEMS_KEY,
         INVENTORY_KEY,
         STRATEGIE_KEY,
+        VF_GOALS_KEY,
       ],
       (result: { [key: string]: unknown }) => {
       setLayout(Array.isArray(result[LAYOUT_KEY]) ? (result[LAYOUT_KEY] as ShelfLayoutItem[]) : []);
@@ -540,6 +545,7 @@ export function useShelfStorage() {
       setSaleItemsState(normalizeSaleItems(result[SALE_ITEMS_KEY]));
       setInventoryItemsState(normalizeInventory(result[INVENTORY_KEY]));
       setStrategieState(normalizeStrategie(result[STRATEGIE_KEY]));
+      setVfGoalsState(normalizeVfGoals(result[VF_GOALS_KEY]));
       const vf = result[VISUAL_FLOW_KEY];
       if (vf && typeof vf === "object" && !Array.isArray(vf)) {
         const raw = vf as Record<string, unknown>;
@@ -1155,6 +1161,14 @@ export function useShelfStorage() {
     });
   }, []);
 
+  const setVfGoals = useCallback((next: VfGoal[] | ((prev: VfGoal[]) => VfGoal[])) => {
+    setVfGoalsState((prev) => {
+      const value = typeof next === "function" ? (next as (p: VfGoal[]) => VfGoal[])(prev) : next;
+      getStorage()?.set({ [VF_GOALS_KEY]: value });
+      return value;
+    });
+  }, []);
+
   const saveGoals = useCallback((next: ShelfGoalMap) => {
     setGoals(next);
     getStorage()?.set({ [GOALS_KEY]: next });
@@ -1404,8 +1418,9 @@ export function useShelfStorage() {
       hopperFace,
       strategie: strategieState,
       saleItems,
+      vfGoals,
     };
-  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState]);
+  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState, vfGoals]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -1457,6 +1472,7 @@ export function useShelfStorage() {
     if (backup.hopperFace === "buy" || backup.hopperFace === "sell") setHopperFace(backup.hopperFace);
     if (backup.strategie) setStrategie(normalizeStrategie(backup.strategie));
     if (Array.isArray(backup.saleItems)) setSaleItems(normalizeSaleItems(backup.saleItems));
+    if (Array.isArray(backup.vfGoals)) setVfGoalsState(normalizeVfGoals(backup.vfGoals));
 
     getStorage()?.set({
       [LAYOUT_KEY]: backup.layout ?? layout,
@@ -1494,8 +1510,9 @@ export function useShelfStorage() {
       [HOPPER_FACE_KEY]: backup.hopperFace === "buy" || backup.hopperFace === "sell" ? backup.hopperFace : hopperFace,
       [STRATEGIE_KEY]: backup.strategie ? normalizeStrategie(backup.strategie) : strategieState,
       [SALE_ITEMS_KEY]: Array.isArray(backup.saleItems) ? normalizeSaleItems(backup.saleItems) : saleItems,
+      [VF_GOALS_KEY]: Array.isArray(backup.vfGoals) ? normalizeVfGoals(backup.vfGoals) : vfGoals,
     });
-  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setHopperFace, setGrazelandItems, setSaleItems, strategieState, setStrategie]);
+  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setHopperFace, setGrazelandItems, setSaleItems, strategieState, setStrategie, vfGoals]);
 
   return {
     layout,
@@ -1604,6 +1621,8 @@ export function useShelfStorage() {
     strategieSetDebts,
     strategieSetDebtStrategy,
     strategieSetCardLayout,
+    vfGoals,
+    setVfGoals,
     llmConsoleUrl,
     setLlmConsoleUrl,
     showBothNavButtons,
