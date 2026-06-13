@@ -346,16 +346,8 @@ export const ACCOUNT_KINDS: { id: AccountKind; label: string; hue: string }[] = 
 /** Current schema version of the seeded accounts directory. Bumping reseeds the
  *  starter slice on next load (user statements/pots/etc. are preserved). */
 export const ACCT_SCHEMA_V = 3;
-/** Starter accounts slice (USD-base balances). */
-export const DEFAULT_ACCOUNTS_DIRECTORY: AccountDictEntry[] = [
-  { name: "Air Bank — běžný účet",        kind: "checking",  tag: "Everyday",       balance: 2050, url: "https://www.airbank.cz" },
-  { name: "Air Bank — spořicí účet",      kind: "savings",   tag: "Instant access", balance: 3940, url: "https://www.airbank.cz" },
-  { name: "Money-market fund — Fio",      kind: "savings",   tag: "T+1 access",     balance: 5100 },
-  { name: "DIP — investiční účet",        kind: "brokerage", tag: "Tax-deductible", balance: 3200 },
-  { name: "Penzijní připojištění",        kind: "pension",   tag: "State bonus",    balance: 5890 },
-  { name: "Brokerage — VWCE (all-world)", kind: "brokerage", tag: "Auto-buy 1st",   balance: 9000 },
-  { name: "Coinbase — BTC/ETH",           kind: "crypto",    tag: "Long-term",      balance: 1780 },
-];
+/** No seed — the accounts directory starts empty; the user adds their own. */
+export const DEFAULT_ACCOUNTS_DIRECTORY: AccountDictEntry[] = [];
 export interface SavingsPlan {
   id: string;
   name: string;
@@ -390,12 +382,8 @@ export interface Debt {
 }
 /** Bumping reseeds the starter debts slice on next load (statements/pots preserved). */
 export const DEBT_SCHEMA_V = 1;
-export const DEFAULT_DEBTS: Debt[] = [
-  { id: "dbt-car", name: "Car loan — Škoda",        kind: "consumer", principal: 9800, rate: 6.9,  payment: 260 },
-  { id: "dbt-uni", name: "Student loan",            kind: "student",  principal: 5200, rate: 3.2,  payment: 90  },
-  { id: "dbt-cc",  name: "Credit card — revolving", kind: "card",     principal: 1450, rate: 21.9, payment: 120 },
-  { id: "dbt-fam", name: "Owed to parents",         kind: "family",   principal: 1500, rate: 0,    payment: 100 },
-];
+/** No seed — debts start empty; the user adds their own on the Open debt card. */
+export const DEFAULT_DEBTS: Debt[] = [];
 
 // ─── Visual Flow goals layer ("camps") ───────────────────────────────────────
 export type VfGoalStatus = "notstarted" | "ontrack" | "atrisk" | "done";
@@ -416,41 +404,8 @@ export interface VfGoal {
 }
 /** Max campsites pitched along the trail. */
 export const VF_MAX_GOALS = 6;
-/** Seed goals shown on first load (links reference the Strategie seed pot/debt ids). */
-export const DEFAULT_VF_GOALS: VfGoal[] = [
-  {
-    id: "g-pm", title: "Become a product manager",
-    outcome: "Hired as PM for a B2B product by next summer",
-    status: "ontrack", link: null, due: "2027-06",
-    milestones: [
-      { id: "m1", label: "Ship a side project end-to-end", done: true },
-      { id: "m2", label: "Lead one cross-team feature at work", done: true },
-      { id: "m3", label: "Do 5 PM-style case interviews", done: false },
-      { id: "m4", label: "Apply to 10 PM roles", done: false },
-    ],
-    notes: "Strength: technical background. Gap: stakeholder storytelling — practice weekly.",
-  },
-  {
-    id: "g-japan", title: "Japan trip — spring",
-    outcome: "Three weeks in Japan, fully paid from the pot",
-    status: "ontrack", link: { type: "pot", id: "pot-japan" }, due: "2027-04",
-    milestones: [
-      { id: "m1", label: "Set the budget", done: true },
-      { id: "m2", label: "Book flights 6 months out", done: false },
-    ],
-    notes: "",
-  },
-  {
-    id: "g-cc", title: "Kill the credit card",
-    outcome: "Revolving balance at zero, card kept for emergencies only",
-    status: "atrisk", link: { type: "debt", id: "dbt-cc" }, due: "2026-12",
-    milestones: [
-      { id: "m1", label: "Stop new spending on the card", done: true },
-      { id: "m2", label: "Overpay every month", done: true },
-    ],
-    notes: "21.9% APR — first target per avalanche.",
-  },
-];
+/** No seed — the camps map starts blank (six empty "pitch a camp" slots). */
+export const DEFAULT_VF_GOALS: VfGoal[] = [];
 export function normalizeVfGoals(raw: unknown): VfGoal[] {
   if (!Array.isArray(raw)) return DEFAULT_VF_GOALS.map((g) => ({ ...g, milestones: g.milestones.map((m) => ({ ...m })) }));
   const STATUSES: VfGoalStatus[] = ["notstarted", "ontrack", "atrisk", "done"];
@@ -584,19 +539,9 @@ function _defaultStrategie(): StrategieState {
       order: ["2026-04"],
       byMonth: { "2026-04": { income: [], expenses: [] } },
     },
-    positions: { invested: 14000, emergencySaved: 9000, emergencyTarget: 18000 },
-    pots: [
-      { id: "pot-apt",   name: "Apartment deposit", target: 12000, saved: 4500, monthly: 400, fromHopper: false },
-      { id: "pot-japan", name: "Japan spring 2027",  target: 6000,  saved: 1750, monthly: 150, fromHopper: false },
-    ],
-    memberships: [
-      { id: "m_net", name: "Netflix",         plan: "Standard",   price: 13, color: "#E50914", mono: "N"  },
-      { id: "m_spo", name: "Spotify",         plan: "Premium",    price: 6,  color: "#1DB954", mono: "S"  },
-      { id: "m_yt",  name: "YouTube Premium", plan: "Individual", price: 12, color: "#FF0033", mono: "YT" },
-      { id: "m_gpt", name: "ChatGPT",         plan: "Plus",       price: 20, color: "#10A37F", mono: "AI" },
-      { id: "m_icl", name: "iCloud+",         plan: "200 GB",     price: 3,  color: "#3B82F6", mono: "iC" },
-      { id: "m_not", name: "Notion",          plan: "Plus",       price: 8,  color: "#8E8E93", mono: "No" },
-    ],
+    positions: { invested: 0, emergencySaved: 0, emergencyTarget: 0 },
+    pots: [],
+    memberships: [],
     currency: "CZK",
     secondaryCurrency: null,
     compareCurrencyOn: false,
@@ -671,12 +616,12 @@ export function normalizeStrategie(raw: unknown): StrategieState {
   if (rp && typeof rp === "object" && !Array.isArray(rp)) {
     const p = rp as Record<string, unknown>;
     positions = {
-      invested:        typeof p["invested"]        === "number" ? p["invested"]        : 14000,
-      emergencySaved:  typeof p["emergencySaved"]  === "number" ? p["emergencySaved"]  : 9000,
-      emergencyTarget: typeof p["emergencyTarget"] === "number" ? p["emergencyTarget"] : 18000,
+      invested:        typeof p["invested"]        === "number" ? p["invested"]        : 0,
+      emergencySaved:  typeof p["emergencySaved"]  === "number" ? p["emergencySaved"]  : 0,
+      emergencyTarget: typeof p["emergencyTarget"] === "number" ? p["emergencyTarget"] : 0,
     };
   } else {
-    positions = { invested: 14000, emergencySaved: 9000, emergencyTarget: 18000 };
+    positions = { invested: 0, emergencySaved: 0, emergencyTarget: 0 };
   }
 
   // pots

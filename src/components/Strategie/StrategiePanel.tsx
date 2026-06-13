@@ -189,7 +189,9 @@ export function StrategiePanel({
 
   const byCat = expensesByCat(stmt);
   const totalExp = exp || 1;
-  const emergencyPct = Math.min(100, Math.round((positions.emergencySaved / positions.emergencyTarget) * 100));
+  const emergencyPct = positions.emergencyTarget > 0
+    ? Math.min(100, Math.round((positions.emergencySaved / positions.emergencyTarget) * 100))
+    : 0;
 
   const netWorth = positions.invested + positions.emergencySaved + extraAssets - openDebtTotal;
 

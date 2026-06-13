@@ -5717,3 +5717,15 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 }
 .vf-flip { margin-top: 10px; }
 
+/* showy "open a camp" flip — deeper perspective for the toward-you lift + a
+   light sheen glinting across the face (see vfRunCardFlipShow). */
+.vf-flip3d--show { perspective: 1700px; }
+.vf-flip3d-sheen {
+  position: absolute; inset: 0; z-index: 3; pointer-events: none; will-change: transform, opacity;
+  background: linear-gradient(105deg,
+    transparent 42%,
+    color-mix(in srgb, var(--accent) 26%, rgba(255, 255, 255, 0.22)) 50%,
+    transparent 58%);
+  mix-blend-mode: screen;
+}
+

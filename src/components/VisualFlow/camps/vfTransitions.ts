@@ -3,7 +3,7 @@
    the overlay is removed when the animation resolves. dir = +1 (deeper/forward)
    or −1 (back). Ported 1:1 from the v4 handoff (cylinder runner omitted). */
 
-export type VfTransitionMode = "cardflip" | "depthzoom";
+export type VfTransitionMode = "cardflip" | "depthzoom" | "flipshow";
 
 /** Deep-clone a view, copying live input/checkbox/textarea/select values onto
  *  the clone so the frozen snapshot matches what was on screen. */
@@ -138,7 +138,88 @@ export function vfRunCardFlip(wrap: HTMLElement, outSnap: HTMLElement, outH: num
   });
 }
 
+/* ── showy card flip — the "open a camp" turn (6 camps → camp detail). Same
+   3D family as the plain flip, but slower, softer and more lavish: the card
+   lifts toward you mid-turn (`translateZ` bloom) with a gentle `rotateX` tilt,
+   the camera blooms ~1.05, and an accent-tinted light sheen glints across the
+   face as it rolls. One continuous ease-in-out turn — NO overshoot/spring, so
+   it reads perfectly smooth. The way back keeps the plain `vfRunCardFlip`. */
+export function vfRunCardFlipShow(wrap: HTMLElement, outSnap: HTMLElement, outH: number, dir: number): void {
+  const view = wrap.querySelector<HTMLElement>(".vf-view");
+  if (!view) return;
+  const W = wrap.clientWidth;
+  if (!W) return;
+  const H = Math.max(outH, view.offsetHeight);
+  const inSnap = vfCloneWithValues(view);
+  wrap.classList.add("vf-cyl-hide");
+
+  const overlay = document.createElement("div");
+  overlay.className = "vf-flip3d vf-flip3d--show";
+  overlay.style.height = `${H}px`;
+  const cam = document.createElement("div");
+  cam.className = "vf-flip3d-cam";
+  const card = document.createElement("div");
+  card.className = "vf-flip3d-card";
+  cam.appendChild(card);
+
+  const faceEl = (snap: HTMLElement, back: boolean) => {
+    const f = document.createElement("div");
+    f.className = "vf-flip3d-face" + (back ? " vf-flip3d-back" : "");
+    const inner = snap.cloneNode(true) as HTMLElement;
+    inner.style.cssText += `;position:absolute;left:0;top:0;width:${W}px;margin:0;`;
+    f.appendChild(inner);
+    card.appendChild(f);
+  };
+  faceEl(outSnap, false);
+  faceEl(inSnap, true);
+  overlay.appendChild(cam);
+
+  const sheen = document.createElement("div");
+  sheen.className = "vf-flip3d-sheen";
+  overlay.appendChild(sheen);
+  wrap.appendChild(overlay);
+
+  const end = dir >= 0 ? -180 : 180;
+  const dur = 1080;
+  // One continuous ease-in-out turn — no overshoot, no spring. The midpoint
+  // keyframe sits at the geometric half-turn with matched velocities either side
+  // (accelerate in → decelerate out), so the rotation reads perfectly smooth;
+  // translateZ/rotateX just bloom and settle along the same curve.
+  const anims = [
+    card.animate(
+      [
+        { transform: "rotateY(0deg) rotateX(0deg) translateZ(0px)", offset: 0, easing: "cubic-bezier(0.42, 0, 1, 1)" },
+        { transform: `rotateY(${end * 0.5}deg) rotateX(2.6deg) translateZ(150px)`, offset: 0.5, easing: "cubic-bezier(0, 0, 0.58, 1)" },
+        { transform: `rotateY(${end}deg) rotateX(0deg) translateZ(0px)`, offset: 1 },
+      ],
+      { duration: dur, fill: "both" }
+    ),
+    cam.animate(
+      [
+        { transform: "scale(1) rotateX(0deg)" },
+        { transform: "scale(1.05) rotateX(-1.6deg)", offset: 0.5 },
+        { transform: "scale(1) rotateX(0deg)" },
+      ],
+      { duration: dur, easing: "ease-in-out", fill: "both" }
+    ),
+    sheen.animate(
+      [
+        { transform: "translateX(-130%) skewX(-14deg)", opacity: 0 },
+        { transform: "translateX(0%) skewX(-14deg)", opacity: 0.85, offset: 0.5 },
+        { transform: "translateX(130%) skewX(-14deg)", opacity: 0 },
+      ],
+      { duration: dur, easing: "cubic-bezier(0.45, 0.05, 0.3, 1)", fill: "both" }
+    ),
+  ];
+
+  Promise.all(anims.map((a) => a.finished)).catch(() => {}).finally(() => {
+    overlay.remove();
+    wrap.classList.remove("vf-cyl-hide");
+  });
+}
+
 export function vfRunTransition(wrap: HTMLElement, outSnap: HTMLElement, outH: number, dir: number, mode: VfTransitionMode): void {
   if (mode === "cardflip") return vfRunCardFlip(wrap, outSnap, outH, dir);
+  if (mode === "flipshow") return vfRunCardFlipShow(wrap, outSnap, outH, dir);
   return vfRunDepthZoom(wrap, outSnap, outH, dir);
 }

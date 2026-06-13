@@ -52,7 +52,9 @@ export function VisualFlowSurface({ goals, onSetGoals, strategie, currency, onTo
   const patchGoal = (id: string, p: Partial<VfGoal>) =>
     onSetGoals((prev) => prev.map((g) => (g.id === id ? { ...g, ...p } : g)));
 
-  const openGoal = (id: string) => goTrans(() => setEditId(id), 1, "cardflip");
+  // Asymmetric on purpose: opening/pitching a camp uses the showy flip
+  // (slower, lifts toward you, light sheen); the way back keeps the plain flip.
+  const openGoal = (id: string) => goTrans(() => setEditId(id), 1, "flipshow");
   const backToMap = () => goTrans(() => setEditId(null), -1, "cardflip");
   const toNodes = () => goTrans(() => setLayer("nodes"), 1, "depthzoom");
   const toCamps = () => goTrans(() => setLayer("camps"), -1, "depthzoom");
@@ -63,7 +65,7 @@ export function VisualFlowSurface({ goals, onSetGoals, strategie, currency, onTo
       id: `g${crypto.randomUUID()}`, title: "", outcome: "", status: "notstarted",
       link: null, milestones: [], notes: "",
     };
-    goTrans(() => { onSetGoals((prev) => [...prev, g]); setEditId(g.id); }, 1, "cardflip");
+    goTrans(() => { onSetGoals((prev) => [...prev, g]); setEditId(g.id); }, 1, "flipshow");
   };
 
   const deleteGoal = (id: string) => {
