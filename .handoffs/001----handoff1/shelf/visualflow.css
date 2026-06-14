@@ -19,6 +19,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+  padding: 1rem;
   flex-shrink: 0;
 }
 .vf-head-l { display: flex; align-items: center; gap: 16px; }

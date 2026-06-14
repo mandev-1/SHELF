@@ -50,48 +50,57 @@ export function vfReadFinance(strategie: StrategieState): VfFinance {
   return { pots: strategie.pots ?? [], debts };
 }
 
-export interface VfProgress { pct: number; auto: boolean; line: string; name: string | null; }
+export interface VfProgress { pct: number; line: string; complete: boolean; }
 
-/** Resolve a goal's progress + supply line against the live money data. */
-export function vfProgress(g: VfGoal, fin: VfFinance, currency: string): VfProgress {
-  if (g.link?.type === "pot") {
-    const p = fin.pots.find((x) => x.id === g.link!.id);
-    if (p) {
-      const pct = p.target > 0 ? Math.min(100, Math.round((p.saved / p.target) * 100)) : 0;
-      return {
-        pct, auto: pct >= 100,
-        line: `${fmtMoney(p.saved, currency, { abbr: true })} of ${fmtMoney(p.target, currency, { abbr: true })} saved`,
-        name: p.name,
-      };
-    }
-  }
-  if (g.link?.type === "debt") {
-    const d = fin.debts.find((x) => x.id === g.link!.id);
-    if (d) {
-      const pct = d.principal > 0 ? Math.min(100, Math.round((d.paid / d.principal) * 100)) : 0;
-      return {
-        pct, auto: d.remaining <= 0,
-        line: d.remaining <= 0 ? "paid off" : `${fmtMoney(d.remaining, currency, { abbr: true })} still owed`,
-        name: d.name,
-      };
-    }
+/** A goal's PROGRESS = doneness — completed subgoals or a self-set %. Money is
+ *  never part of this (see vfSupplies). */
+export function vfProgress(g: VfGoal): VfProgress {
+  if (g.progressMode === "manual") {
+    const pct = Math.max(0, Math.min(100, Math.round(g.manualPct ?? 0)));
+    return { pct, line: "set by hand", complete: pct >= 100 };
   }
   const ms = g.milestones ?? [];
   const done = ms.filter((m) => m.done).length;
-  return { pct: ms.length ? Math.round((done / ms.length) * 100) : 0, auto: false, line: `${done} of ${ms.length} subgoals`, name: null };
+  const pct = ms.length ? Math.round((done / ms.length) * 100) : 0;
+  return { pct, line: `${done} of ${ms.length} subgoal${ms.length === 1 ? "" : "s"}`, complete: ms.length > 0 && done === ms.length };
+}
+
+export interface VfSupplies { kind: "pot" | "debt"; name: string; pct: number; ready: boolean; line: string; }
+
+/** The OPTIONAL money tie — a separate readiness / paid-off indicator, never the
+ *  goal's progress. Returns null when unlinked or the pot/debt no longer exists. */
+export function vfSupplies(g: VfGoal, fin: VfFinance, currency: string): VfSupplies | null {
+  if (!g.supplies) return null;
+  if (g.supplies.type === "pot") {
+    const p = fin.pots.find((x) => x.id === g.supplies!.id);
+    if (!p) return null;
+    const pct = p.target > 0 ? Math.min(100, Math.round((p.saved / p.target) * 100)) : 0;
+    return {
+      kind: "pot", name: p.name, pct, ready: p.target > 0 && p.saved >= p.target,
+      line: `${fmtMoney(p.saved, currency, { abbr: true })} of ${fmtMoney(p.target, currency, { abbr: true })} saved`,
+    };
+  }
+  const d = fin.debts.find((x) => x.id === g.supplies!.id);
+  if (!d) return null;
+  const pct = d.principal > 0 ? Math.min(100, Math.round((d.paid / d.principal) * 100)) : 0;
+  return {
+    kind: "debt", name: d.name, pct, ready: d.remaining <= 0,
+    line: d.remaining <= 0 ? "paid off" : `${fmtMoney(d.remaining, currency, { abbr: true })} still owed`,
+  };
 }
 
 export interface VfSmartCheck { k: string; label: string; ok: boolean; }
 
-/** SMART meter — is this goal set well? (0–5). */
+/** SMART meter — is this goal set well? (0–5). "Measurable" needs a real success
+ *  criterion (≥2 subgoals, or a manual %), NOT merely a money link. */
 export function vfSmart(g: VfGoal, reached: boolean): { checks: VfSmartCheck[]; score: number } {
   const ms = g.milestones ?? [];
   const checks: VfSmartCheck[] = [
-    { k: "S", label: "Specific — Point B named",                 ok: !!(g.outcome || "").trim() },
-    { k: "M", label: "Measurable — wired to money or ≥2 subgoals", ok: !!g.link || ms.length >= 2 },
-    { k: "A", label: "Achievable — clear next subgoal",          ok: reached || ms.some((m) => !m.done) },
-    { k: "R", label: "Relevant — journal says why",              ok: !!(g.notes || "").trim() },
-    { k: "T", label: "Time-bound — target date set",             ok: !!g.due },
+    { k: "S", label: "Specific — Point B named",                ok: !!(g.outcome || "").trim() },
+    { k: "M", label: "Measurable — ≥2 subgoals or a tracked %", ok: (g.progressMode === "subgoals" && ms.length >= 2) || g.progressMode === "manual" },
+    { k: "A", label: "Achievable — a clear next step",          ok: reached || ms.some((m) => !m.done) || g.progressMode === "manual" },
+    { k: "R", label: "Relevant — journal says why",             ok: !!(g.notes || "").trim() },
+    { k: "T", label: "Time-bound — target date set",            ok: !!g.due },
   ];
   return { checks, score: checks.filter((c) => c.ok).length };
 }

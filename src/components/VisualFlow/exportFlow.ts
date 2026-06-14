@@ -48,13 +48,17 @@ function renderGoals(goals: VfGoal[]): string {
   if (!goals.length) return "";
   const blocks = goals.map((g) => {
     const done = g.milestones.filter((m) => m.done).length;
+    const progress = g.progressMode === "manual"
+      ? `${Math.max(0, Math.min(100, Math.round(g.manualPct ?? 0)))}% (set by hand)`
+      : `${done}/${g.milestones.length} subgoals`;
     const lines = [
       `### ${g.title || "(untitled goal)"} — ${VF_STATUS_LABEL[g.status]}`,
       g.outcome ? `- **Point B:** ${g.outcome}` : null,
       g.due ? `- **By when:** ${g.due}` : null,
-      g.link ? `- **Wired to:** ${g.link.type} \`${g.link.id}\`` : null,
-      g.milestones.length ? `- **Subgoals (${done}/${g.milestones.length}):**` : null,
-      ...g.milestones.map((m) => `  - [${m.done ? "x" : " "}] ${m.label || "(untitled)"}`),
+      `- **Progress:** ${progress}`,
+      g.supplies ? `- **Supplies (readiness, not progress):** ${g.supplies.type} \`${g.supplies.id}\`` : null,
+      g.progressMode === "subgoals" && g.milestones.length ? `- **Subgoals:**` : null,
+      ...(g.progressMode === "subgoals" ? g.milestones.map((m) => `  - [${m.done ? "x" : " "}] ${m.label || "(untitled)"}`) : []),
       g.notes.trim() ? `- **Journal:** ${g.notes.trim()}` : null,
     ].filter(Boolean);
     return lines.join("\n");

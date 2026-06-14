@@ -23,12 +23,18 @@ export function DebtCard({
 }: DebtCardProps) {
   const cur = CURRENCIES[currency] ?? CURRENCIES.USD;
   const [editId, setEditId] = useState<string | null>(null);
+  // raw display-currency buffers for the inline editor: while a field is being
+  // typed the model is NOT touched (so a mid-edit empty/small value can't yank
+  // the debt to "cleared"); the parsed value commits on blur / Enter.
+  const [balBuf, setBalBuf] = useState("");
+  const [payBuf, setPayBuf] = useState("");
   const [nName, setNName] = useState("");
   const [nKind, setNKind] = useState<DebtKind>("consumer");
   const [nBal, setNBal] = useState("");
 
   const shown = (base: number) => Math.round((base || 0) * cur.rate);
-  const toBase = (v: number) => Math.round(v / cur.rate);
+  // float (no round-trip rounding) so small CZK/HUF amounts don't collapse to 0
+  const toBase = (v: number) => v / cur.rate;
   const fmt = (b: number) => fmtMoney(b, currency, { abbr: true });
 
   const rows = debts.map((d) => {
@@ -125,7 +131,12 @@ export function DebtCard({
                     className={`debt-edit-btn${editing ? " on" : ""}`}
                     title="Edit balance, APR, payment"
                     aria-label={`Edit ${d.name}`}
-                    onClick={() => setEditId(editing ? null : d.id)}
+                    onClick={() => {
+                      if (editing) { setEditId(null); return; }
+                      setBalBuf(shown(r.remaining) ? String(shown(r.remaining)) : "");
+                      setPayBuf(d.payment ? String(shown(d.payment)) : "");
+                      setEditId(d.id);
+                    }}
                   >
                     <IcoPencil />
                   </button>
@@ -147,11 +158,15 @@ export function DebtCard({
                     <label>Balance
                       <input
                         type="text" inputMode="numeric"
-                        value={shown(r.remaining).toLocaleString(cur.locale)}
-                        onChange={(e) => {
-                          const n = parseInt(e.target.value.replace(/[^\d]/g, ""), 10);
+                        value={balBuf}
+                        onChange={(e) => setBalBuf(e.target.value.replace(/[^\d]/g, ""))}
+                        onBlur={() => {
+                          // empty = no change (so clearing-to-retype can't mark the debt cleared)
+                          if (balBuf === "") { setBalBuf(shown(r.remaining) ? String(shown(r.remaining)) : ""); return; }
+                          const n = parseInt(balBuf, 10);
                           patch(d.id, { principal: (isNaN(n) ? 0 : toBase(n)) + r.paid });
                         }}
+                        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                       />
                     </label>
                     <label>APR %
@@ -163,12 +178,14 @@ export function DebtCard({
                     <label>Per month
                       <input
                         type="text" inputMode="numeric"
-                        value={d.payment ? shown(d.payment).toLocaleString(cur.locale) : ""}
+                        value={payBuf}
                         placeholder={paidMonth[d.id] ? shown(paidMonth[d.id]).toLocaleString(cur.locale) : "0"}
-                        onChange={(e) => {
-                          const n = parseInt(e.target.value.replace(/[^\d]/g, ""), 10);
-                          patch(d.id, { payment: isNaN(n) ? 0 : toBase(n) });
+                        onChange={(e) => setPayBuf(e.target.value.replace(/[^\d]/g, ""))}
+                        onBlur={() => {
+                          const n = parseInt(payBuf, 10);
+                          patch(d.id, { payment: payBuf === "" || isNaN(n) ? 0 : toBase(n) });
                         }}
+                        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                       />
                     </label>
                     <label>Kind

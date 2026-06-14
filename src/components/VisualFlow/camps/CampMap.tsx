@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import type { VfGoal } from "../../../types/grid";
 import { VF_MAX_GOALS } from "../../../types/grid";
 import {
-  VF_START, VF_END, VF_SLOTS, vfTrailPath, vfStatusMeta, vfProgress, vfSmart, type VfFinance,
+  VF_START, VF_END, VF_SLOTS, vfTrailPath, vfStatusMeta, vfProgress, vfSupplies, vfSmart, type VfFinance,
 } from "./vfGoals";
 import { VfTent } from "./VfTent";
 
@@ -64,8 +64,9 @@ export function CampMap({ goals, fin, currency, onOpenGoal, onPitch, onFlipToFlo
             </button>
           );
         }
-        const prog = vfProgress(g, fin, currency);
-        const reached = g.status === "done" || prog.auto;
+        const prog = vfProgress(g);
+        const supplies = vfSupplies(g, fin, currency);
+        const reached = g.status === "done";
         const st = vfStatusMeta(reached ? "done" : g.status);
         const smart = vfSmart(g, reached);
         return (
@@ -74,7 +75,7 @@ export function CampMap({ goals, fin, currency, onOpenGoal, onPitch, onFlipToFlo
             className={"camp camp--" + (reached ? "done" : g.status)}
             style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
             onClick={() => onOpenGoal(g.id)}
-            title={`${g.outcome || "No Point B yet"} · SMART ${smart.score}/5`}
+            title={`${g.outcome || "No Point B yet"} · ${prog.pct}% done${supplies ? ` · supplies ${supplies.ready ? "ready" : `${supplies.pct}%`}` : ""} · SMART ${smart.score}/5`}
           >
             <span className="camp-marker">
               <VfTent hue={st.hue} lit={!reached && g.status !== "notstarted"} />
@@ -88,7 +89,16 @@ export function CampMap({ goals, fin, currency, onOpenGoal, onPitch, onFlipToFlo
             <span className="camp-label">
               <span className="camp-name">{g.title || "Untitled goal"}</span>
               <span className="camp-bar"><span style={{ width: `${prog.pct}%`, background: st.hue }} /></span>
-              <span className="camp-sub">{reached ? "camp reached" : `${st.label.toLowerCase()} · ${prog.pct}%`}</span>
+              <span className="camp-sub">
+                {reached ? "camp reached" : `${st.label.toLowerCase()} · ${prog.pct}%`}
+                {supplies && (
+                  <span
+                    className={"camp-supply" + (supplies.ready ? " camp-supply--ready" : "")}
+                    title={`Supplies — ${supplies.name}: ${supplies.ready ? (supplies.kind === "debt" ? "paid off" : "ready") : supplies.line}`}
+                    aria-hidden="true"
+                  />
+                )}
+              </span>
             </span>
           </button>
         );

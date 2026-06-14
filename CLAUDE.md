@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Ignore `.handoffs/` by default.** Do NOT read, open, search (`Grep`/`Glob`/`Explore`), or otherwise pull anything under `.handoffs/` into context unless the user **explicitly** points you at a specific handoff. It's large design-reference prototype source (HTML / JSX / CSS) that bloats context and pollutes search results. When the user does reference one (e.g. "handoff 005"), read only that bundle.
+
 ## Project
 
 ShELF Bookmarks — a Manifest V3 Chrome/Brave extension that overrides the new-tab page with a bookmark organizer, todo pillar, prompt library, visual flow graph, and an LLM Console overlay. React 19 + TypeScript 5.6 + Vite 6 + Tailwind v4 + HeroUI v3. Serverless — uses only `chrome.bookmarks` and `chrome.storage.local`.

@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
-import type { VfGoal } from "../../../types/grid";
+import type { VfGoal, VfGoalProgressMode } from "../../../types/grid";
 import { VF_MAX_GOALS } from "../../../types/grid";
-import { VF_STATUS, vfProgress, vfSmart, type VfFinance } from "./vfGoals";
+import { VF_STATUS, vfProgress, vfSupplies, vfSmart, type VfFinance } from "./vfGoals";
 import { GoalCascade } from "./GoalCascade";
 
 interface GoalScreenProps {
@@ -31,9 +31,14 @@ export function GoalScreen({ goal, slot, fin, currency, onPatch, onDelete, onBac
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const prog = vfProgress(goal, fin, currency);
-  const reached = goal.status === "done" || prog.auto;
+  const prog = vfProgress(goal);
+  const supplies = vfSupplies(goal, fin, currency);
+  const reached = goal.status === "done";
   const smart = vfSmart(goal, reached);
+  const MODES: { id: VfGoalProgressMode; label: string }[] = [
+    { id: "subgoals", label: "Subgoals" },
+    { id: "manual", label: "Set by hand" },
+  ];
 
   return (
     <div className="gs" data-screen-label={`Goal — ${goal.title || "untitled"}`}>
@@ -94,48 +99,89 @@ export function GoalScreen({ goal, slot, fin, currency, onPatch, onDelete, onBac
             </span>
           ))}
         </div>
-        {prog.auto && goal.status !== "done" && (
-          <div className="vfg-auto">Supplies say you've arrived — mark it reached?</div>
+        {prog.complete && goal.status !== "done" && (
+          <button className="vfg-auto" onClick={() => onPatch({ status: "done" })}>
+            {goal.progressMode === "manual" ? "Marked 100%" : "Every subgoal is done"} — mark this camp reached?
+          </button>
         )}
       </div>
 
       <div className="gs-body">
         <div className="gs-cascade-wrap">
-          <div className="vfg-lab">Cascading subgoals — each one leads to the next, the chain leads to the goal</div>
-          <GoalCascade goal={goal} onPatch={onPatch} />
+          <div className="gs-prog-head">
+            <div className="vfg-lab">Progress — how you'll know you've arrived</div>
+            <div className="gs-prog-seg">
+              <div className="seg">
+                {MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    className={"seg-btn" + (goal.progressMode === m.id ? " on" : "")}
+                    onClick={() => onPatch({ progressMode: m.id })}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <span className="gs-prog-pct">{prog.pct}%</span>
+            </div>
+          </div>
+          {goal.progressMode === "manual" ? (
+            <div className="gs-manual">
+              <div className="gs-manual-bar"><span style={{ width: `${prog.pct}%` }} /></div>
+              <input
+                className="slider gs-manual-slider"
+                type="range" min={0} max={100} step={5}
+                value={Math.max(0, Math.min(100, Math.round(goal.manualPct ?? 0)))}
+                onChange={(e) => onPatch({ manualPct: Number(e.target.value) })}
+              />
+              <div className="gs-manual-hint">Slide as you make headway — for goals that don't break into tidy steps.</div>
+            </div>
+          ) : (
+            <>
+              <div className="vfg-lab gs-prog-sub">Each subgoal leads to the next, the chain leads to the goal</div>
+              <GoalCascade goal={goal} onPatch={onPatch} />
+            </>
+          )}
         </div>
         <div className="gs-side">
           <div className="vfg-sec">
-            <div className="vfg-lab">Supplies — wire it to real money</div>
+            <div className="vfg-lab">Supplies — money set aside (optional · doesn't change progress)</div>
             <select
               className="se-cat vfg-link"
-              value={goal.link ? `${goal.link.type}:${goal.link.id}` : ""}
+              value={goal.supplies ? `${goal.supplies.type}:${goal.supplies.id}` : ""}
               onChange={(e) => {
                 const v = e.target.value;
-                if (!v) onPatch({ link: null });
+                if (!v) onPatch({ supplies: null });
                 else {
                   const i = v.indexOf(":");
                   const type = v.slice(0, i);
-                  if (type === "pot" || type === "debt") onPatch({ link: { type, id: v.slice(i + 1) } });
+                  if (type === "pot" || type === "debt") onPatch({ supplies: { type, id: v.slice(i + 1) } });
                 }
               }}
             >
-              <option value="">No link</option>
+              <option value="">Not wired to money</option>
               {fin.pots.length > 0 && (
                 <optgroup label="Savings pots">
                   {fin.pots.map((p) => <option key={p.id} value={`pot:${p.id}`}>◌ {p.name}</option>)}
                 </optgroup>
               )}
               {fin.debts.length > 0 && (
-                <optgroup label="Debts (payoff = arrival)">
+                <optgroup label="Debts (clear = paid off)">
                   {fin.debts.map((d) => <option key={d.id} value={`debt:${d.id}`}>↓ {d.name}</option>)}
                 </optgroup>
               )}
             </select>
-            <div className="vfg-prog">
-              <div className="vfg-prog-bar"><span style={{ width: `${prog.pct}%` }} /></div>
-              <div className="vfg-prog-foot"><span>{prog.pct}%</span><span>{prog.line}</span></div>
-            </div>
+            {supplies ? (
+              <div className="vfg-prog">
+                <div className="vfg-prog-bar"><span className={supplies.ready ? "is-ready" : ""} style={{ width: `${supplies.pct}%` }} /></div>
+                <div className="vfg-prog-foot">
+                  <span className={"vfg-supply-tag" + (supplies.ready ? " ok" : "")}>{supplies.ready ? (supplies.kind === "debt" ? "paid off" : "ready") : `${supplies.pct}%`}</span>
+                  <span>{supplies.line}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="vfg-prog-empty">Link a pot or a debt to track readiness alongside the goal — it stays separate from your progress.</div>
+            )}
           </div>
           <div className="vfg-sec">
             <div className="vfg-lab">Field journal — why it matters, risks</div>

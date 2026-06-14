@@ -63,7 +63,7 @@ export function VisualFlowSurface({ goals, onSetGoals, strategie, currency, onTo
     if (trimmed.length >= VF_MAX_GOALS) return;
     const g: VfGoal = {
       id: `g${crypto.randomUUID()}`, title: "", outcome: "", status: "notstarted",
-      link: null, milestones: [], notes: "",
+      progressMode: "subgoals", supplies: null, milestones: [], notes: "",
     };
     goTrans(() => { onSetGoals((prev) => [...prev, g]); setEditId(g.id); }, 1, "flipshow");
   };

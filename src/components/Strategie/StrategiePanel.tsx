@@ -36,6 +36,7 @@ interface StrategiePanelProps {
     memberships: MembershipRow[],
   ) => void;
   onAddPot: (name: string) => void;
+  onRemovePot: (id: string) => void;
   onSetCurrency: (c: string) => void;
   onSetActiveMonth: (key: string) => void;
   onSetHeroFace: (face: "grow" | "spend") => void;
@@ -61,6 +62,7 @@ export function StrategiePanel({
   extraAssets = 0,
   onSaveStatement,
   onAddPot,
+  onRemovePot,
   onSetCurrency,
   onSetActiveMonth,
   onSetHeroFace,
@@ -93,8 +95,10 @@ export function StrategiePanel({
   const ladderRef = useRef<HTMLDivElement>(null);
   const [rungTip, setRungTip] = useState<{
     rung: LadderRung;
-    x: number;
-    y: number;
+    /** Viewport coords (the tip is portaled to body + position:fixed, so it never
+     *  gets clipped by the ladder card's `overflow:hidden`). */
+    cx: number;
+    cy: number;
     flipX: boolean;
     flipY: boolean;
   } | null>(null);
@@ -276,9 +280,10 @@ export function StrategiePanel({
     const card = ladderRef.current;
     if (!card) return;
     const rect = card.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    setRungTip({ rung, x, y, flipX: x > rect.width * 0.45, flipY: y > rect.height * 0.62 });
+    // flip decision stays card-relative; position uses viewport coords (fixed + portal)
+    const relX = e.clientX - rect.left;
+    const relY = e.clientY - rect.top;
+    setRungTip({ rung, cx: e.clientX, cy: e.clientY, flipX: relX > rect.width * 0.45, flipY: relY > rect.height * 0.62 });
   };
 
   const openRangeInEditor = useCallback((info: SpendRangeOpenInfo) => {
@@ -579,12 +584,12 @@ export function StrategiePanel({
             const total = rows.reduce((a, r) => a + (r.balance || 0), 0);
             const share = ladderGrand > 0 ? Math.round((total / ladderGrand) * 100) : 0;
             const OPS = [1, 0.68, 0.45, 0.3, 0.2];
-            return (
+            return createPortal(
               <div
                 className="rung-tip"
                 style={{
-                  left: rungTip.x + 14,
-                  top: rungTip.y + 14,
+                  left: rungTip.cx + 14,
+                  top: rungTip.cy + 14,
                   transform: `${rungTip.flipX ? "translateX(calc(-100% - 28px))" : ""} ${rungTip.flipY ? "translateY(calc(-100% - 28px))" : ""}`,
                   ["--step-hue" as string]: rungTip.rung.hue || "var(--accent)",
                 } as React.CSSProperties}
@@ -632,7 +637,8 @@ export function StrategiePanel({
                 ) : (
                   <div className="rung-tip-empty">Nothing parked here yet — unlocks once the earlier steps are funded.</div>
                 )}
-              </div>
+              </div>,
+              document.body,
             );
           })()}
         </div>
@@ -919,7 +925,7 @@ export function StrategiePanel({
                         <IcoHopper /> From hopper
                       </div>
                       {buylistItems.map((item) => (
-                        <div key={item.id} className="pot-menu-item" onClick={() => handleAddFromHopper(item)}>
+                        <div key={item.id} className="pot-menu-item" title={item.title} onClick={() => handleAddFromHopper(item)}>
                           {item.title}
                         </div>
                       ))}
@@ -947,7 +953,17 @@ export function StrategiePanel({
                       <div className="pot-name">{pot.name}</div>
                       <div className="pot-fig">{fmtMoney(pot.saved, cur)} of {fmtMoney(pot.target, cur)}</div>
                     </div>
-                    {pot.fromHopper && <span className="pot-flag"><IcoHopper /></span>}
+                    <div className="pot-top-actions">
+                      {pot.fromHopper && <span className="pot-flag"><IcoHopper /></span>}
+                      <button
+                        className="sp-del pot-del"
+                        title={`Remove pot "${pot.name}"`}
+                        aria-label={`Remove pot ${pot.name}`}
+                        onClick={() => { if (window.confirm(`Remove pot "${pot.name}"?`)) onRemovePot(pot.id); }}
+                      >
+                        ×
+                      </button>
+                    </div>
                   </div>
                   <div className="pot-bar"><span style={{ width: `${pct}%` }} /></div>
                   <div className="pot-foot">

@@ -300,6 +300,8 @@ export interface ShelfBackupData {
   hopperFace?: "buy" | "sell";
   strategie?: StrategieState;
   saleItems?: SaleItem[];
+  /** Inventory tab — catalogue of owned items. */
+  inventory?: InventoryItem[];
   /** Visual Flow goals layer ("camps"). */
   vfGoals?: VfGoal[];
 }
@@ -389,6 +391,8 @@ export const DEFAULT_DEBTS: Debt[] = [];
 export type VfGoalStatus = "notstarted" | "ontrack" | "atrisk" | "done";
 export interface VfGoalMilestone { id: string; label: string; done: boolean; }
 export interface VfGoalLink { type: "pot" | "debt"; id: string; }
+/** How a goal's progress (doneness) is measured — money is never the progress. */
+export type VfGoalProgressMode = "subgoals" | "manual";
 export interface VfGoal {
   id: string;
   title: string;
@@ -396,8 +400,13 @@ export interface VfGoal {
   status: VfGoalStatus;
   /** Target month, "YYYY-MM". */
   due?: string;
-  /** "Supplies" — wired to a savings pot or a tracked debt. */
-  link: VfGoalLink | null;
+  /** Progress = doneness: completed subgoals, or a self-set %. Never the money. */
+  progressMode: VfGoalProgressMode;
+  /** Manual progress 0–100 (used when progressMode === "manual"). */
+  manualPct?: number;
+  /** "Supplies" — an OPTIONAL pot/debt tie shown as a separate readiness/paid-off
+   *  indicator. It never drives the progress %. */
+  supplies: VfGoalLink | null;
   /** Cascading subgoals. */
   milestones: VfGoalMilestone[];
   notes: string;              // field journal
@@ -414,12 +423,13 @@ export function normalizeVfGoals(raw: unknown): VfGoal[] {
     .filter((o) => typeof o["id"] === "string")
     .slice(0, VF_MAX_GOALS)
     .map((o) => {
-      const linkRaw = o["link"];
-      let link: VfGoalLink | null = null;
-      if (linkRaw && typeof linkRaw === "object" && !Array.isArray(linkRaw)) {
-        const l = linkRaw as Record<string, unknown>;
+      // supplies (new) falls back to the legacy `link` field for old blobs
+      const supRaw = o["supplies"] ?? o["link"];
+      let supplies: VfGoalLink | null = null;
+      if (supRaw && typeof supRaw === "object" && !Array.isArray(supRaw)) {
+        const l = supRaw as Record<string, unknown>;
         if ((l["type"] === "pot" || l["type"] === "debt") && typeof l["id"] === "string") {
-          link = { type: l["type"], id: l["id"] };
+          supplies = { type: l["type"], id: l["id"] };
         }
       }
       const milestones: VfGoalMilestone[] = Array.isArray(o["milestones"])
@@ -427,13 +437,18 @@ export function normalizeVfGoals(raw: unknown): VfGoal[] {
             .filter((m): m is Record<string, unknown> => !!m && typeof m === "object" && typeof (m as Record<string, unknown>)["id"] === "string")
             .map((m) => ({ id: m["id"] as string, label: typeof m["label"] === "string" ? m["label"] : "", done: Boolean(m["done"]) }))
         : [];
+      const progressMode: VfGoalProgressMode = o["progressMode"] === "manual" ? "manual" : "subgoals";
+      const manualPct = typeof o["manualPct"] === "number"
+        ? Math.max(0, Math.min(100, Math.round(o["manualPct"]))) : undefined;
       return {
         id: o["id"] as string,
         title: typeof o["title"] === "string" ? o["title"] : "",
         outcome: typeof o["outcome"] === "string" ? o["outcome"] : "",
         status: STATUSES.includes(o["status"] as VfGoalStatus) ? (o["status"] as VfGoalStatus) : "notstarted",
         due: typeof o["due"] === "string" ? o["due"] : undefined,
-        link,
+        progressMode,
+        manualPct,
+        supplies,
         milestones,
         notes: typeof o["notes"] === "string" ? o["notes"] : "",
       };

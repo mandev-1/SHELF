@@ -142,6 +142,7 @@ export default function FullApp() {
     strategieState,
     strategieSaveStatement,
     strategieAddPot,
+    strategieRemovePot,
     strategieSetCurrency,
     strategieSetCurrentMonth,
     strategieSetHeroFace,
@@ -608,6 +609,7 @@ export default function FullApp() {
                 buylistItems={buylist}
                 onSaveStatement={strategieSaveStatement}
                 onAddPot={strategieAddPot}
+                onRemovePot={strategieRemovePot}
                 onSetCurrency={strategieSetCurrency}
                 onSetActiveMonth={strategieSetCurrentMonth}
                 onSetHeroFace={strategieSetHeroFace}
@@ -663,7 +665,7 @@ export default function FullApp() {
               />
             </div>
           ) : dashboardView === "visual-flow" ? (
-            <div className="max-w-[1640px] mx-auto">
+            <div className="w-full">
               <Suspense fallback={<div className="py-20 text-center text-sm text-slate-500">Loading Visual Flow…</div>}>
               <VisualFlowSurface
                 goals={vfGoals}
