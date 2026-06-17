@@ -197,7 +197,7 @@ export interface VisualFlowData {
   /** Sector label → border color; applies to all tasks with that sector name on both planes */
   sectorColors?: Record<string, SectorColorKey>;
   /** User-created custom planes beyond the three built-ins */
-  customPlanes?: { id: string; name: string }[];
+  customPlanes?: { id: string; name: string; color?: string }[];
   customPlaneItems?: Record<string, ShelfPillarTodoItem[]>;
   customPlaneNodePositions?: Record<string, Record<string, { x: number; y: number }>>;
   customPlaneEdges?: Record<string, VisualFlowEdge[]>;

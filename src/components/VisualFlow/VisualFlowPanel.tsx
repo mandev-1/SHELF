@@ -186,6 +186,17 @@ type SpecialVisualFlowPlane = "grazeland" | "bin";
 
 const SPECIAL_VISUAL_FLOW_PLANES: SpecialVisualFlowPlane[] = ["grazeland", "bin"];
 
+// Theme-adaptive palette for custom sheet tabs. Values are CSS hue tokens so the
+// tab color tracks the active theme; `null` clears back to the default accent.
+const CUSTOM_PLANE_COLORS: { key: string; value: string }[] = [
+  { key: "blue", value: "var(--hue-blue)" },
+  { key: "green", value: "var(--hue-green)" },
+  { key: "purple", value: "var(--hue-purple)" },
+  { key: "orange", value: "var(--hue-orange)" },
+  { key: "rose", value: "var(--hue-rose)" },
+  { key: "zinc", value: "var(--hue-zinc)" },
+];
+
 const SPECIAL_VISUAL_FLOW_PLANE_META: Record<SpecialVisualFlowPlane, {
   tabLabel: string;
   tabClass: string;
@@ -2250,6 +2261,15 @@ function VisualFlowPanelInner({
     }));
   }, [onUpdateVisualFlow]);
 
+  const commitPlaneColor = useCallback((id: string, color: string | null) => {
+    onUpdateVisualFlow((prev) => ({
+      ...prev,
+      customPlanes: (prev.customPlanes ?? []).map((p) =>
+        p.id === id ? { ...p, color: color ?? undefined } : p
+      ),
+    }));
+  }, [onUpdateVisualFlow]);
+
   // Create a new sub-task already connected to a parent node.
   // Plane-aware: writes to the right positions map + edges list for whichever
   // plane the user is currently on.
@@ -3217,6 +3237,8 @@ function VisualFlowPanelInner({
                   key={cp.id}
                   role="tab"
                   aria-selected={plane === cp.id}
+                  data-colored={cp.color ? "" : undefined}
+                  style={cp.color ? ({ "--plane-hue": cp.color } as React.CSSProperties) : undefined}
                   className={`shelf-vf-sheet-tab shelf-vf-sheet-tab--custom${plane === cp.id ? " on" : ""}`}
                   onClick={() => { if (renamingPlaneId !== cp.id) switchPlane(cp.id); }}
                   onContextMenu={(e) => {
@@ -3225,26 +3247,57 @@ function VisualFlowPanelInner({
                     setRenameValue(cp.name);
                   }}
                 >
+                  {cp.color && <span className="shelf-vf-sheet-dot" aria-hidden />}
                   {renamingPlaneId === cp.id ? (
-                    <input
-                      className="shelf-vf-sheet-rename-input"
-                      autoFocus
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
+                    <>
+                      <input
+                        className="shelf-vf-sheet-rename-input"
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            commitRenamePlane(cp.id, renameValue);
+                            setRenamingPlaneId(null);
+                          } else if (e.key === "Escape") {
+                            setRenamingPlaneId(null);
+                          }
+                        }}
+                        onBlur={() => {
                           commitRenamePlane(cp.id, renameValue);
                           setRenamingPlaneId(null);
-                        } else if (e.key === "Escape") {
-                          setRenamingPlaneId(null);
-                        }
-                      }}
-                      onBlur={() => {
-                        commitRenamePlane(cp.id, renameValue);
-                        setRenamingPlaneId(null);
-                      }}
-                    />
+                        }}
+                      />
+                      <div
+                        className="shelf-vf-sheet-palette"
+                        // keep focus on the input so its onBlur commit isn't fired
+                        // before the swatch click lands
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {CUSTOM_PLANE_COLORS.map((c) => (
+                          <button
+                            key={c.key}
+                            type="button"
+                            className={`shelf-vf-swatch${cp.color === c.value ? " on" : ""}`}
+                            style={{ background: c.value }}
+                            title={c.key}
+                            aria-label={`Color ${c.key}`}
+                            onClick={() => commitPlaneColor(cp.id, cp.color === c.value ? null : c.value)}
+                          />
+                        ))}
+                        {cp.color && (
+                          <button
+                            type="button"
+                            className="shelf-vf-swatch shelf-vf-swatch--clear"
+                            title="Clear color"
+                            aria-label="Clear color"
+                            onClick={() => commitPlaneColor(cp.id, null)}
+                          />
+                        )}
+                      </div>
+                    </>
                   ) : (
                     <span className="shelf-vf-sheet-name">{cp.name}</span>
                   )}
