@@ -100,7 +100,15 @@ export function createGrazelandHandleVisibility(allVisible = true): ShelfGrazela
 }
 
 /** Epic / sector border tint on Visual Flow (subtle; optional) */
-export type SectorColorKey = "bone" | "jet-black" | "pacific-blue" | "alice-blue" | "fern";
+export type SectorColorKey =
+  | "bone"
+  | "jet-black"
+  | "pacific-blue"
+  | "alice-blue"
+  | "fern"
+  | "neon-blue"
+  | "acid-blue"
+  | "king-blue";
 
 export const SECTOR_COLOR_OPTIONS: { value: SectorColorKey; label: string }[] = [
   { value: "bone", label: "Bone" },
@@ -108,6 +116,9 @@ export const SECTOR_COLOR_OPTIONS: { value: SectorColorKey; label: string }[] = 
   { value: "pacific-blue", label: "Pacific blue" },
   { value: "alice-blue", label: "Alice blue" },
   { value: "fern", label: "Fern" },
+  { value: "neon-blue", label: "Neon blue" },
+  { value: "acid-blue", label: "Acid blue" },
+  { value: "king-blue", label: "King blue" },
 ];
 
 /** Hex values for sector borders (see design tokens) */
@@ -117,6 +128,9 @@ export const SECTOR_HEX: Record<SectorColorKey, string> = {
   "pacific-blue": "#5fb3c6",
   "alice-blue": "#eaf4f7",
   fern: "#3e7c4a",
+  "neon-blue": "#3a72ff",
+  "acid-blue": "#16e0e6",
+  "king-blue": "#1d4ed8",
 };
 
 const SECTOR_COLOR_SET = new Set<string>(Object.keys(SECTOR_HEX));
@@ -151,6 +165,22 @@ export interface ShelfPillarTodoItem {
   sectorColor?: SectorColorKey;
   /** Bin-specific potential value text shown as PV in the bin editor. */
   potentialValue?: string;
+  /** Epoch ms when the item was first created. */
+  createdAt?: number;
+  /** Epoch ms when the item was last modified. */
+  updatedAt?: number;
+  /** Bounded audit trail of changes (most recent last). */
+  history?: ShelfTodoAuditEntry[];
+}
+
+/** A single entry in an item's audit trail. */
+export interface ShelfTodoAuditEntry {
+  /** Epoch ms when the change happened. */
+  at: number;
+  /** What kind of change occurred. */
+  action: "created" | "updated" | "completed" | "restored";
+  /** Names of the content fields that changed (for "updated"). */
+  fields?: string[];
 }
 
 export interface ObsidianLogConfig {

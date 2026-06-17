@@ -2242,6 +2242,33 @@ body {
 }
 
 /*
+ * Visual Flow — sector tints on day / sap themes. The base .shelf-top6-card rule
+ * forces a paper background with !important, which otherwise swallows the inline
+ * sector tint. Re-apply the tint from the inline --sec-* custom properties so
+ * every tint gets a real, distinct surface (not just a shared blue rim).
+ */
+[data-theme="day"] .visual-flow-canvas .shelf-flow-node.shelf-flow-node--tinted.shelf-top6-card,
+[data-theme="sap"] .visual-flow-canvas .shelf-flow-node.shelf-flow-node--tinted.shelf-top6-card {
+  background-color: var(--sec-bg) !important;
+  background-image: var(--sec-bg-img, none) !important;
+  border: var(--sec-border) !important;
+  box-shadow: var(--sec-shadow, none) !important;
+}
+/* Dark-fill tints (e.g. king blue blueprint): invert text to stay readable on
+   the solid colored surface, across every theme. */
+.visual-flow-canvas .shelf-flow-node.shelf-flow-node--darkfill.shelf-top6-card .text-white,
+.visual-flow-canvas .shelf-flow-node.shelf-flow-node--darkfill.shelf-top6-card .font-semibold {
+  color: var(--sec-text, #f4f7ff) !important;
+}
+.visual-flow-canvas .shelf-flow-node.shelf-flow-node--darkfill .shelf-flow-node-note {
+  color: rgba(255, 255, 255, 0.84) !important;
+}
+.visual-flow-canvas .shelf-flow-node.shelf-flow-node--darkfill .shelf-flow-node-date,
+.visual-flow-canvas .shelf-flow-node.shelf-flow-node--darkfill .text-zinc-500\/90 {
+  color: rgba(255, 255, 255, 0.62) !important;
+}
+
+/*
  * Visual Flow — SAP theme + Jet black sector: .shelf-top6-card forces a light gray background
  * with !important; this restores a dark surface anchored on SECTOR_HEX jet-black (#1f2a2a).
  */

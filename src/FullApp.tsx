@@ -5,6 +5,7 @@ import { useBookmarksTree } from "./hooks/useBookmarks";
 import { BookmarkGrid } from "./components/BookmarkGrid";
 import { SearchResults } from "./components/SearchResults";
 import { useShelfStorage } from "./hooks/useShelfStorage";
+import { editTodoInList, stampNewTodo } from "./utils/todoAudit";
 import { PromptLibraryCard } from "./components/PromptLibraryCard";
 import { Pillar } from "./components/Pillar";
 // Lazy + prefetch: split the React Flow chunk, but warm it in the background
@@ -206,7 +207,7 @@ export default function FullApp() {
 
   const handleVisualFlowEditTodo = useCallback(
     (id: string, updates: Partial<ShelfPillarTodoItem>) => {
-      setPillarTodos((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+      setPillarTodos((prev) => editTodoInList(prev, id, updates));
     },
     [setPillarTodos]
   );
@@ -221,7 +222,7 @@ export default function FullApp() {
 
   const handleVisualFlowEditGrazeland = useCallback(
     (id: string, updates: Partial<ShelfPillarTodoItem>) => {
-      setGrazelandItems((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+      setGrazelandItems((prev) => editTodoInList(prev, id, updates));
     },
     [setGrazelandItems]
   );
@@ -235,7 +236,7 @@ export default function FullApp() {
 
   const handleVisualFlowEditBin = useCallback(
     (id: string, updates: Partial<ShelfPillarTodoItem>) => {
-      setBinItems((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+      setBinItems((prev) => editTodoInList(prev, id, updates));
     },
     [setBinItems]
   );
@@ -685,17 +686,17 @@ export default function FullApp() {
                     onEditTodo={handleVisualFlowEditTodo}
                     onDeleteTodo={handleVisualFlowDeleteTodo}
                     onAddTodo={(todo) =>
-                      setPillarTodos((prev) => [...prev, todo])
+                      setPillarTodos((prev) => [...prev, stampNewTodo(todo)])
                     }
                     onEditGrazelandItem={handleVisualFlowEditGrazeland}
                     onDeleteGrazelandItem={handleVisualFlowDeleteGrazeland}
                     onAddGrazelandItem={(todo) =>
-                      setGrazelandItems((prev) => [...prev, todo])
+                      setGrazelandItems((prev) => [...prev, stampNewTodo(todo)])
                     }
                     onEditBinItem={handleVisualFlowEditBin}
                     onDeleteBinItem={handleVisualFlowDeleteBin}
                     onAddBinItem={(todo) =>
-                      setBinItems((prev) => [...prev, todo])
+                      setBinItems((prev) => [...prev, stampNewTodo(todo)])
                     }
                     onTaskCompleted={showTaskCelebration}
                     onTodoLog={(entry) => {

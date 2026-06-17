@@ -40,6 +40,7 @@ import {
   resolveVisualFlowSectorColor,
 } from "../../types/grid";
 import { NoteContent, linkifyText } from "../NoteContent";
+import { applyTodoUpdate, stampNewTodo } from "../../utils/todoAudit";
 import { exportFlowAsMarkdown } from "./exportFlow";
 import { writePlane, getPlaneSizes, type PlaneId } from "./visualFlowWriter";
 
@@ -110,74 +111,108 @@ function useShelfDocumentTheme() {
  * Sector styling: night = dark card + rim + wash; day = warm paper + strong sector-colored border & wash;
  * SAP = very low-key background tint + subtle SAP-blue rim (sector reads as fill).
  */
+/** Sector colors that render as a solid dark/colored fill and need light text. */
+const DARK_FILL_SECTORS = new Set<SectorColorKey>(["king-blue"]);
+
+/**
+ * Build the sector "chrome" for a node. Returns BOTH the direct CSS properties
+ * (used as-is on the dark theme) AND matching `--sec-*` custom properties — on
+ * day / sap themes the base `.shelf-top6-card` rule forces a paper background
+ * with `!important`, so a companion `.shelf-flow-node--tinted` rule re-applies
+ * the tint from these vars. Text inversion for dark fills is driven by
+ * `.shelf-flow-node--darkfill` reading `--sec-text`.
+ */
 function sectorNodeChromeStyleForTheme(colorKey: SectorColorKey, theme: string): React.CSSProperties {
   const hex = SECTOR_HEX[colorKey];
   const [r, g, b] = rgbFromSectorHex(hex);
   const avg = (r + g + b) / 3;
+
+  const build = (
+    border: string,
+    backgroundColor: string,
+    backgroundImage: string | undefined,
+    boxShadow: string,
+    text?: string
+  ): React.CSSProperties => {
+    const style: Record<string, string> = {
+      border,
+      backgroundColor,
+      boxShadow,
+      "--sec-bg": backgroundColor,
+      "--sec-bg-img": backgroundImage ?? "none",
+      "--sec-border": border,
+      "--sec-shadow": boxShadow,
+    };
+    if (backgroundImage) style.backgroundImage = backgroundImage;
+    if (text) style["--sec-text"] = text;
+    return style as React.CSSProperties;
+  };
+
+  // King blue — blueprint look: solid blue fill + white text, identical on every
+  // theme so it always reads as a deliberate "blueprint" card.
+  if (colorKey === "king-blue") {
+    return build(
+      "1.5px solid rgba(120, 160, 255, 0.9)",
+      "#1d4ed8",
+      `linear-gradient(165deg, rgba(96,140,255,0.55) 0%, rgba(29,78,216,0.96) 45%, #163fb0 100%)`,
+      "inset 0 1px 0 rgba(255,255,255,0.2), 0 3px 16px rgba(23,58,160,0.5)",
+      "#f4f7ff"
+    );
+  }
 
   if (theme === "day") {
     const br = Math.round(r * 0.38 + 118 * 0.62);
     const bgMix = Math.round(g * 0.38 + 112 * 0.62);
     const bb = Math.round(b * 0.38 + 106 * 0.62);
     const borderA = avg > 210 ? 0.58 : avg > 135 ? 0.52 : 0.48;
-    return {
-      border: `2px solid rgba(${br},${bgMix},${bb}, ${borderA})`,
-      backgroundColor: "rgba(255, 252, 247, 0.97)",
-      backgroundImage: `linear-gradient(
-        168deg,
-        rgba(${r},${g},${b}, 0.38) 0%,
-        rgba(${r},${g},${b}, 0.16) 42%,
-        rgba(255, 252, 247, 0.72) 100%
-      )`,
-      boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(28, 25, 23, 0.07)",
-    };
+    return build(
+      `2px solid rgba(${br},${bgMix},${bb}, ${borderA})`,
+      "rgba(255, 252, 247, 0.97)",
+      `linear-gradient(168deg, rgba(${r},${g},${b}, 0.38) 0%, rgba(${r},${g},${b}, 0.16) 42%, rgba(255, 252, 247, 0.72) 100%)`,
+      "inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(28, 25, 23, 0.07)"
+    );
   }
 
   if (theme === "sap") {
-    // Jet black sector: match token #1f2a2a — dark card, SAP-blue rim (not the default light “paper” chrome).
+    // Jet black sector: match token #1f2a2a — dark card, SAP-blue rim.
     if (colorKey === "jet-black") {
       const deep = `rgb(${Math.max(8, r - 14)}, ${Math.max(10, g - 10)}, ${Math.max(10, b - 10)})`;
-      return {
-        border: "1px solid rgba(0, 112, 242, 0.5)",
-        backgroundColor: deep,
-        backgroundImage: `linear-gradient(
-          165deg,
-          rgba(${Math.min(255, r + 28)}, ${Math.min(255, g + 32)}, ${Math.min(255, b + 34)}, 0.2) 0%,
-          rgba(${r}, ${g}, ${b}, 0.88) 42%,
-          ${deep} 100%
-        )`,
-        boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 2px 10px rgba(0, 0, 0, 0.4)",
-      };
+      return build(
+        "1px solid rgba(0, 112, 242, 0.5)",
+        deep,
+        `linear-gradient(165deg, rgba(${Math.min(255, r + 28)}, ${Math.min(255, g + 32)}, ${Math.min(255, b + 34)}, 0.2) 0%, rgba(${r}, ${g}, ${b}, 0.88) 42%, ${deep} 100%)`,
+        "inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 2px 10px rgba(0, 0, 0, 0.4)",
+        "#f4f4f5"
+      );
     }
-    // Light SAP canvas needs a paper base + visible (still soft) sector wash — flat rgba(r,g,b,0.08) was invisible.
-    const topA = avg > 200 ? 0.22 : avg > 115 ? 0.19 : avg > 55 ? 0.16 : 0.13;
-    const midA = topA * 0.55;
-    return {
-      border: "1px solid rgba(0, 112, 242, 0.2)",
-      backgroundColor: "rgb(244, 247, 252)",
-      backgroundImage: `linear-gradient(
-        165deg,
-        rgba(${r},${g},${b}, ${topA}) 0%,
-        rgba(${r},${g},${b}, ${midA}) 42%,
-        rgba(236, 242, 249, 0.97) 68%,
-        rgb(244, 247, 252) 100%
-      )`,
-      boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.75)",
-    };
+    // Light SAP canvas: paper base + a clearly visible tint wash AND a tint-colored
+    // rim (previously every tint shared the same SAP-blue border → no distinction).
+    const topA = avg > 200 ? 0.34 : avg > 115 ? 0.3 : avg > 55 ? 0.26 : 0.22;
+    const midA = topA * 0.5;
+    const rb = Math.round(r * 0.62);
+    const rg = Math.round(g * 0.62);
+    const rbb = Math.round(b * 0.62);
+    return build(
+      `1.5px solid rgba(${rb},${rg},${rbb}, 0.6)`,
+      "rgb(244, 247, 252)",
+      `linear-gradient(165deg, rgba(${r},${g},${b}, ${topA}) 0%, rgba(${r},${g},${b}, ${midA}) 42%, rgba(236, 242, 249, 0.97) 70%, rgb(244, 247, 252) 100%)`,
+      `inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 0 0 1px rgba(${r},${g},${b},0.18)`
+    );
   }
 
-  const lineA = colorKey === "alice-blue" || colorKey === "bone" ? 0.4 : 0.34;
-  return {
-    border: `1px solid rgba(${r},${g},${b},${lineA})`,
-    backgroundImage: `linear-gradient(
-      165deg,
-      rgba(${r},${g},${b}, 0.13) 0%,
-      rgba(${r},${g},${b}, 0.04) 55%,
-      transparent 100%
-    )`,
-    backgroundColor: "rgba(0, 0, 0, 0.38)",
-    boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.04)",
-  };
+  // Dark / default theme. Tint shows as a clear colored rim + soft outer glow,
+  // over a dark backdrop so the light node text stays readable. The vivid
+  // neon/acid blues get a stronger ring so they read as "modern" accents.
+  const vivid = colorKey === "neon-blue" || colorKey === "acid-blue";
+  const lineA = vivid ? 0.85 : colorKey === "alice-blue" || colorKey === "bone" ? 0.6 : 0.55;
+  const glowA = vivid ? 0.55 : 0.32;
+  const ringA = vivid ? 0.3 : 0.16;
+  return build(
+    `1.5px solid rgba(${r},${g},${b},${lineA})`,
+    "rgba(0, 0, 0, 0.42)",
+    `linear-gradient(165deg, rgba(${r},${g},${b}, ${vivid ? 0.2 : 0.15}) 0%, rgba(${r},${g},${b}, 0.05) 55%, transparent 100%)`,
+    `inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 0 0 1px rgba(${r},${g},${b},${ringA}), 0 0 20px -4px rgba(${r},${g},${b},${glowA})`
+  );
 }
 
 export type VisualFlowPlane = "main" | "grazeland" | "bin" | (string & {});
@@ -185,6 +220,20 @@ export type VisualFlowPlane = "main" | "grazeland" | "bin" | (string & {});
 type SpecialVisualFlowPlane = "grazeland" | "bin";
 
 const SPECIAL_VISUAL_FLOW_PLANES: SpecialVisualFlowPlane[] = ["grazeland", "bin"];
+
+// Short, locale-aware timestamp for the audit (created / updated) display.
+function formatAuditTs(ts: number): string {
+  try {
+    const d = new Date(ts);
+    return (
+      d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) +
+      " " +
+      d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+    );
+  } catch {
+    return "";
+  }
+}
 
 // Theme-adaptive palette for custom sheet tabs. Values are CSS hue tokens so the
 // tab color tracks the active theme; `null` clears back to the default accent.
@@ -835,12 +884,14 @@ function TodoFlowNode(props: NodeProps) {
   const sectorStyle = sectorColor ? sectorNodeChromeStyleForTheme(sectorColor, uiTheme) : undefined;
   const baseBgClass = sectorColor ? "" : "bg-black/35";
   const sapJetBlackSector = uiTheme === "sap" && sectorColor === "jet-black";
+  const tintedSector = !!sectorColor;
+  const darkFillSector = !!sectorColor && DARK_FILL_SECTORS.has(sectorColor);
   const daySectorHandleStyle =
     uiTheme === "day" && sectorColor ? sectorHandleStyleDay(sectorColor) : undefined;
   return (
     <div
       onContextMenu={(e) => e.preventDefault()}
-      className={`shelf-flow-node shelf-top6-card group flex h-full w-full min-h-[4rem] flex-col gap-1.5 ${baseBgClass} px-1 py-2.5 shadow-sm ${statusClass} ${isSelected ? "shelf-flow-node--selected" : ""} ${grazelandPlane ? "shelf-flow-node--grazeland ring-1 ring-amber-200/25" : ""} ${sapJetBlackSector ? "shelf-flow-node--sector-jet-black-sap" : ""}`}
+      className={`shelf-flow-node shelf-top6-card group flex h-full w-full min-h-[4rem] flex-col gap-1.5 ${baseBgClass} px-1 py-2.5 shadow-sm ${statusClass} ${isSelected ? "shelf-flow-node--selected" : ""} ${grazelandPlane ? "shelf-flow-node--grazeland ring-1 ring-amber-200/25" : ""} ${sapJetBlackSector ? "shelf-flow-node--sector-jet-black-sap" : ""} ${tintedSector ? "shelf-flow-node--tinted" : ""} ${darkFillSector ? "shelf-flow-node--darkfill" : ""}`}
       style={sectorStyle}
     >
       {grazelandPlane && onResizeEnd && (
@@ -1409,7 +1460,7 @@ function VisualFlowPanelInner({
           ...prev,
           customPlaneItems: {
             ...(prev.customPlaneItems ?? {}),
-            [plane]: (prev.customPlaneItems?.[plane] ?? []).map((t) => t.id === id ? { ...t, ...updates } : t),
+            [plane]: (prev.customPlaneItems?.[plane] ?? []).map((t) => t.id === id ? applyTodoUpdate(t, updates) : t),
           },
         }));
       }
@@ -2147,11 +2198,11 @@ function VisualFlowPanelInner({
     const pos = { x: flowPos.x - width / 2, y: flowPos.y - height / 2 };
     if (plane === "main") {
       if (!currentPlaneAdd) return;
-      const newTodo: ShelfPillarTodoItem = {
+      const newTodo: ShelfPillarTodoItem = stampNewTodo({
         id: crypto.randomUUID(),
         text: "New task",
         done: false,
-      };
+      });
       currentPlaneAdd(newTodo);
       onUpdateVisualFlow((prev) => ({
         ...prev,
@@ -2163,12 +2214,12 @@ function VisualFlowPanelInner({
       return;
     }
     if (!currentPlaneAdd) return;
-    const newItem: ShelfPillarTodoItem = {
+    const newItem: ShelfPillarTodoItem = stampNewTodo({
       id: crypto.randomUUID(),
       text: "New item",
       done: false,
       grazelandHandleVisibility: createGrazelandHandleVisibility(false),
-    };
+    });
     if (isCustomPlane) {
       // Atomic: item + position in one updater so the writes can't clobber each other.
       onUpdateVisualFlow((prev) => ({
@@ -2328,12 +2379,12 @@ function VisualFlowPanelInner({
         ? { grazelandHandleVisibility: { ...createGrazelandHandleVisibility(false), left1: true } }
         : {};
 
-      const baseTodo: ShelfPillarTodoItem = {
+      const baseTodo: ShelfPillarTodoItem = stampNewTodo({
         id: crypto.randomUUID(),
         text: plane === "main" ? "New sub-task" : "New item",
         done: false,
         ...newNodeHandles,
-      };
+      });
 
       // On special planes, connect source-right (right2) → target-left (left1); handleId values, not slot keys
       const newEdge: VisualFlowEdge = isSpecialPlane
@@ -2916,6 +2967,21 @@ function VisualFlowPanelInner({
     [currentPlaneEdit, onTodoLog, plane, visualFlow.sectorColors]
   );
 
+  const handleBulkSetTint = useCallback(
+    (ids: string[], color: SectorColorKey | undefined) => {
+      if (!currentPlaneEdit || ids.length === 0) return;
+      setNodeMenu(null);
+      hasInteracted.current = true;
+      ids.forEach((id) => {
+        currentPlaneEdit?.(id, { sectorColor: color });
+      });
+      const n = ids.length;
+      const unit = getVisualFlowPlaneCountLabel(plane, n);
+      onTodoLog?.(`${getVisualFlowPlaneLogLabel(plane)}: set tint to ${color ?? "(none)"} for ${n} ${unit}`);
+    },
+    [currentPlaneEdit, onTodoLog, plane]
+  );
+
   const handleToggleFocus = useCallback(
     (id: string) => {
       // Works on every plane — the node menu always targets the current canvas,
@@ -3047,7 +3113,7 @@ function VisualFlowPanelInner({
         customPlaneItems: {
           ...(prev.customPlaneItems ?? {}),
           [planeId]: (prev.customPlaneItems?.[planeId] ?? []).map((t) =>
-            t.id === id ? { ...t, ...updates } : t
+            t.id === id ? applyTodoUpdate(t, updates) : t
           ),
         },
       }));
@@ -3765,6 +3831,45 @@ function VisualFlowPanelInner({
                         </>
                       );
                     })()}
+                    {canEdit && (() => {
+                      const tints = present.map((t) => t.sectorColor ?? "");
+                      const uniformTint = tints.length > 0 && tints.every((s) => s === tints[0]);
+                      const tintSelectValue = uniformTint ? tints[0]! : "__mixed__";
+                      return (
+                        <>
+                          <div className="my-1 border-t border-white/10" />
+                          <div className="px-3 py-2">
+                            <label className="mb-1 block text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
+                              Set tint for all
+                            </label>
+                            <select
+                              value={tintSelectValue}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                const v = e.target.value;
+                                if (v === "__mixed__") return;
+                                handleBulkSetTint(ids, v === "" ? undefined : (v as SectorColorKey));
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-zinc-200 focus:outline-none"
+                              aria-label="Set tint for all selected"
+                            >
+                              {!uniformTint && (
+                                <option value="__mixed__" disabled>
+                                  Mixed — pick tint
+                                </option>
+                              )}
+                              <option value="">No tint</option>
+                              {SECTOR_COLOR_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </>
+                      );
+                    })()}
                     {relocateBlock}
                   </div>
                 );
@@ -4436,6 +4541,14 @@ function VisualFlowPanelInner({
                                         )}
                                         {showTodoDates && todo.date && (
                                           <div className="text-[10px] text-zinc-500">{todo.date}</div>
+                                        )}
+                                        {(todo.createdAt || todo.updatedAt) && (
+                                          <div className="text-[10px] text-zinc-600" title={todo.history?.length ? `${todo.history.length} change${todo.history.length === 1 ? "" : "s"} recorded` : undefined}>
+                                            {todo.createdAt && <>Created {formatAuditTs(todo.createdAt)}</>}
+                                            {todo.updatedAt && todo.updatedAt !== todo.createdAt && (
+                                              <> · Updated {formatAuditTs(todo.updatedAt)}</>
+                                            )}
+                                          </div>
                                         )}
                                         <button
                                           type="button"

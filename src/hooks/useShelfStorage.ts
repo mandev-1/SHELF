@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { isPragueDaylight } from "../utils/sun";
+import { readAuditFields } from "../utils/todoAudit";
 import {
   GRAZELAND_HANDLE_SLOTS,
   createGrazelandHandleVisibility,
@@ -314,6 +315,7 @@ function normalizeShelfTodoItems(input: unknown): ShelfPillarTodoItem[] {
       burning: x.burning ? true : undefined,
       sectorName: typeof x.sectorName === "string" && x.sectorName.trim() ? x.sectorName.trim() : undefined,
       sectorColor: isSectorColorKey(x.sectorColor) ? x.sectorColor : undefined,
+      ...readAuditFields(x),
     }));
 }
 

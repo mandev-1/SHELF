@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { BookmarkTreeNode } from "../types/bookmarks";
 import type { ShelfPillarTodoItem } from "../types/grid";
 import { monogramDataUri } from "../utils/monogram";
+import { applyTodoUpdate, stampNewTodo } from "../utils/todoAudit";
 import { NoteContent } from "./NoteContent";
 
 function faviconUrl(url: string) {
@@ -212,7 +213,7 @@ export function Pillar({
     const text = todoDraft.trim();
     if (!text) return;
     const subtitle = todoSubtitleDraft.trim() || undefined;
-    onSetTodos((prev) => [...prev, { id: crypto.randomUUID(), text, subtitle, done: false }]);
+    onSetTodos((prev) => [...prev, stampNewTodo({ id: crypto.randomUUID(), text, subtitle, done: false })]);
     setTodoDraft("");
     setTodoSubtitleDraft("");
     onTodoLog?.(`added new task with name ${text}`);
@@ -221,7 +222,7 @@ export function Pillar({
   const toggleTodo = (id: string) => {
     const t = todos.find((x) => x.id === id);
     const wasDone = t?.done ?? false;
-    onSetTodos((prev) => prev.map((item) => (item.id === id ? { ...item, done: !item.done } : item)));
+    onSetTodos((prev) => prev.map((item) => (item.id === id ? applyTodoUpdate(item, { done: !item.done }) : item)));
     if (t) onTodoLog?.(wasDone ? `reopened task ${t.text}` : `completed task ${t.text}`);
     if (t && !wasDone) onTaskCompleted?.();
   };
@@ -247,6 +248,10 @@ export function Pillar({
           ...todos.filter((t) => t.focused).map((t) => t.id).filter((id) => !pillarTodoPins.includes(id)),
         ];
     return [...todos].sort((a, b) => {
+      // Burning ("on fire") tasks always float to the very top.
+      const aBurning = !!a.burning;
+      const bBurning = !!b.burning;
+      if (aBurning !== bBurning) return aBurning ? -1 : 1;
       const aPinned = pinSet.has(a.id);
       const bPinned = pinSet.has(b.id);
       if (aPinned && !bPinned) return -1;
@@ -283,7 +288,7 @@ export function Pillar({
         }
       }
       onSetTodos((prev) => {
-        const next = prev.map((t) => (t.id === id ? { ...t, focused: willBeFocused } : t));
+        const next = prev.map((t) => (t.id === id ? applyTodoUpdate(t, { focused: willBeFocused }) : t));
         const focusedIds = next.filter((t) => t.focused).map((t) => t.id).slice(0, MAX_PILLAR_TODO_PINS);
         onSetPillarTodoPins?.(focusedIds);
         return next;
@@ -293,7 +298,7 @@ export function Pillar({
 
   const setTodoUrl = (id: string, url: string | undefined) => {
     const t = todos.find((x) => x.id === id);
-    onSetTodos((prev) => prev.map((item) => (item.id === id ? { ...item, url: url?.trim() || undefined } : item)));
+    onSetTodos((prev) => prev.map((item) => (item.id === id ? applyTodoUpdate(item, { url: url?.trim() || undefined }) : item)));
     if (t) {
       if (url?.trim()) onTodoLog?.(`added URL to task with name ${t.text}. The URL is: ${url.trim()}`);
       else onTodoLog?.(`removed URL from task with name ${t.text}`);
@@ -301,24 +306,24 @@ export function Pillar({
   };
 
   const setTodoNote = (id: string, note: string) => {
-    onSetTodos((prev) => prev.map((item) => (item.id === id ? { ...item, note: note === "" ? undefined : note } : item)));
+    onSetTodos((prev) => prev.map((item) => (item.id === id ? applyTodoUpdate(item, { note: note === "" ? undefined : note }) : item)));
   };
 
   const setTodoSubtitle = (id: string, subtitle: string) => {
     onSetTodos((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, subtitle: subtitle === "" ? undefined : subtitle } : item))
+      prev.map((item) => (item.id === id ? applyTodoUpdate(item, { subtitle: subtitle === "" ? undefined : subtitle }) : item))
     );
   };
 
   const toggleTodoBurning = (id: string) => {
     onSetTodos((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, burning: item.burning ? undefined : true } : item))
+      prev.map((item) => (item.id === id ? applyTodoUpdate(item, { burning: item.burning ? undefined : true }) : item))
     );
   };
 
   const setTodoTag = (id: string, tag: string) => {
     onSetTodos((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, tag: tag.trim() === "" ? undefined : tag.trim() } : item))
+      prev.map((item) => (item.id === id ? applyTodoUpdate(item, { tag: tag.trim() === "" ? undefined : tag.trim() }) : item))
     );
   };
 
