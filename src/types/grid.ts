@@ -198,6 +198,10 @@ export interface VisualFlowData {
   sectorColors?: Record<string, SectorColorKey>;
   /** User-created custom planes beyond the three built-ins */
   customPlanes?: { id: string; name: string; color?: string }[];
+  /** Focused-task cards expanded in the focus drawer (default collapsed). */
+  focusExpandedIds?: string[];
+  /** Plane groups collapsed in the focus drawer. */
+  focusCollapsedGroups?: string[];
   customPlaneItems?: Record<string, ShelfPillarTodoItem[]>;
   customPlaneNodePositions?: Record<string, Record<string, { x: number; y: number }>>;
   customPlaneEdges?: Record<string, VisualFlowEdge[]>;

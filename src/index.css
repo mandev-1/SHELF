@@ -1974,6 +1974,21 @@ body {
   transition: transform 0.3s var(--shelf-ease-silk);
 }
 
+/* Focus drawer: visible pull-handle tab that rides the drawer's left edge */
+.shelf-flow-focus-handle {
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 66px;
+  border-radius: 12px 0 0 12px;
+  border: 1px solid var(--line-strong); border-right: none;
+  background: var(--surface-2); color: var(--dim);
+  box-shadow: -4px 0 18px rgba(0,0,0,0.18);
+  cursor: pointer;
+  transition: right 0.3s var(--shelf-ease-silk), width 0.16s, background-color 0.16s, color 0.16s;
+}
+.shelf-flow-focus-handle:hover { width: 26px; color: var(--accent-bright); background: var(--surface-3); }
+[data-theme="day"] .shelf-flow-focus-handle:hover,
+[data-theme="sap"] .shelf-flow-focus-handle:hover { color: var(--accent-deep); }
+
 /* View slide transition (swipe between shelf / dashboard / flow) — silky smooth */
 .shelf-view-slide.shelf-view-slide--from-left {
   animation: shelf-view-slide-in-left 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -3724,6 +3739,19 @@ body {
   background: color-mix(in srgb, var(--plane-hue) 10%, var(--surface-2));
 }
 .shelf-vf-sheet-tab--custom[data-colored].on::before { background: var(--plane-hue); }
+
+/* Drag-to-reorder custom sheet tabs. */
+.shelf-vf-sheet-tab--custom[draggable="true"] { cursor: grab; }
+.shelf-vf-sheet-tab--custom[data-dragging] { opacity: 0.4; cursor: grabbing; }
+/* vertical drop indicator on the side the tab will land */
+.shelf-vf-sheet-tab--custom[data-drop-before]::after,
+.shelf-vf-sheet-tab--custom[data-drop-after]::after {
+  content: ""; position: absolute; top: 4px; bottom: 4px;
+  width: 3px; border-radius: 3px; background: var(--accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.shelf-vf-sheet-tab--custom[data-drop-before]::after { left: -4px; }
+.shelf-vf-sheet-tab--custom[data-drop-after]::after { right: -4px; }
 
 /* Swatch palette shown inline while renaming a custom sheet tab.
    Inline (not a popover) so the `.shelf-vf-sheets` scroll container — whose

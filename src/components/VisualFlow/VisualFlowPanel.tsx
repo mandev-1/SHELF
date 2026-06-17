@@ -1302,9 +1302,14 @@ function VisualFlowPanelInner({
   const [paneMenu, setPaneMenu] = useState<{ x: number; y: number } | null>(null);
   const [sectorManagerOpen, setSectorManagerOpen] = useState(false);
   const [editNodeId, setEditNodeId] = useState<string | null>(null);
+  // Which focus-card note is being edited inline (todo id), if any.
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerFrozen, setDrawerFrozen] = useState(false);
   const [drawerPinned, setDrawerPinned] = useState(false);
+  // On screens wider than 1920px the focus drawer is permanently docked open.
+  const [dockedAlways, setDockedAlways] = useState(false);
+  const pendingPanRef = useRef<string | null>(null);
   const [drawerMenu, setDrawerMenu] = useState<{ x: number; y: number } | null>(null);
   const [exportToast, setExportToast] = useState<string | null>(null);
   const exportToastTimerRef = useRef<number | null>(null);
@@ -1313,6 +1318,8 @@ function VisualFlowPanelInner({
   const [deletePlanePending, setDeletePlanePending] = useState<string | null>(null);
   const [renamingPlaneId, setRenamingPlaneId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [draggingPlaneId, setDraggingPlaneId] = useState<string | null>(null);
+  const [planeDropHint, setPlaneDropHint] = useState<{ id: string; place: "before" | "after" } | null>(null);
 
   // Undo stack for visualFlow snapshots. Covers position/edge changes on every
   // plane, custom-plane item add/delete/edit, sector colors, plane registry
@@ -2270,6 +2277,23 @@ function VisualFlowPanelInner({
     }));
   }, [onUpdateVisualFlow]);
 
+  // Reorder a custom plane relative to a target plane. Only touches the
+  // customPlanes array — the fixed Main/Grazeland/Bin tabs are never involved.
+  const commitReorderPlane = useCallback((draggedId: string, targetId: string, place: "before" | "after") => {
+    if (draggedId === targetId) return;
+    onUpdateVisualFlow((prev) => {
+      const planes = [...(prev.customPlanes ?? [])];
+      const from = planes.findIndex((p) => p.id === draggedId);
+      if (from === -1) return prev;
+      const [moved] = planes.splice(from, 1);
+      let to = planes.findIndex((p) => p.id === targetId);
+      if (to === -1) return prev;
+      if (place === "after") to += 1;
+      planes.splice(to, 0, moved);
+      return { ...prev, customPlanes: planes };
+    });
+  }, [onUpdateVisualFlow]);
+
   // Create a new sub-task already connected to a parent node.
   // Plane-aware: writes to the right positions map + edges list for whichever
   // plane the user is currently on.
@@ -2911,18 +2935,19 @@ function VisualFlowPanelInner({
   );
 
   const scheduleDrawerClose = useCallback(() => {
-    if (drawerFrozen || drawerMenu) return;
+    if (drawerFrozen || drawerMenu || dockedAlways) return;
     const now = Date.now();
     if (stickOutUntilRef.current && now < stickOutUntilRef.current) return;
     if (drawerCloseTimeoutRef.current !== null) window.clearTimeout(drawerCloseTimeoutRef.current);
-    const delay = drawerPinned ? 5000 : 200;
+    // Gentler linger so the drawer doesn't snap shut on a small mouse slip.
+    const delay = drawerPinned ? 5000 : 450;
     drawerCloseTimeoutRef.current = window.setTimeout(() => {
       setDrawerOpen(false);
       setDrawerPinned(false);
       stickOutUntilRef.current = null;
       drawerCloseTimeoutRef.current = null;
     }, delay);
-  }, [drawerPinned, drawerFrozen, drawerMenu]);
+  }, [drawerPinned, drawerFrozen, drawerMenu, dockedAlways]);
 
   const cancelDrawerClose = useCallback(() => {
     if (drawerCloseTimeoutRef.current !== null) {
@@ -2977,6 +3002,142 @@ function VisualFlowPanelInner({
       if (drawerCloseTimeoutRef.current !== null) window.clearTimeout(drawerCloseTimeoutRef.current);
     };
   }, []);
+
+  // Dock the focus drawer permanently on wide screens (> 1920px) so it lives in
+  // the spare right-hand space instead of behind the hover handle.
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(min-width: 1921px)");
+    const update = () => setDockedAlways(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // After a cross-plane jump, pan to the target node once it has mounted on the
+  // newly-active plane. Guarded by the ref so it only fires for a pending jump.
+  useEffect(() => {
+    if (!pendingPanRef.current) return;
+    const id = pendingPanRef.current;
+    const raf = requestAnimationFrame(() => {
+      if (getNodes().some((n) => n.id === id)) {
+        panToNode(id);
+        pendingPanRef.current = null;
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [nodes, plane, getNodes, panToNode]);
+
+  const drawerVisible = drawerOpen || dockedAlways;
+
+  // ---- Focus drawer: cross-plane task helpers ----
+  // Edit / delete an item on any plane (not just the active one).
+  const editItemInPlane = useCallback(
+    (planeId: VisualFlowPlane, id: string, updates: Partial<ShelfPillarTodoItem>) => {
+      if (planeId === "main") return onEditTodo?.(id, updates);
+      if (planeId === "grazeland") return onEditGrazelandItem?.(id, updates);
+      if (planeId === "bin") return onEditBinItem?.(id, updates);
+      onUpdateVisualFlow((prev) => ({
+        ...prev,
+        customPlaneItems: {
+          ...(prev.customPlaneItems ?? {}),
+          [planeId]: (prev.customPlaneItems?.[planeId] ?? []).map((t) =>
+            t.id === id ? { ...t, ...updates } : t
+          ),
+        },
+      }));
+    },
+    [onEditTodo, onEditGrazelandItem, onEditBinItem, onUpdateVisualFlow]
+  );
+
+  const deleteItemInPlane = useCallback(
+    (planeId: VisualFlowPlane, id: string) => {
+      if (planeId === "main") return onDeleteTodo?.(id);
+      if (planeId === "grazeland") return onDeleteGrazelandItem?.(id);
+      if (planeId === "bin") return onDeleteBinItem?.(id);
+      onUpdateVisualFlow((prev) => ({
+        ...prev,
+        customPlaneItems: {
+          ...(prev.customPlaneItems ?? {}),
+          [planeId]: (prev.customPlaneItems?.[planeId] ?? []).filter((t) => t.id !== id),
+        },
+      }));
+    },
+    [onDeleteTodo, onDeleteGrazelandItem, onDeleteBinItem, onUpdateVisualFlow]
+  );
+
+  // Complete a focused task. On the active plane reuse the animated removal;
+  // off-plane just remove it (no mounted node to animate) and log it.
+  const completeFocusedTask = useCallback(
+    (planeId: VisualFlowPlane, id: string, text: string) => {
+      if (planeId === plane) {
+        handleMarkCompleted(id);
+        return;
+      }
+      deleteItemInPlane(planeId, id);
+      onTaskCompleted?.();
+      onTodoLog?.(`${getVisualFlowPlaneLogLabel(planeId)}: completed ${getVisualFlowPlaneCountLabel(planeId, 1)} ${text}`);
+    },
+    [plane, handleMarkCompleted, deleteItemInPlane, onTaskCompleted, onTodoLog]
+  );
+
+  // Switch to a task's plane (if needed) and center the canvas on its node.
+  const jumpToTask = useCallback(
+    (planeId: VisualFlowPlane, id: string) => {
+      if (planeId === plane) {
+        panToNode(id);
+        return;
+      }
+      pendingPanRef.current = id;
+      switchPlane(planeId);
+    },
+    [plane, panToNode, switchPlane]
+  );
+
+  const toggleFocusExpanded = useCallback(
+    (id: string) => {
+      onUpdateVisualFlow((prev) => {
+        const set = new Set(prev.focusExpandedIds ?? []);
+        if (set.has(id)) set.delete(id);
+        else set.add(id);
+        return { ...prev, focusExpandedIds: Array.from(set) };
+      });
+    },
+    [onUpdateVisualFlow]
+  );
+
+  const toggleFocusGroup = useCallback(
+    (planeId: string) => {
+      onUpdateVisualFlow((prev) => {
+        const set = new Set(prev.focusCollapsedGroups ?? []);
+        if (set.has(planeId)) set.delete(planeId);
+        else set.add(planeId);
+        return { ...prev, focusCollapsedGroups: Array.from(set) };
+      });
+    },
+    [onUpdateVisualFlow]
+  );
+
+  // Focused tasks aggregated across every plane, grouped by plane (empty groups dropped).
+  const focusGroups = useMemo(() => {
+    const groups: { id: VisualFlowPlane; label: string; color?: string; items: ShelfPillarTodoItem[] }[] = [
+      { id: "main", label: "Main canvas", color: undefined, items: todos },
+      { id: "grazeland", label: "Grazeland", color: "var(--hue-orange)", items: grazelandItems },
+      { id: "bin", label: "Bin", color: "var(--hue-blue)", items: binItems },
+      ...(visualFlow.customPlanes ?? []).map((cp) => ({
+        id: cp.id as VisualFlowPlane,
+        label: cp.name,
+        color: cp.color,
+        items: visualFlow.customPlaneItems?.[cp.id] ?? [],
+      })),
+    ];
+    return groups
+      .map((g) => ({ ...g, items: g.items.filter((t) => t.focused) }))
+      .filter((g) => g.items.length > 0);
+  }, [todos, grazelandItems, binItems, visualFlow.customPlanes, visualFlow.customPlaneItems]);
+
+  const focusExpandedSet = useMemo(() => new Set(visualFlow.focusExpandedIds ?? []), [visualFlow.focusExpandedIds]);
+  const focusCollapsedGroupSet = useMemo(() => new Set(visualFlow.focusCollapsedGroups ?? []), [visualFlow.focusCollapsedGroups]);
 
   const containerClass = fullPage
     ? "min-w-0 rounded-2xl border border-white/10 bg-zinc-900/50 flex flex-col h-[calc(100vh-9rem)] overflow-hidden"
@@ -3127,13 +3288,13 @@ function VisualFlowPanelInner({
         <div className="flex-1 min-h-0 px-6 pt-6 pb-0 overflow-x-hidden flex flex-col">
           <section
             className="flex flex-col flex-1 min-h-0 min-w-0 shelf-flow-canvas-transition"
-            style={{ marginRight: drawerOpen ? FOCUS_DRAWER_CARD_MARGIN : 0 }}
+            style={{ marginRight: drawerVisible ? FOCUS_DRAWER_CARD_MARGIN : 0 }}
           >
             <div
               className={`relative flex-1 min-h-[280px] rounded-xl border visual-flow-canvas shelf-flow-canvas-transition${
                 plane === "grazeland" ? " visual-flow-canvas--graze" : plane === "bin" ? " visual-flow-canvas--bin" : ""
               } ${plane === "main" ? "border-white/10" : planeMeta?.canvasClass ?? "border-white/10"}`}
-              style={{ transform: drawerOpen ? `translateX(${FOCUS_DRAWER_CANVAS_TRANSLATE})` : "translateX(0)" }}
+              style={{ transform: drawerVisible ? `translateX(${FOCUS_DRAWER_CANVAS_TRANSLATE})` : "translateX(0)" }}
             >
               <ReactFlow
                 nodes={nodes}
@@ -3238,13 +3399,49 @@ function VisualFlowPanelInner({
                   role="tab"
                   aria-selected={plane === cp.id}
                   data-colored={cp.color ? "" : undefined}
+                  data-dragging={draggingPlaneId === cp.id ? "" : undefined}
+                  data-drop-before={planeDropHint?.id === cp.id && planeDropHint.place === "before" ? "" : undefined}
+                  data-drop-after={planeDropHint?.id === cp.id && planeDropHint.place === "after" ? "" : undefined}
                   style={cp.color ? ({ "--plane-hue": cp.color } as React.CSSProperties) : undefined}
                   className={`shelf-vf-sheet-tab shelf-vf-sheet-tab--custom${plane === cp.id ? " on" : ""}`}
+                  draggable={renamingPlaneId !== cp.id}
                   onClick={() => { if (renamingPlaneId !== cp.id) switchPlane(cp.id); }}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     setRenamingPlaneId(cp.id);
                     setRenameValue(cp.name);
+                  }}
+                  onDragStart={(e) => {
+                    setDraggingPlaneId(cp.id);
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("application/x-shelf-plane", cp.id);
+                  }}
+                  onDragOver={(e) => {
+                    if (!draggingPlaneId || draggingPlaneId === cp.id) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                    const place: "before" | "after" = e.clientX < rect.left + rect.width / 2 ? "before" : "after";
+                    setPlaneDropHint({ id: cp.id, place });
+                  }}
+                  onDragLeave={(e) => {
+                    const related = e.relatedTarget as globalThis.Node | null;
+                    if (related && e.currentTarget.contains(related)) return;
+                    setPlaneDropHint((h) => (h?.id === cp.id ? null : h));
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggingPlaneId && draggingPlaneId !== cp.id) {
+                      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                      const place: "before" | "after" = e.clientX < rect.left + rect.width / 2 ? "before" : "after";
+                      commitReorderPlane(draggingPlaneId, cp.id, place);
+                    }
+                    setDraggingPlaneId(null);
+                    setPlaneDropHint(null);
+                  }}
+                  onDragEnd={() => {
+                    setDraggingPlaneId(null);
+                    setPlaneDropHint(null);
                   }}
                 >
                   {cp.color && <span className="shelf-vf-sheet-dot" aria-hidden />}
@@ -4003,19 +4200,41 @@ function VisualFlowPanelInner({
 
           </section>
 
-          {/* Hover trigger: thin strip on the right edge to summon the drawer */}
-          <div
-            className="fixed right-0 top-0 bottom-0 w-4 z-[100] cursor-default"
-            style={{ marginTop: fullPage ? "6rem" : undefined }}
-            onMouseEnter={handleDrawerTriggerEnter}
-            onMouseLeave={handleDrawerTriggerLeave}
-            aria-label="Open focus drawer"
-          />
+          {/* Hover trigger + pull-handle: only on narrower screens. On wide
+              screens the drawer is permanently docked, so neither is needed. */}
+          {!dockedAlways && (
+            <>
+              <div
+                className="fixed right-0 top-0 bottom-0 w-5 z-[100] cursor-default"
+                style={{ marginTop: fullPage ? "6rem" : undefined }}
+                onMouseEnter={handleDrawerTriggerEnter}
+                onMouseLeave={handleDrawerTriggerLeave}
+                aria-hidden="true"
+              />
+              <button
+                type="button"
+                className="shelf-flow-focus-handle fixed top-1/2 z-[101] -translate-y-1/2"
+                style={{ right: drawerVisible ? FOCUS_DRAWER_WIDTH : 0, marginTop: fullPage ? "3rem" : undefined }}
+                onMouseEnter={handleDrawerTriggerEnter}
+                onMouseLeave={handleDrawerTriggerLeave}
+                onClick={handleDrawerToggleFreeze}
+                aria-label={drawerFrozen ? "Unpin focused tasks" : "Open focused tasks"}
+                title="Focused tasks"
+              >
+                <svg
+                  className={`h-4 w-4 transition-transform ${drawerVisible ? "rotate-180" : ""}`}
+                  fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 6l-6 6 6 6" />
+                </svg>
+              </button>
+            </>
+          )}
 
           {/* Focus drawer: slides in from right when hovered — matches settings panel design */}
           <aside
             className={`shelf-flow-focus-drawer fixed right-0 top-0 bottom-0 z-[99] flex flex-col overflow-hidden rounded-l-2xl border border-emerald-400/15 border-r-0 bg-black/92 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)] ${
-              drawerOpen ? "translate-x-0" : "translate-x-full"
+              drawerVisible ? "translate-x-0" : "translate-x-full"
             }`}
             style={{ marginTop: fullPage ? "6rem" : undefined, width: FOCUS_DRAWER_WIDTH }}
             onMouseEnter={handleDrawerEnter}
@@ -4028,110 +4247,227 @@ function VisualFlowPanelInner({
           >
             <div className="flex flex-col gap-2 min-h-0 flex-1 overflow-y-auto p-2">
               <div className="rounded-xl border border-white/10 bg-white/5 p-2">
-                <div className="mb-1.5 text-xs font-medium text-emerald-200">Focused tasks</div>
-                {(() => {
-                  const focusedTodos = todos.filter((t) => t.focused);
-                  if (focusedTodos.length === 0) {
-                    return (
-                      <p className="text-[11px] text-zinc-500">
-                        Right-click a task and select <span className="text-zinc-400">Focused</span> to pin it here.
-                      </p>
-                    );
-                  }
-                  return (
-                    <div className="flex flex-col gap-2">
-                      {focusedTodos.map((todo) => (
-                        <div
-                          key={todo.id}
-                          className="shelf-flow-focus-todo-card group/card rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 relative"
-                        >
-                          {todo.url && (
-                            <a
-                              href={todo.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="absolute top-2 right-2 p-1 rounded opacity-0 group-hover/card:opacity-60 hover:!opacity-100 transition-opacity text-zinc-500 hover:text-emerald-400 focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-emerald-400/40"
-                              aria-label="Open link"
-                              title={todo.url}
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-xs font-medium text-emerald-200">Focused tasks</span>
+                  {focusGroups.length > 0 && (
+                    <span className="text-[10px] text-zinc-500">
+                      {focusGroups.reduce((n, g) => n + g.items.length, 0)}
+                    </span>
+                  )}
+                </div>
+                {focusGroups.length === 0 ? (
+                  <p className="text-[11px] text-zinc-500">
+                    Right-click a task and select <span className="text-zinc-400">Focused</span> to pin it here.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {focusGroups.map((group) => {
+                      const groupCollapsed = focusCollapsedGroupSet.has(group.id);
+                      return (
+                        <div key={group.id} className="flex flex-col gap-1.5">
+                          {/* Plane group header — collapsible, color-dotted */}
+                          <button
+                            type="button"
+                            onClick={() => toggleFocusGroup(group.id)}
+                            className="flex items-center gap-1.5 px-0.5 text-left"
+                            aria-expanded={!groupCollapsed}
+                          >
+                            <svg
+                              className={`h-3 w-3 shrink-0 text-zinc-500 transition-transform ${groupCollapsed ? "" : "rotate-90"}`}
+                              fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" aria-hidden="true"
                             >
-                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                              </svg>
-                            </a>
-                          )}
-                          <div className="flex gap-2 items-start">
-                            {onEditTodo && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  todo.done ? onEditTodo(todo.id, { done: false }) : handleMarkCompleted(todo.id)
-                                }
-                                className="shelf-note-checkbox shelf-note-checkbox--interactive mt-0.5 shrink-0 h-4 w-4 rounded border border-zinc-500/50 bg-black/10 flex items-center justify-center hover:bg-emerald-500/15 hover:border-emerald-400/30 focus:outline-none focus:ring-1 focus:ring-emerald-400/25"
-                                aria-label={todo.done ? "Uncheck" : "Check"}
-                              >
-                                {todo.done && (
-                                  <svg className="h-2.5 w-2.5 text-emerald-500/80" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                  </svg>
-                                )}
-                              </button>
-                            )}
-                            <div
-                              className={`font-medium leading-snug text-emerald-100 break-words whitespace-pre-wrap text-sm flex-1 min-w-0 ${todo.url ? "pr-5" : ""} ${
-                                todo.done ? "line-through opacity-70" : ""
-                              }`}
-                            >
-                              {linkifyText(
-                                todo.subtitle ? `${todo.text} · ${todo.subtitle}` : todo.text
-                              )}
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+                            </svg>
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: group.color || "var(--accent)" }} aria-hidden="true" />
+                            <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-zinc-300">{group.label}</span>
+                            <span className="text-[10px] text-zinc-500">{group.items.length}</span>
+                          </button>
+                          {!groupCollapsed && (
+                            <div className="flex flex-col gap-2">
+                              {group.items.map((todo) => {
+                                const expanded = focusExpandedSet.has(todo.id);
+                                return (
+                                  <div
+                                    key={todo.id}
+                                    className="shelf-flow-focus-todo-card group/card rounded-lg border border-white/10 bg-black/25 px-2.5 py-2"
+                                  >
+                                    {/* Collapsed row: checkbox + title + expand chevron */}
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (todo.done) editItemInPlane(group.id, todo.id, { done: false });
+                                          else completeFocusedTask(group.id, todo.id, todo.text);
+                                        }}
+                                        className="shelf-note-checkbox shelf-note-checkbox--interactive shrink-0 h-4 w-4 rounded border border-zinc-500/50 bg-black/10 flex items-center justify-center hover:bg-emerald-500/15 hover:border-emerald-400/30 focus:outline-none focus:ring-1 focus:ring-emerald-400/25"
+                                        aria-label={todo.done ? "Uncheck" : "Complete"}
+                                      >
+                                        {todo.done && (
+                                          <svg className="h-2.5 w-2.5 text-emerald-500/80" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                          </svg>
+                                        )}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => jumpToTask(group.id, todo.id)}
+                                        title="Jump to node on canvas"
+                                        className={`min-w-0 flex-1 text-left text-sm font-medium text-emerald-100 hover:text-emerald-50 ${
+                                          todo.done ? "line-through opacity-70" : ""
+                                        } ${expanded ? "whitespace-pre-wrap break-words leading-snug" : "truncate"}`}
+                                      >
+                                        {todo.subtitle ? `${todo.text} · ${todo.subtitle}` : todo.text}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleFocusExpanded(todo.id);
+                                        }}
+                                        className="shrink-0 rounded p-0.5 text-zinc-500 hover:bg-white/10 hover:text-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-400/25"
+                                        aria-label={expanded ? "Collapse task" : "Expand task"}
+                                        aria-expanded={expanded}
+                                      >
+                                        <svg
+                                          className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`}
+                                          fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true"
+                                        >
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                    {/* Expanded detail */}
+                                    {expanded && (
+                                      <div className="mt-1.5 flex flex-col gap-1 pl-6">
+                                        {todo.url && (
+                                          <a
+                                            href={todo.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-[11px] text-zinc-400 hover:text-emerald-400 truncate"
+                                            title={todo.url}
+                                          >
+                                            <svg className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                            </svg>
+                                            <span className="truncate">{todo.url}</span>
+                                          </a>
+                                        )}
+                                        {editingNoteId === todo.id ? (
+                                          <textarea
+                                            autoFocus
+                                            defaultValue={todo.note ?? ""}
+                                            rows={3}
+                                            placeholder="Note…"
+                                            onClick={(e) => e.stopPropagation()}
+                                            onBlur={(e) => {
+                                              editItemInPlane(group.id, todo.id, { note: e.target.value });
+                                              setEditingNoteId(null);
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Escape") {
+                                                e.preventDefault();
+                                                setEditingNoteId(null);
+                                              } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                                                e.preventDefault();
+                                                editItemInPlane(group.id, todo.id, { note: (e.target as HTMLTextAreaElement).value });
+                                                setEditingNoteId(null);
+                                              }
+                                            }}
+                                            className="w-full resize-y rounded-md border border-emerald-400/30 bg-black/30 px-2 py-1.5 text-[11px] leading-relaxed text-zinc-200 outline-none focus:border-emerald-400/60"
+                                          />
+                                        ) : todo.note ? (
+                                          <div
+                                            className="cursor-text rounded text-[11px] leading-relaxed text-zinc-400 hover:bg-white/5"
+                                            title="Click to edit note (Esc cancels, ⌘/Ctrl+Enter saves)"
+                                            onClick={(e) => {
+                                              // let links and in-note checkboxes work; edit on plain-text clicks
+                                              if ((e.target as HTMLElement).closest("a,button")) return;
+                                              setEditingNoteId(todo.id);
+                                            }}
+                                          >
+                                            <NoteContent
+                                              content={todo.note}
+                                              onNoteChange={(newNote) => editItemInPlane(group.id, todo.id, { note: newNote })}
+                                              linkify
+                                            />
+                                          </div>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            className="w-fit text-left text-[11px] text-zinc-500 hover:text-zinc-300"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setEditingNoteId(todo.id);
+                                            }}
+                                          >
+                                            + Add note…
+                                          </button>
+                                        )}
+                                        {todo.tag && (
+                                          <span className={`inline-block w-fit rounded px-1.5 py-0.5 text-[9px] font-medium ${tagColorClasses(todo.tag)}`}>
+                                            {todo.tag}
+                                          </span>
+                                        )}
+                                        {showTodoDates && todo.date && (
+                                          <div className="text-[10px] text-zinc-500">{todo.date}</div>
+                                        )}
+                                        <button
+                                          type="button"
+                                          className="mt-1 w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+                                          onClick={() => {
+                                            if (group.id !== plane) jumpToTask(group.id, todo.id);
+                                            else setEditNodeId(todo.id);
+                                          }}
+                                        >
+                                          {group.id !== plane ? "Open on canvas…" : "Edit…"}
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
-                          </div>
-                          {todo.note && (
-                            <div className="mt-1 text-[11px] leading-relaxed text-zinc-400">
-                              <NoteContent
-                                content={todo.note}
-                                onNoteChange={onEditTodo ? (newNote) => onEditTodo(todo.id, { note: newNote }) : undefined}
-                                linkify
-                              />
-                            </div>
-                          )}
-                          {todo.tag && (
-                            <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[9px] font-medium ${tagColorClasses(todo.tag)}`}>
-                              {todo.tag}
-                            </span>
-                          )}
-                          {showTodoDates && todo.date && (
-                            <div className="mt-1 text-[10px] text-zinc-500">{todo.date}</div>
-                          )}
-                          {onEditTodo && (
-                            <button
-                              type="button"
-                              className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-[11px] text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
-                              onClick={() => setEditNodeId(todo.id)}
-                            >
-                              Edit…
-                            </button>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  );
-                })()}
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
-            <div className="shrink-0 flex justify-start p-2 pt-0">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDrawerClose();
-                }}
-                className="rounded-lg px-2 py-1.5 text-[11px] text-zinc-500 hover:bg-white/10 hover:text-zinc-300"
-                aria-label="Close drawer"
-              >
-                ✕
-              </button>
-            </div>
+            {!dockedAlways && (
+              <div className="shrink-0 flex items-center justify-between p-2 pt-0">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDrawerToggleFreeze();
+                  }}
+                  className={`rounded-lg px-2 py-1.5 text-[11px] transition-colors ${
+                    drawerFrozen
+                      ? "bg-emerald-400/15 text-emerald-200 hover:bg-emerald-400/25"
+                      : "text-zinc-500 hover:bg-white/10 hover:text-zinc-300"
+                  }`}
+                  aria-pressed={drawerFrozen}
+                  title={drawerFrozen ? "Unpin (let it auto-close)" : "Pin open"}
+                >
+                  {drawerFrozen ? "📌 Pinned" : "📌 Pin open"}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDrawerClose();
+                  }}
+                  className="rounded-lg px-2 py-1.5 text-[11px] text-zinc-500 hover:bg-white/10 hover:text-zinc-300"
+                  aria-label="Close drawer"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
           </aside>
 
           {drawerMenu && (
