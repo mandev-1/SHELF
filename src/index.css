@@ -1969,9 +1969,48 @@ body {
   transition: margin-right 0.3s var(--shelf-ease-silk), transform 0.3s var(--shelf-ease-silk);
 }
 
-/* Focus drawer: slide in/out with silky ease */
+/* Focus drawer: slide in/out with silky ease.
+   Liquid matte see-through glass: translucent surface + heavy frost blur, a
+   soft top sheen for the "liquid" feel, and a deep ambient shadow. Theme-aware
+   via --surface so it reads right on day / sap / dark. */
 .shelf-flow-focus-drawer {
   transition: transform 0.3s var(--shelf-ease-silk);
+  background:
+    linear-gradient(155deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03) 38%, rgba(255,255,255,0) 68%),
+    color-mix(in srgb, var(--surface) 45%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  backdrop-filter: blur(22px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    0 26px 80px rgba(0,0,0,0.48),
+    0 0 70px rgba(16,185,129,0.18),
+    0 0 130px rgba(59,130,246,0.12);
+}
+[data-theme="day"] .shelf-flow-focus-drawer,
+[data-theme="sap"] .shelf-flow-focus-drawer {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    0 26px 80px rgba(15,23,42,0.20),
+    0 0 70px rgba(16,185,129,0.12),
+    0 0 130px rgba(59,130,246,0.10);
+}
+
+/* Docked (wide-screen) canvas: lift it as a floating card with an outer shadow
+   biased to the left, so it reads as raised next to the docked drawer — the
+   same depth the hover "move" gives on smaller screens. */
+.visual-flow-canvas--docked {
+  box-shadow:
+    inset 0 1px 1px rgba(0,0,0,0.5),
+    inset 0 14px 34px -18px rgba(0,0,0,0.7),
+    inset 0 0 0 1px rgba(255,255,255,0.04),
+    -16px 10px 44px -24px rgba(0,0,0,0.55);
+}
+[data-theme="day"] .visual-flow-canvas--docked,
+[data-theme="sap"] .visual-flow-canvas--docked {
+  box-shadow:
+    inset 0 2px 6px rgba(0,0,0,0.08),
+    inset 0 0 0 1px rgba(0,0,0,0.05),
+    -16px 10px 44px -26px rgba(15,23,42,0.28);
 }
 
 /* Focus drawer: visible pull-handle tab that rides the drawer's left edge */

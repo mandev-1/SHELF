@@ -1004,9 +1004,9 @@ const PARALLEL_OFFSET = 4;
 const ARROW_COUNT = 4;
 
 /** Focus drawer layout — adjust these to tune the open animation */
-const FOCUS_DRAWER_WIDTH = "18rem";           /* Width of the drawer panel */
-const FOCUS_DRAWER_CARD_MARGIN = "6rem";     /* Margin-right on the card (section) containing the canvas */
-const FOCUS_DRAWER_CANVAS_TRANSLATE = "-12rem"; /* translateX on the canvas — how far it slides left */
+const FOCUS_DRAWER_WIDTH = "20.5rem";         /* Width of the drawer panel */
+const FOCUS_DRAWER_CARD_MARGIN = "7rem";     /* Margin-right on the card (section) containing the canvas */
+const FOCUS_DRAWER_CANVAS_TRANSLATE = "-13rem"; /* translateX on the canvas — how far it slides left */
 const ARROW_LENGTH = 8;
 const ARROW_WIDTH = 5
 
@@ -1304,6 +1304,8 @@ function VisualFlowPanelInner({
   const [editNodeId, setEditNodeId] = useState<string | null>(null);
   // Which focus-card note is being edited inline (todo id), if any.
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  // Right-click menu for a focused-task card in the drawer.
+  const [focusItemMenu, setFocusItemMenu] = useState<{ planeId: VisualFlowPlane; id: string; text: string; x: number; y: number } | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerFrozen, setDrawerFrozen] = useState(false);
   const [drawerPinned, setDrawerPinned] = useState(false);
@@ -2916,12 +2918,15 @@ function VisualFlowPanelInner({
 
   const handleToggleFocus = useCallback(
     (id: string) => {
-      if (plane !== "main") return;
-      const todo = todos.find((t) => t.id === id);
+      // Works on every plane — the node menu always targets the current canvas,
+      // so currentPlaneEdit writes focus to the right items array (which is
+      // persisted and included in the backup export).
+      const todo = canvasItems.find((t) => t.id === id);
       if (!todo) return;
       const nextFocused = !todo.focused;
-      onEditTodo?.(id, { focused: nextFocused });
-      if (!focusDesynced && setPillarTodoPins) {
+      currentPlaneEdit?.(id, { focused: nextFocused });
+      // Pillar pins mirror only the main canvas' focused todos.
+      if (plane === "main" && !focusDesynced && setPillarTodoPins) {
         const nextFocusedIds = todos
           .map((t) => (t.id === id ? { ...t, focused: nextFocused } : t))
           .filter((t) => t.focused)
@@ -2931,7 +2936,7 @@ function VisualFlowPanelInner({
       }
       setNodeMenu(null);
     },
-    [onEditTodo, todos, focusDesynced, setPillarTodoPins]
+    [canvasItems, currentPlaneEdit, plane, todos, focusDesynced, setPillarTodoPins]
   );
 
   const scheduleDrawerClose = useCallback(() => {
@@ -3154,7 +3159,10 @@ function VisualFlowPanelInner({
   );
 
   return (
-    <div className={`shelf-error-dashboard ${containerClass}`}>
+    <div
+      className={`shelf-error-dashboard ${containerClass}`}
+      style={{ paddingRight: dockedAlways ? "21.75rem" : undefined }}
+    >
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-black/20 px-4 py-3">
         <div className="flex items-center gap-3 min-w-0">
           <h1 className="text-base font-semibold tracking-tight text-zinc-100">
@@ -3288,13 +3296,13 @@ function VisualFlowPanelInner({
         <div className="flex-1 min-h-0 px-6 pt-6 pb-0 overflow-x-hidden flex flex-col">
           <section
             className="flex flex-col flex-1 min-h-0 min-w-0 shelf-flow-canvas-transition"
-            style={{ marginRight: drawerVisible ? FOCUS_DRAWER_CARD_MARGIN : 0 }}
+            style={{ marginRight: drawerOpen && !dockedAlways ? FOCUS_DRAWER_CARD_MARGIN : 0 }}
           >
             <div
               className={`relative flex-1 min-h-[280px] rounded-xl border visual-flow-canvas shelf-flow-canvas-transition${
                 plane === "grazeland" ? " visual-flow-canvas--graze" : plane === "bin" ? " visual-flow-canvas--bin" : ""
-              } ${plane === "main" ? "border-white/10" : planeMeta?.canvasClass ?? "border-white/10"}`}
-              style={{ transform: drawerVisible ? `translateX(${FOCUS_DRAWER_CANVAS_TRANSLATE})` : "translateX(0)" }}
+              }${dockedAlways ? " visual-flow-canvas--docked" : ""} ${plane === "main" ? "border-white/10" : planeMeta?.canvasClass ?? "border-white/10"}`}
+              style={{ transform: drawerOpen && !dockedAlways ? `translateX(${FOCUS_DRAWER_CANVAS_TRANSLATE})` : "translateX(0)" }}
             >
               <ReactFlow
                 nodes={nodes}
@@ -3860,7 +3868,7 @@ function VisualFlowPanelInner({
                       </div>
                     </>
                   )}
-                  {canEdit && plane === "main" && (
+                  {canEdit && (
                     <button
                       type="button"
                       className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2"
@@ -4231,12 +4239,19 @@ function VisualFlowPanelInner({
             </>
           )}
 
-          {/* Focus drawer: slides in from right when hovered — matches settings panel design */}
+          {/* Focus drawer: slides in from right when hovered — matches settings panel design.
+              When docked on wide screens it floats as a rounded panel, offset from the
+              bottom so it clears the bottom-right controls. */}
           <aside
-            className={`shelf-flow-focus-drawer fixed right-0 top-0 bottom-0 z-[99] flex flex-col overflow-hidden rounded-l-2xl border border-emerald-400/15 border-r-0 bg-black/92 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)] ${
-              drawerVisible ? "translate-x-0" : "translate-x-full"
-            }`}
-            style={{ marginTop: fullPage ? "6rem" : undefined, width: FOCUS_DRAWER_WIDTH }}
+            className={`shelf-flow-focus-drawer fixed right-0 top-0 bottom-0 z-[99] flex flex-col overflow-hidden border border-white/15 ${
+              dockedAlways ? "rounded-2xl" : "rounded-l-2xl border-r-0"
+            } ${drawerVisible ? "translate-x-0" : "translate-x-full"}`}
+            style={{
+              marginTop: fullPage ? "6rem" : undefined,
+              marginBottom: dockedAlways ? "5.5rem" : undefined,
+              marginRight: dockedAlways ? "0.75rem" : undefined,
+              width: FOCUS_DRAWER_WIDTH,
+            }}
             onMouseEnter={handleDrawerEnter}
             onMouseLeave={handleDrawerLeave}
             onClick={handleDrawerClick}
@@ -4245,6 +4260,10 @@ function VisualFlowPanelInner({
               setDrawerMenu({ x: e.clientX, y: e.clientY });
             }}
           >
+            {/* Only mount the (potentially heavy) task list while the drawer is
+                actually visible — keeps memory/DOM idle when it's tucked away. */}
+            {drawerVisible && (
+            <>
             <div className="flex flex-col gap-2 min-h-0 flex-1 overflow-y-auto p-2">
               <div className="rounded-xl border border-white/10 bg-white/5 p-2">
                 <div className="mb-1.5 flex items-center justify-between">
@@ -4290,6 +4309,11 @@ function VisualFlowPanelInner({
                                   <div
                                     key={todo.id}
                                     className="shelf-flow-focus-todo-card group/card rounded-lg border border-white/10 bg-black/25 px-2.5 py-2"
+                                    onContextMenu={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setFocusItemMenu({ planeId: group.id, id: todo.id, text: todo.text, x: e.clientX, y: e.clientY });
+                                    }}
                                   >
                                     {/* Collapsed row: checkbox + title + expand chevron */}
                                     <div className="flex items-center gap-2">
@@ -4468,7 +4492,43 @@ function VisualFlowPanelInner({
                 </button>
               </div>
             )}
+            </>
+            )}
           </aside>
+
+          {focusItemMenu && (
+            <>
+              <div className="fixed inset-0 z-[200]" onClick={() => setFocusItemMenu(null)} onContextMenu={(e) => { e.preventDefault(); setFocusItemMenu(null); }} />
+              <div
+                className="shelf-note-popover fixed z-[201] min-w-[160px] rounded-xl border border-emerald-400/20 bg-zinc-900 py-1 shadow-xl"
+                style={{
+                  left: Math.max(8, Math.min(focusItemMenu.x, window.innerWidth - 180)),
+                  top: Math.max(8, Math.min(focusItemMenu.y, window.innerHeight - 120)),
+                }}
+              >
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10"
+                  onClick={() => {
+                    jumpToTask(focusItemMenu.planeId, focusItemMenu.id);
+                    setFocusItemMenu(null);
+                  }}
+                >
+                  Jump to node
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-sm text-amber-300 hover:bg-white/10"
+                  onClick={() => {
+                    editItemInPlane(focusItemMenu.planeId, focusItemMenu.id, { focused: false });
+                    setFocusItemMenu(null);
+                  }}
+                >
+                  Unfocus
+                </button>
+              </div>
+            </>
+          )}
 
           {drawerMenu && (
             <div

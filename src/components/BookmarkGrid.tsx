@@ -1128,7 +1128,7 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
       )}
       {showSettings && (
         <div
-          className="fixed inset-0 z-40"
+          className="fixed inset-0 z-[210]"
           onClick={() => setShowSettings(false)}
         >
           <div
