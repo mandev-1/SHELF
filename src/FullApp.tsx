@@ -24,12 +24,13 @@ const VisualFlowSurface = lazy(() =>
 import { BuylistPanel } from "./components/Hopper/BuylistPanel";
 import { StrategiePanel } from "./components/Strategie/StrategiePanel";
 import { InventoryPanel } from "./components/Inventory/InventoryPanel";
+import { BudgetPanel } from "./components/Budget/BudgetPanel";
 import { pickCelebrationPhrase } from "./utils/celebration";
 import type { ShelfPillarTodoItem } from "./types/grid";
 
 const DASHBOARD_LAST_TOOL_KEY = "shelf-dashboard-last-tool";
 
-type DashboardView = "shelf" | "visual-flow" | "buylist" | "strategie" | "inventory";
+type DashboardView = "shelf" | "visual-flow" | "buylist" | "strategie" | "inventory" | "budget";
 type LastTool = "visual-flow" | "llm-console";
 
 /** Render a greeting, styling the word "smile" (case-insensitive) in --accent-bright. */
@@ -162,6 +163,9 @@ export default function FullApp() {
     showStrategieTab,
     showHopperTab,
     showInventoryTab,
+    showBudgetTab,
+    budget,
+    setBudget,
   } = useShelfStorage();
 
   // If the user disables the tab they're currently looking at via the settings
@@ -170,11 +174,12 @@ export default function FullApp() {
     if (
       (dashboardView === "strategie" && !showStrategieTab) ||
       (dashboardView === "buylist"   && !showHopperTab)    ||
-      (dashboardView === "inventory" && !showInventoryTab)
+      (dashboardView === "inventory" && !showInventoryTab) ||
+      (dashboardView === "budget"    && !showBudgetTab)
     ) {
       setDashboardView("shelf");
     }
-  }, [dashboardView, showStrategieTab, showHopperTab, showInventoryTab]);
+  }, [dashboardView, showStrategieTab, showHopperTab, showInventoryTab, showBudgetTab]);
   const [editingName, setEditingName] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -508,6 +513,7 @@ export default function FullApp() {
               <Input
                 autoFocus
                 value={shelfName}
+                placeholder="ShELF"
                 onChange={(e) => setShelfName(e.target.value)}
                 onBlur={() => setEditingName(false)}
                 onKeyDown={(e) => {
@@ -524,7 +530,7 @@ export default function FullApp() {
                 className="greeting"
                 title="Click to edit"
               >
-                {renderGreeting(shelfName)}
+                {shelfName ? renderGreeting(shelfName) : <span className="opacity-40">ShELF</span>}
               </button>
             )}
             <div className="search-pill" data-search-area>
@@ -560,6 +566,7 @@ export default function FullApp() {
                 { id: "strategie",   label: "Strategie",   visible: showStrategieTab  },
                 { id: "buylist",     label: "Hopper",      visible: showHopperTab     },
                 { id: "inventory",   label: "Inventory",   visible: showInventoryTab  },
+                { id: "budget",      label: "Budget",      visible: showBudgetTab     },
               ] as const).filter((t) => t.visible)).map((tab) => {
                 const isActive = dashboardView === tab.id;
                 const isVF = tab.id === "visual-flow";
@@ -664,6 +671,10 @@ export default function FullApp() {
                   });
                 }}
               />
+            </div>
+          ) : dashboardView === "budget" ? (
+            <div className="max-w-[1640px] mx-auto px-6 py-6">
+              <BudgetPanel budget={budget} setBudget={setBudget} />
             </div>
           ) : dashboardView === "visual-flow" ? (
             <div className="w-full">

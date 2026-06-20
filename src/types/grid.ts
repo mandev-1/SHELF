@@ -298,6 +298,95 @@ export interface InventoryItem {
   addedAt: string;
 }
 
+/* ============================================================
+ * Holiday / Shared Budget (handoff 006)
+ * A Splitwise-style shared-expense model: people, expenses split by a
+ * basis (equal / share / income), with derived settle-up balances.
+ * Designed sync-friendly (string ids + ISO timestamps) so an external
+ * Supabase layer can merge it later.
+ * ========================================================== */
+
+export type BudgetCurrency = "CZK" | "PLN" | "EUR";
+
+export type BudgetSplitBasis = "equal" | "share" | "income";
+
+export interface BudgetMember {
+  id: string;
+  name: string;
+  /** Weight for "by share" basis (defaults to 1). */
+  share?: number;
+  /** Monthly income for "by income" basis. */
+  income?: number;
+  /** Avatar accent (hex or token). */
+  color?: string;
+  createdAt: string;
+}
+
+export interface BudgetExpense {
+  id: string;
+  title: string;
+  /** Amount in the budget's base currency. */
+  amount: number;
+  currency: BudgetCurrency;
+  category?: string;
+  /** ISO yyyy-mm-dd. */
+  date: string;
+  /** Member id who paid. */
+  paidBy: string;
+  /** Member ids this expense is split among (empty = everyone). */
+  splitAmong: string[];
+  /** Per-expense basis override; falls back to the group default. */
+  basis?: BudgetSplitBasis;
+  /** Custom per-member weights (when basis is custom / overridden). */
+  customWeights?: Record<string, number>;
+  note?: string;
+  /** Receipt image as a data URL (optional, deferred UI). */
+  receipt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BudgetTrip {
+  id: string;
+  name: string;
+  destination?: string;
+  startDate?: string;
+  endDate?: string;
+  datesTBD?: boolean;
+  color?: string;
+  /** Cover image as a data URL (optional, deferred UI). */
+  cover?: string;
+  /** Member ids participating in this trip. */
+  memberIds?: string[];
+  expenses?: BudgetExpense[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BudgetState {
+  /** Base currency for all amounts (default CZK). */
+  currency: BudgetCurrency;
+  /** Group default split basis. */
+  splitBasis: BudgetSplitBasis;
+  members: BudgetMember[];
+  /** Recurring / "Monthly" shared expenses. */
+  expenses: BudgetExpense[];
+  /** Optional shared monthly budget target. */
+  monthlyBudget?: number;
+  /** Month keys (yyyy-mm) the group has marked settled. */
+  settledMonths?: string[];
+  /** Trips ("Holiday") view. */
+  trips?: BudgetTrip[];
+}
+
+export const DEFAULT_BUDGET_STATE: BudgetState = {
+  currency: "CZK",
+  splitBasis: "equal",
+  members: [],
+  expenses: [],
+  trips: [],
+};
+
 export interface ShelfBackupData {
   version: number;
   layout: ShelfLayoutItem[];
@@ -338,6 +427,8 @@ export interface ShelfBackupData {
   inventory?: InventoryItem[];
   /** Visual Flow goals layer ("camps"). */
   vfGoals?: VfGoal[];
+  /** Holiday / shared budget (people, expenses, trips). */
+  budget?: BudgetState;
 }
 
 export type CatKey =

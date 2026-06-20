@@ -364,7 +364,7 @@ export function Pillar({
     <aside className="pillar">
       <div className="pillar-head">
         <div className="eyebrow">Pillar</div>
-        <div className="pillar-name">{shelfName}</div>
+        <div className="pillar-name">{shelfName || "ShELF"}</div>
       </div>
       <div className="pillar-body">
 

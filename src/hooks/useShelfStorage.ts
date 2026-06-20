@@ -33,12 +33,97 @@ import {
   type InventoryItem,
   type InvCategory,
   type VfGoal,
+  type BudgetState,
+  type BudgetCurrency,
+  type BudgetSplitBasis,
+  type BudgetMember,
+  type BudgetExpense,
+  type BudgetTrip,
   normalizeStrategie,
   normalizeVfGoals,
+  DEFAULT_BUDGET_STATE,
   SAVINGS_PLAN_HUES,
 } from "../types/grid";
 void (undefined as unknown as SaleStatus);
 void (undefined as unknown as InvCategory);
+
+const BUDGET_CURRENCIES: BudgetCurrency[] = ["CZK", "PLN", "EUR"];
+const BUDGET_BASES: BudgetSplitBasis[] = ["equal", "share", "income"];
+
+function normBudgetExpense(o: any): BudgetExpense | null {
+  if (!o || typeof o !== "object") return null;
+  if (typeof o.id !== "string" || typeof o.paidBy !== "string") return null;
+  const nowIso = new Date().toISOString();
+  return {
+    id: o.id,
+    title: typeof o.title === "string" ? o.title : "",
+    amount: typeof o.amount === "number" && isFinite(o.amount) ? o.amount : 0,
+    currency: BUDGET_CURRENCIES.includes(o.currency) ? o.currency : "CZK",
+    category: typeof o.category === "string" ? o.category : undefined,
+    date: typeof o.date === "string" ? o.date : nowIso.slice(0, 10),
+    paidBy: o.paidBy,
+    splitAmong: Array.isArray(o.splitAmong) ? o.splitAmong.filter((x: unknown) => typeof x === "string") : [],
+    basis: BUDGET_BASES.includes(o.basis) ? o.basis : undefined,
+    customWeights:
+      o.customWeights && typeof o.customWeights === "object" && !Array.isArray(o.customWeights)
+        ? o.customWeights
+        : undefined,
+    note: typeof o.note === "string" ? o.note : undefined,
+    receipt: typeof o.receipt === "string" ? o.receipt : undefined,
+    createdAt: typeof o.createdAt === "string" ? o.createdAt : nowIso,
+    updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : nowIso,
+  };
+}
+
+function normBudgetMember(o: any): BudgetMember | null {
+  if (!o || typeof o !== "object" || typeof o.id !== "string" || typeof o.name !== "string") return null;
+  return {
+    id: o.id,
+    name: o.name,
+    share: typeof o.share === "number" ? o.share : undefined,
+    income: typeof o.income === "number" ? o.income : undefined,
+    color: typeof o.color === "string" ? o.color : undefined,
+    createdAt: typeof o.createdAt === "string" ? o.createdAt : new Date().toISOString(),
+  };
+}
+
+function normalizeBudget(raw: unknown): BudgetState {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ...DEFAULT_BUDGET_STATE };
+  const o = raw as Record<string, any>;
+  const members = Array.isArray(o.members)
+    ? (o.members.map(normBudgetMember).filter(Boolean) as BudgetMember[])
+    : [];
+  const expenses = Array.isArray(o.expenses)
+    ? (o.expenses.map(normBudgetExpense).filter(Boolean) as BudgetExpense[])
+    : [];
+  const trips: BudgetTrip[] = Array.isArray(o.trips)
+    ? o.trips
+        .filter((t: any) => t && typeof t.id === "string" && typeof t.name === "string")
+        .map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          destination: typeof t.destination === "string" ? t.destination : undefined,
+          startDate: typeof t.startDate === "string" ? t.startDate : undefined,
+          endDate: typeof t.endDate === "string" ? t.endDate : undefined,
+          datesTBD: !!t.datesTBD,
+          color: typeof t.color === "string" ? t.color : undefined,
+          cover: typeof t.cover === "string" ? t.cover : undefined,
+          memberIds: Array.isArray(t.memberIds) ? t.memberIds.filter((x: unknown) => typeof x === "string") : undefined,
+          expenses: Array.isArray(t.expenses) ? (t.expenses.map(normBudgetExpense).filter(Boolean) as BudgetExpense[]) : undefined,
+          createdAt: typeof t.createdAt === "string" ? t.createdAt : new Date().toISOString(),
+          updatedAt: typeof t.updatedAt === "string" ? t.updatedAt : new Date().toISOString(),
+        }))
+    : [];
+  return {
+    currency: BUDGET_CURRENCIES.includes(o.currency) ? o.currency : "CZK",
+    splitBasis: BUDGET_BASES.includes(o.splitBasis) ? o.splitBasis : "equal",
+    members,
+    expenses,
+    monthlyBudget: typeof o.monthlyBudget === "number" ? o.monthlyBudget : undefined,
+    settledMonths: Array.isArray(o.settledMonths) ? o.settledMonths.filter((x: unknown) => typeof x === "string") : undefined,
+    trips,
+  };
+}
 
 const LAYOUT_KEY = "shelf-layout";
 const COLORS_KEY = "shelf-colors";
@@ -85,6 +170,8 @@ const SALE_ITEMS_KEY = "shelf-sale-items";
 const INVENTORY_KEY = "shelf-inventory";
 const STRATEGIE_KEY = "shelf-strategie";
 const VF_GOALS_KEY = "shelf-vf-goals";
+const BUDGET_KEY = "shelf-budget";
+const SHOW_BUDGET_TAB_KEY = "shelf-show-budget-tab";
 
 function normalizeBuylist(raw: unknown): BuylistItem[] {
   if (!Array.isArray(raw)) return [];
@@ -368,6 +455,8 @@ export function useShelfStorage() {
   const [inventoryItems, setInventoryItemsState] = useState<InventoryItem[]>([]);
   const [strategieState, setStrategieState] = useState<StrategieState>(() => normalizeStrategie(null));
   const [vfGoals, setVfGoalsState] = useState<VfGoal[]>(() => normalizeVfGoals(undefined));
+  const [budgetState, setBudgetState] = useState<BudgetState>(() => normalizeBudget(null));
+  const [showBudgetTab, setShowBudgetTabState] = useState(true);
   const [ready, setReady] = useState(false);
 
   const load = useCallback(() => {
@@ -542,6 +631,8 @@ export function useShelfStorage() {
       setShowStrategieTabState(result[SHOW_STRATEGIE_TAB_KEY] !== false);
       setShowHopperTabState   (result[SHOW_HOPPER_TAB_KEY]    !== false);
       setShowInventoryTabState(result[SHOW_INVENTORY_TAB_KEY] !== false);
+      setShowBudgetTabState   (result[SHOW_BUDGET_TAB_KEY]    !== false);
+      setBudgetState(normalizeBudget(result[BUDGET_KEY]));
       setBuylistState(normalizeBuylist(result[BUYLIST_KEY]));
       setHopperFaceState(result[HOPPER_FACE_KEY] === "sell" ? "sell" : "buy");
       setSaleItemsState(normalizeSaleItems(result[SALE_ITEMS_KEY]));
@@ -1298,6 +1389,22 @@ export function useShelfStorage() {
     setShowInventoryTabState(next);
     getStorage()?.set({ [SHOW_INVENTORY_TAB_KEY]: next });
   }, []);
+  const setShowBudgetTab = useCallback((next: boolean) => {
+    setShowBudgetTabState(next);
+    getStorage()?.set({ [SHOW_BUDGET_TAB_KEY]: next });
+  }, []);
+
+  // Single source of truth for the budget blob — pass an updater; result persists.
+  const setBudget = useCallback(
+    (next: BudgetState | ((prev: BudgetState) => BudgetState)) => {
+      setBudgetState((prev) => {
+        const value = typeof next === "function" ? (next as (p: BudgetState) => BudgetState)(prev) : next;
+        getStorage()?.set({ [BUDGET_KEY]: value });
+        return value;
+      });
+    },
+    []
+  );
 
   const setPromptRowsState = useCallback((next: 1 | 2) => {
     setPromptRows(next);
@@ -1430,8 +1537,9 @@ export function useShelfStorage() {
       saleItems,
       inventory: inventoryItems,
       vfGoals,
+      budget: budgetState,
     };
-  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState, inventoryItems, vfGoals]);
+  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState, inventoryItems, vfGoals, budgetState]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -1485,6 +1593,7 @@ export function useShelfStorage() {
     if (Array.isArray(backup.saleItems)) setSaleItems(normalizeSaleItems(backup.saleItems));
     if (Array.isArray(backup.inventory)) setInventory(normalizeInventory(backup.inventory));
     if (Array.isArray(backup.vfGoals)) setVfGoalsState(normalizeVfGoals(backup.vfGoals));
+    if (backup.budget) setBudget(normalizeBudget(backup.budget));
 
     getStorage()?.set({
       [LAYOUT_KEY]: backup.layout ?? layout,
@@ -1524,8 +1633,9 @@ export function useShelfStorage() {
       [SALE_ITEMS_KEY]: Array.isArray(backup.saleItems) ? normalizeSaleItems(backup.saleItems) : saleItems,
       [INVENTORY_KEY]: Array.isArray(backup.inventory) ? normalizeInventory(backup.inventory) : inventoryItems,
       [VF_GOALS_KEY]: Array.isArray(backup.vfGoals) ? normalizeVfGoals(backup.vfGoals) : vfGoals,
+      [BUDGET_KEY]: backup.budget ? normalizeBudget(backup.budget) : budgetState,
     });
-  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setHopperFace, setGrazelandItems, setSaleItems, strategieState, setStrategie, inventoryItems, vfGoals]);
+  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setHopperFace, setGrazelandItems, setSaleItems, strategieState, setStrategie, inventoryItems, vfGoals, budgetState, setBudget]);
 
   return {
     layout,
@@ -1637,6 +1747,10 @@ export function useShelfStorage() {
     strategieSetCardLayout,
     vfGoals,
     setVfGoals,
+    budget: budgetState,
+    setBudget,
+    showBudgetTab,
+    setShowBudgetTab,
     llmConsoleUrl,
     setLlmConsoleUrl,
     showBothNavButtons,

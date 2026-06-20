@@ -947,6 +947,8 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
     setShowHopperTab,
     showInventoryTab,
     setShowInventoryTab,
+    showBudgetTab,
+    setShowBudgetTab,
     strategieState,
     strategieSetCurrency,
     strategieSetSecondaryCurrency,
@@ -1259,6 +1261,7 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
                 { id: "strategie", label: "Strategie", on: showStrategieTab, set: setShowStrategieTab },
                 { id: "hopper",    label: "Hopper",    on: showHopperTab,    set: setShowHopperTab    },
                 { id: "inventory", label: "Inventory", on: showInventoryTab, set: setShowInventoryTab },
+                { id: "budget",    label: "Budget",    on: showBudgetTab,    set: setShowBudgetTab    },
               ] as const).map((t) => (
                 <button
                   key={t.id}
