@@ -12,6 +12,7 @@ import type {
 import { Avatar, fmt, initials, AV_HUES, nowIso, uid } from "../lib/budget-format";
 import { tripStats, tripMembers, tripMetaLabel } from "../lib/trips";
 import { ExpenseModal } from "./BudgetPanel";
+import { toast } from "../lib/toast";
 
 interface TripDetailProps {
   trip: BudgetTrip;
@@ -106,9 +107,6 @@ export function TripDetail({
               <div className="gb-trip-hero-actions">
                 <button type="button" className="gb-hero-btn" onClick={() => setInvite(true)}>
                   ＋ Invite to reconcile
-                </button>
-                <button type="button" className="gb-hero-btn ghost" onClick={openGuest}>
-                  👁 Guest view
                 </button>
                 <button type="button" className="gb-hero-btn ghost" onClick={onEdit}>
                   Edit trip
@@ -358,11 +356,12 @@ export function TripDetail({
                       <button
                         type="button"
                         className="gb-invite-act"
-                        onClick={() =>
+                        onClick={() => {
                           navigator.clipboard.writeText(
                             `${location.origin}/?b=${budgetId}&me=${m.id}&trip=${trip.id}`,
-                          )
-                        }
+                          );
+                          toast("Trip link copied");
+                        }}
                       >
                         Copy link
                       </button>

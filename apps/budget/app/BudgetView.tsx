@@ -3,6 +3,7 @@
 import { useBudget } from "@/lib/useBudget";
 import { BudgetPanel } from "@/components/BudgetPanel";
 import { BootError } from "@/components/BootError";
+import { Toaster } from "@/components/Toaster";
 
 export function BudgetView() {
   const { budget, setBudget, budgetId, activeMemberId, scopedTripId, loading, error } =
@@ -17,12 +18,15 @@ export function BudgetView() {
   if (!budget) return null;
 
   return (
-    <BudgetPanel
-      budget={budget}
-      setBudget={setBudget}
-      budgetId={budgetId}
-      activeMemberId={activeMemberId}
-      scopedTripId={scopedTripId}
-    />
+    <>
+      <BudgetPanel
+        budget={budget}
+        setBudget={setBudget}
+        budgetId={budgetId}
+        activeMemberId={activeMemberId}
+        scopedTripId={scopedTripId}
+      />
+      <Toaster />
+    </>
   );
 }

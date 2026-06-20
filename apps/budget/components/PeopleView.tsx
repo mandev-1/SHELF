@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { BudgetCurrency, BudgetMember } from "../lib/budget-types";
 import { Avatar, fmt, type Balance } from "../lib/budget-format";
+import { toast } from "../lib/toast";
 
 interface PeopleViewProps {
   balances: Balance[];
@@ -20,6 +21,7 @@ export function PeopleView({ balances, currency, budgetId, onEdit, onAdd }: Peop
   const copyLink = (m: BudgetMember) => {
     if (!budgetId) return;
     navigator.clipboard.writeText(`${location.origin}/?b=${budgetId}&me=${m.id}`);
+    toast("Link copied");
     setCopiedId(m.id);
     setTimeout(() => setCopiedId(null), 1500);
   };

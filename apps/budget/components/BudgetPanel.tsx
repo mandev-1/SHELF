@@ -13,6 +13,7 @@ import "./budget.css";
 import { TripsView } from "./TripsView";
 import { PeopleView } from "./PeopleView";
 import { TripDetail } from "./TripDetail";
+import { toast } from "../lib/toast";
 
 const CURRENCIES: BudgetCurrency[] = ["CZK", "PLN", "EUR"];
 const BASES: { id: BudgetSplitBasis; label: string }[] = [
@@ -200,7 +201,7 @@ export function BudgetPanel({
     return (
       <div className="gb">
         <div className="gb-head">
-          <div className="gb-head-l">
+          <div className="gb-head-l" style={{ flexDirection: "column", alignItems: "flex-start", gap: 0 }}>
             <span className="card-eyebrow" style={{ display: "block", marginBottom: 2 }}>SHARED BUDGET · TRIP GUEST</span>
             <h1 className="gb-title">{scopedTrip.name}</h1>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginTop: 10 }}>
@@ -246,7 +247,7 @@ export function BudgetPanel({
     <div className="gb">
       {/* Header */}
       <div className="gb-head">
-        <div className="gb-head-l">
+        <div className="gb-head-l" style={{ flexDirection: "column", alignItems: "flex-start", gap: 0 }}>
           <span className="card-eyebrow" style={{ display: "block", marginBottom: 2 }}>STRATEGIE · SHARED BUDGET</span>
           <h1 className="gb-title">{view === "trips" ? "Trips & travel" : "People"}</h1>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginTop: 10 }}>
@@ -481,6 +482,7 @@ function PersonModal({ member, budgetId, onSave, onRemove, onClose }: {
                   style={{ width: "auto", marginTop: 0, padding: "10px 16px", whiteSpace: "nowrap" }}
                   onClick={() => {
                     navigator.clipboard.writeText(shareUrl);
+                    toast("Link copied");
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1500);
                   }}
