@@ -49,7 +49,8 @@ browser-safe by design. **Never** add the `service_role` key — the app doesn't
 
 ### Supabase
 1. Create a project at supabase.com (free plan, region near your friends).
-2. SQL Editor → run `supabase/schema.sql` (creates the `budgets` table, open RLS, Realtime).
+2. SQL Editor → run the migrations in `supabase/migrations/` in order (currently just
+   `0001_init.sql` — creates `budgets` + `users`, open RLS, Realtime; idempotent).
 3. Copy Project URL + anon key into your env vars.
 
 That's it — no auth/URL/email configuration needed.

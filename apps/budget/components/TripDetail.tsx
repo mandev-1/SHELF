@@ -62,7 +62,7 @@ export function TripDetail({
 
   const openGuest = () => {
     if (budgetId && tMembers[0]) {
-      window.open(`${location.origin}/?b=${budgetId}&me=${tMembers[0].id}&trip=${trip.id}`, "_blank");
+      window.open(`${location.origin}/?b=${budgetId}&user=${tMembers[0].id}&trip=${trip.id}`, "_blank");
     }
   };
 
@@ -358,7 +358,7 @@ export function TripDetail({
                         className="gb-invite-act"
                         onClick={() => {
                           navigator.clipboard.writeText(
-                            `${location.origin}/?b=${budgetId}&me=${m.id}&trip=${trip.id}`,
+                            `${location.origin}/?b=${budgetId}&user=${m.id}&trip=${trip.id}`,
                           );
                           toast("Trip link copied");
                         }}

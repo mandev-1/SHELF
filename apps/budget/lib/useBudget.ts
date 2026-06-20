@@ -30,6 +30,7 @@ export function useBudget(): UseBudgetResult {
   const idRef = useRef<string | null>(null);
   const lastSyncedRef = useRef<string>(""); // JSON we last wrote or received
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRef = useRef<BudgetState | null>(null); // last value awaiting save
 
   // Load the budget. A personal link carries ?b=<budgetId>&me=<memberId>:
   //   - ?b present → load that specific budget (the friend's link)
@@ -145,11 +146,22 @@ export function useBudget(): UseBudgetResult {
     const id = idRef.current;
     if (!id) return;
     lastSyncedRef.current = JSON.stringify(state);
+    pendingRef.current = null;
     void getSupabase()
       .from("budgets")
       .update({ data: state, updated_at: new Date().toISOString() })
       .eq("id", id);
   }, []);
+
+  // Persist any pending (debounced) change immediately — used on unmount / tab
+  // hide so a just-made edit (e.g. a new trip) can't be dropped before the timer.
+  const flush = useCallback(() => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    if (pendingRef.current) persist(pendingRef.current);
+  }, [persist]);
 
   const setBudget = useCallback(
     (next: BudgetState | ((prev: BudgetState) => BudgetState)) => {
@@ -159,6 +171,7 @@ export function useBudget(): UseBudgetResult {
           typeof next === "function"
             ? (next as (p: BudgetState) => BudgetState)(base)
             : next;
+        pendingRef.current = value;
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => persist(value), SAVE_DEBOUNCE_MS);
         return value;
@@ -167,12 +180,19 @@ export function useBudget(): UseBudgetResult {
     [persist],
   );
 
-  useEffect(
-    () => () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    },
-    [],
-  );
+  // Durability: flush on unmount and when the tab is hidden/closed.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+      flush();
+    };
+  }, [flush]);
 
   return { budget, setBudget, budgetId, loading, error };
 }

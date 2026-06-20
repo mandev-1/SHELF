@@ -20,7 +20,7 @@ export function PeopleView({ balances, currency, budgetId, onEdit, onAdd }: Peop
 
   const copyLink = (m: BudgetMember) => {
     if (!budgetId) return;
-    navigator.clipboard.writeText(`${location.origin}/?b=${budgetId}&me=${m.id}`);
+    navigator.clipboard.writeText(`${location.origin}/?b=${budgetId}&user=${m.id}`);
     toast("Link copied");
     setCopiedId(m.id);
     setTimeout(() => setCopiedId(null), 1500);

@@ -24,12 +24,12 @@ export function useSession(): UseSessionResult {
   // whatever was stored, else stay logged out (→ gate).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const me = params.get("me");
+    const userParam = params.get("user") ?? params.get("me"); // accept legacy ?me
     const trip = params.get("trip");
-    if (me) {
+    if (userParam) {
       const s: Session = trip
-        ? { role: "member", userId: me, tripId: trip }
-        : { role: "member", userId: me };
+        ? { role: "member", userId: userParam, tripId: trip }
+        : { role: "member", userId: userParam };
       saveSession(s);
       setSession(s);
     } else {

@@ -348,6 +348,7 @@ export function BudgetPanel({
         <PersonModal
           member={personModal === "new" ? null : personModal}
           budgetId={budgetId}
+          trips={budget.trips ?? []}
           onSave={savePerson}
           onRemove={personModal === "new" ? undefined : removePerson}
           onClose={() => setPersonModal(null)}
@@ -465,22 +466,28 @@ export function ExpenseModal({ expense, members, currency, defaultPaidBy, onSave
   );
 }
 
-function PersonModal({ member, budgetId, onSave, onRemove, onClose }: {
+function PersonModal({ member, budgetId, trips, onSave, onRemove, onClose }: {
   member: BudgetMember | null;
   budgetId?: string | null;
+  trips: BudgetTrip[];
   onSave: (name: string) => void;
   onRemove?: () => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(member?.name ?? "");
+  const [scope, setScope] = useState<string>("full"); // "full" | tripId
   const [copied, setCopied] = useState(false);
   const valid = name.trim().length > 0;
   const submit = () => { if (valid) onSave(name); };
 
-  // Personal link: opening it identifies the friend as this member, so their
-  // expenses are auto-attributed to them. Only valid once the member exists.
+  // Personal link carries explicit ?user=<id> (who you are) and, when scoped,
+  // &trip=<id> (the only trip they can open). budget id rides along as ?b=.
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const shareUrl = member && budgetId ? `${origin}/?b=${budgetId}&me=${member.id}` : "";
+  const scopeTrip = scope !== "full" ? trips.find((t) => t.id === scope) : undefined;
+  const shareUrl =
+    member && budgetId
+      ? `${origin}/?b=${budgetId}&user=${member.id}${scopeTrip ? `&trip=${scopeTrip.id}` : ""}`
+      : "";
 
   return (
     <div className="gb-modal-backdrop" onClick={onClose}>
@@ -502,27 +509,44 @@ function PersonModal({ member, budgetId, onSave, onRemove, onClose }: {
           </label>
 
           {shareUrl && (
-            <div className="gb-fld" style={{ gridColumn: "1 / -1" }}>
-              <span className="gb-fld-lab">
-                Personal link — send to {name || "them"} so they can add expenses as themselves
-              </span>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input readOnly value={shareUrl} onFocus={(e) => e.currentTarget.select()} style={{ flex: 1 }} />
-                <button
-                  type="button"
-                  className="gb-settle-btn"
-                  style={{ width: "auto", marginTop: 0, padding: "10px 16px", whiteSpace: "nowrap" }}
-                  onClick={() => {
-                    navigator.clipboard.writeText(shareUrl);
-                    toast("Link copied");
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1500);
-                  }}
-                >
-                  {copied ? "Copied ✓" : "Copy link"}
-                </button>
+            <>
+              {trips.length > 0 && (
+                <label className="gb-fld" style={{ gridColumn: "1 / -1" }}>
+                  <span className="gb-fld-lab">Trip access</span>
+                  <select value={scope} onChange={(e) => setScope(e.target.value)}>
+                    <option value="full">Full access — everything</option>
+                    {trips.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {(t.emoji ? t.emoji + " " : "") + t.name} only
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <div className="gb-fld" style={{ gridColumn: "1 / -1" }}>
+                <span className="gb-fld-lab">
+                  {scopeTrip
+                    ? `Trip link — ${name || "they"} can only open “${scopeTrip.name}”`
+                    : `Personal link — send to ${name || "them"} so they can add expenses as themselves`}
+                </span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input readOnly value={shareUrl} onFocus={(e) => e.currentTarget.select()} style={{ flex: 1 }} />
+                  <button
+                    type="button"
+                    className="gb-settle-btn"
+                    style={{ width: "auto", marginTop: 0, padding: "10px 16px", whiteSpace: "nowrap" }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(shareUrl);
+                      toast(scopeTrip ? "Trip link copied" : "Link copied");
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1500);
+                    }}
+                  >
+                    {copied ? "Copied ✓" : "Copy link"}
+                  </button>
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
         <div className="gb-modal-foot">

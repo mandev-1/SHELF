@@ -19,7 +19,8 @@ cp .env.local.example .env.local   # fill in Supabase URL + anon key
 npm run dev                          # http://localhost:3000
 ```
 
-Then run `supabase/schema.sql` in your Supabase project's SQL Editor.
+Then run the migrations in `supabase/migrations/` (start with `0001_init.sql`) in your
+Supabase project's SQL Editor.
 
 Full hosting/setup/deploy walkthrough and free-tier caveats: **[HOSTING.md](./HOSTING.md)**.
 
@@ -40,7 +41,7 @@ lib/
   budget-types.ts     BudgetState model + normalizeBudget (from grid.ts)
   useBudget.ts        Supabase-backed budget: load · debounced save · Realtime
   supabase/client.ts  anon Supabase client (database only, no Auth)
-supabase/schema.sql   single budgets(jsonb blob) table + open RLS + Realtime
+supabase/migrations/   ordered SQL migrations (0001_init = budgets + users + RLS + Realtime)
 ```
 
 The port swapped **only** persistence: the extension fed `BudgetPanel` from
