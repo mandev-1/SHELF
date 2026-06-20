@@ -1,9 +1,14 @@
 # Budget
 
-Shared budget app for friends. Next.js 15 + Supabase (Postgres + Auth), hosted on Vercel.
+Shared budget app for friends. Next.js 15 + Supabase (Postgres, no auth), hosted on Vercel.
 
 Independent of the ShELF extension at the repo root — it has its own `package.json`
 and deploys from its own Vercel **Root Directory** (`apps/budget`).
+
+**Porting more features from the design prototype?** See
+[`docs/handoff-006-port-map.md`](./docs/handoff-006-port-map.md) — it maps the full handoff
+(Trips, guest view, receipt import, spend charts, …) to a porting plan. Read it before
+building any new budget view.
 
 ## Quick start
 
