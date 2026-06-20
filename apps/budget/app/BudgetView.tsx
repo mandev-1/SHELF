@@ -5,7 +5,8 @@ import { BudgetPanel } from "@/components/BudgetPanel";
 import { BootError } from "@/components/BootError";
 
 export function BudgetView() {
-  const { budget, setBudget, budgetId, activeMemberId, loading, error } = useBudget();
+  const { budget, setBudget, budgetId, activeMemberId, scopedTripId, loading, error } =
+    useBudget();
 
   if (loading) {
     return <p className="p-8 text-sm text-neutral-400">Loading budget…</p>;
@@ -21,6 +22,7 @@ export function BudgetView() {
       setBudget={setBudget}
       budgetId={budgetId}
       activeMemberId={activeMemberId}
+      scopedTripId={scopedTripId}
     />
   );
 }

@@ -19,6 +19,8 @@ interface TripDetailProps {
   currency: BudgetCurrency;
   splitBasis: BudgetSplitBasis;
   budgetId?: string | null;
+  /** Guest mode (trip-scoped link): hide host-only actions. */
+  guest?: boolean;
   onBack: () => void;
   onEdit: () => void;
   onUpdate: (trip: BudgetTrip) => void; // persist expense add/edit, cover, etc.
@@ -30,6 +32,7 @@ export function TripDetail({
   currency,
   splitBasis,
   budgetId,
+  guest = false,
   onBack,
   onEdit,
   onUpdate,
@@ -58,7 +61,7 @@ export function TripDetail({
 
   const openGuest = () => {
     if (budgetId && tMembers[0]) {
-      window.open(`${location.origin}/?b=${budgetId}&me=${tMembers[0].id}`, "_blank");
+      window.open(`${location.origin}/?b=${budgetId}&me=${tMembers[0].id}&trip=${trip.id}`, "_blank");
     }
   };
 
@@ -70,9 +73,11 @@ export function TripDetail({
           <img className="gb-trip-hero-img" src={trip.cover} data-filled="" alt="" />
         )}
         <div className="gb-trip-hero-scrim" />
-        <button type="button" className="gb-trip-back" onClick={onBack}>
-          ← All trips
-        </button>
+        {!guest && (
+          <button type="button" className="gb-trip-back" onClick={onBack}>
+            ← All trips
+          </button>
+        )}
         <div className="gb-trip-faces">
           {tMembers.map((m, i) => (
             <span
@@ -97,36 +102,40 @@ export function TripDetail({
             <div className="gb-trip-hero-emoji">{trip.emoji}</div>
             <h1 className="gb-trip-hero-name">{trip.name}</h1>
             <div className="gb-trip-hero-meta">{tripMetaLabel(trip)}</div>
-            <div className="gb-trip-hero-actions">
-              <button type="button" className="gb-hero-btn" onClick={() => setInvite(true)}>
-                ＋ Invite to reconcile
-              </button>
-              <button type="button" className="gb-hero-btn ghost" onClick={openGuest}>
-                👁 Guest view
-              </button>
-              <button type="button" className="gb-hero-btn ghost" onClick={onEdit}>
-                Edit trip
-              </button>
-            </div>
+            {!guest && (
+              <div className="gb-trip-hero-actions">
+                <button type="button" className="gb-hero-btn" onClick={() => setInvite(true)}>
+                  ＋ Invite to reconcile
+                </button>
+                <button type="button" className="gb-hero-btn ghost" onClick={openGuest}>
+                  👁 Guest view
+                </button>
+                <button type="button" className="gb-hero-btn ghost" onClick={onEdit}>
+                  Edit trip
+                </button>
+              </div>
+            )}
           </div>
-          <label
-            style={{
-              cursor: "pointer",
-              color: "rgba(255,255,255,0.85)",
-              textAlign: "center",
-              fontSize: 12,
-            }}
-          >
-            <div style={{ fontSize: 22 }}>🖼</div>
-            <div>Drop a cover photo</div>
-            <div style={{ textDecoration: "underline" }}>or browse files</div>
-            <input
-              type="file"
-              accept="image/*"
-              style={{ display: "none" }}
-              onChange={onCoverFile}
-            />
-          </label>
+          {!guest && (
+            <label
+              style={{
+                cursor: "pointer",
+                color: "rgba(255,255,255,0.85)",
+                textAlign: "center",
+                fontSize: 12,
+              }}
+            >
+              <div style={{ fontSize: 22 }}>🖼</div>
+              <div>Drop a cover photo</div>
+              <div style={{ textDecoration: "underline" }}>or browse files</div>
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={onCoverFile}
+              />
+            </label>
+          )}
         </div>
       </div>
 
@@ -197,7 +206,7 @@ export function TripDetail({
       </div>
 
       {/* Who paid what */}
-      <div className="card">
+      <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-head">
           <div style={{ display: "flex", flexDirection: "column" }}>
             <span className="card-eyebrow">ON THE ROAD</span>
@@ -351,7 +360,7 @@ export function TripDetail({
                         className="gb-invite-act"
                         onClick={() =>
                           navigator.clipboard.writeText(
-                            `${location.origin}/?b=${budgetId}&me=${m.id}`,
+                            `${location.origin}/?b=${budgetId}&me=${m.id}&trip=${trip.id}`,
                           )
                         }
                       >

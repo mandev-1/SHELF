@@ -14,6 +14,10 @@ export interface UseBudgetResult {
   budgetId: string | null;
   /** Member id from a personal link (?me=<id>); null when opened normally. */
   activeMemberId: string | null;
+  /** Trip id from a trip-scoped link (?trip=<id>) → guest sees only that trip.
+   *  Soft scoping: a UX guardrail, NOT a security boundary (the whole blob is
+   *  still readable with the anon key). Hard scoping would need auth + RLS. */
+  scopedTripId: string | null;
   loading: boolean;
   error: string | null;
 }
@@ -27,6 +31,7 @@ export function useBudget(): UseBudgetResult {
   const [budget, setBudgetState] = useState<BudgetState | null>(null);
   const [budgetId, setBudgetId] = useState<string | null>(null);
   const [activeMemberId, setActiveMemberId] = useState<string | null>(null);
+  const [scopedTripId, setScopedTripId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +51,9 @@ export function useBudget(): UseBudgetResult {
       const params = new URLSearchParams(window.location.search);
       const bParam = params.get("b");
       const meParam = params.get("me");
+      const tripParam = params.get("trip");
       if (meParam) setActiveMemberId(meParam);
+      if (tripParam) setScopedTripId(tripParam);
 
       let row: { id: string; data: unknown } | undefined;
 
@@ -179,5 +186,5 @@ export function useBudget(): UseBudgetResult {
     [],
   );
 
-  return { budget, setBudget, budgetId, activeMemberId, loading, error };
+  return { budget, setBudget, budgetId, activeMemberId, scopedTripId, loading, error };
 }

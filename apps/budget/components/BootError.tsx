@@ -35,7 +35,22 @@ export function BootError({ detail }: { detail?: string }) {
       }}
     >
       <Suitcase />
-      <div style={{ maxWidth: 440, display: "flex", flexDirection: "column", gap: 8 }}>
+      <div
+        style={{
+          background: "var(--surface, #ffffff)",
+          border: "1px solid var(--line, #d8e0ee)",
+          borderRadius: 18,
+          boxShadow: "var(--sh-2, 0 10px 30px -12px rgba(8, 48, 120, 0.25))",
+          padding: "30px 28px",
+          maxWidth: 520,
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 16,
+        }}
+      >
+        <div style={{ maxWidth: 440, display: "flex", flexDirection: "column", gap: 8 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.01em", margin: 0 }}>{headline}</h1>
         <p style={{ fontSize: 14, lineHeight: 1.55, color: "var(--muted, var(--dim))", margin: 0 }}>{sub}</p>
       </div>
@@ -91,6 +106,7 @@ export function BootError({ detail }: { detail?: string }) {
           </pre>
         </details>
       )}
+      </div>
     </div>
   );
 }

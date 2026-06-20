@@ -12,6 +12,7 @@ import type {
 import "./budget.css";
 import { TripsView } from "./TripsView";
 import { PeopleView } from "./PeopleView";
+import { TripDetail } from "./TripDetail";
 
 const CURRENCIES: BudgetCurrency[] = ["CZK", "PLN", "EUR"];
 const BASES: { id: BudgetSplitBasis; label: string }[] = [
@@ -122,9 +123,17 @@ interface Props {
   budgetId?: string | null;
   /** When opened via a personal link (?me=<id>), the member you are. */
   activeMemberId?: string | null;
+  /** Trip-scoped link (?trip=<id>) → render guest mode for just that trip. */
+  scopedTripId?: string | null;
 }
 
-export function BudgetPanel({ budget, setBudget, budgetId = null, activeMemberId = null }: Props) {
+export function BudgetPanel({
+  budget,
+  setBudget,
+  budgetId = null,
+  activeMemberId = null,
+  scopedTripId = null,
+}: Props) {
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
   const [personModal, setPersonModal] = useState<BudgetMember | "new" | null>(null);
   const [view, setView] = useState<"people" | "trips">("people");
@@ -176,6 +185,62 @@ export function BudgetPanel({ budget, setBudget, budgetId = null, activeMemberId
   const memberById = (id: string) => budget.members.find((m) => m.id === id);
   const me = balances[0];
   const activeMember = activeMemberId ? budget.members.find((m) => m.id === activeMemberId) : undefined;
+
+  // Guest mode: a trip-scoped link (?trip=<id>) shows ONLY that trip — no People
+  // tab, no other trips, no host actions. (Soft scoping — a UX guardrail.)
+  if (scopedTripId) {
+    const scopedTrip = (budget.trips ?? []).find((t) => t.id === scopedTripId);
+    if (!scopedTrip) {
+      return (
+        <div className="gb">
+          <div className="gb-empty" style={{ marginTop: 48 }}>This trip link is no longer valid.</div>
+        </div>
+      );
+    }
+    return (
+      <div className="gb">
+        <div className="gb-head">
+          <div className="gb-head-l">
+            <span className="card-eyebrow" style={{ display: "block", marginBottom: 2 }}>SHARED BUDGET · TRIP GUEST</span>
+            <h1 className="gb-title">{scopedTrip.name}</h1>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginTop: 10 }}>
+              {activeMember && (
+                <span
+                  title="You opened a trip link"
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "var(--accent-deep)",
+                    background: "color-mix(in srgb, var(--accent) 12%, transparent)",
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                  }}
+                >
+                  You&apos;re {activeMember.name}
+                </span>
+              )}
+              <div className="seg gb-cur-seg" role="tablist" aria-label="Currency">
+                {CURRENCIES.map((c) => (
+                  <button key={c} type="button" className={`seg-btn${currency === c ? " on" : ""}`} onClick={() => setCurrency(c)}>{c}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+        <TripDetail
+          trip={scopedTrip}
+          members={budget.members}
+          currency={currency}
+          splitBasis={budget.splitBasis}
+          budgetId={budgetId}
+          guest
+          onBack={() => {}}
+          onEdit={() => {}}
+          onUpdate={(t) => setTrips((prev) => prev.map((x) => (x.id === t.id ? t : x)))}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="gb">
