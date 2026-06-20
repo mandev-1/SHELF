@@ -1,0 +1,123 @@
+"use client";
+import { useState } from "react";
+import type * as React from "react";
+import type { BudgetTrip, BudgetMember, BudgetCurrency, BudgetSplitBasis } from "../lib/budget-types";
+import { fmt, initials, AV_HUES } from "../lib/budget-format";
+import { tripStats, tripMembers, tripMetaLabel } from "../lib/trips";
+import { TripModal } from "./TripModal";
+import { TripDetail } from "./TripDetail";
+
+interface TripsViewProps {
+  trips: BudgetTrip[];
+  members: BudgetMember[];
+  currency: BudgetCurrency;
+  splitBasis: BudgetSplitBasis;
+  budgetId?: string | null;
+  setTrips: (updater: (prev: BudgetTrip[]) => BudgetTrip[]) => void;
+}
+
+export function TripsView({ trips, members, currency, splitBasis, budgetId, setTrips }: TripsViewProps) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [modal, setModal] = useState<BudgetTrip | "new" | null>(null);
+
+  const selected = selectedId ? trips.find((t) => t.id === selectedId) ?? null : null;
+
+  const modalNode = modal && (
+    <TripModal
+      trip={modal === "new" ? null : modal}
+      members={members}
+      onSave={(t) => {
+        setTrips((prev) => (modal === "new" ? [t, ...prev] : prev.map((x) => (x.id === t.id ? t : x))));
+        if (modal === "new") setSelectedId(t.id);
+        setModal(null);
+      }}
+      onRemove={
+        modal === "new"
+          ? undefined
+          : () => {
+              const id = (modal as BudgetTrip).id;
+              setTrips((prev) => prev.filter((x) => x.id !== id));
+              setSelectedId(null);
+              setModal(null);
+            }
+      }
+      onClose={() => setModal(null)}
+    />
+  );
+
+  if (selected) {
+    return (
+      <>
+        <TripDetail
+          trip={selected}
+          members={members}
+          currency={currency}
+          splitBasis={splitBasis}
+          budgetId={budgetId}
+          onBack={() => setSelectedId(null)}
+          onEdit={() => setModal(selected)}
+          onUpdate={(t) => setTrips((prev) => prev.map((x) => (x.id === t.id ? t : x)))}
+        />
+        {modalNode}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="gb-trips-grid">
+        {trips.map((trip) => {
+          const stats = tripStats(trip, members, splitBasis);
+          const tm = tripMembers(trip, members);
+          return (
+            <button
+              type="button"
+              key={trip.id}
+              className="gb-trip-card"
+              style={{ ["--trip-hue" as any]: trip.color || "var(--accent)" } as React.CSSProperties}
+              onClick={() => setSelectedId(trip.id)}
+            >
+              <div className="gb-trip-cover">
+                {trip.cover && <img className="gb-trip-img" src={trip.cover} data-filled="" alt="" />}
+                <span className="gb-trip-cover-fallback">{trip.emoji || "🏖️"}</span>
+                <span className={"gb-trip-status" + (stats.squared ? " ok" : "")}>
+                  {stats.squared ? "Squared up" : `${fmt(stats.toSettle, currency)} to settle`}
+                </span>
+              </div>
+              <div className="gb-trip-body">
+                <h3 className="gb-trip-name">{trip.name}</h3>
+                <div className="gb-trip-meta">{tripMetaLabel(trip)}</div>
+                <div className="gb-trip-figs">
+                  <span className="gb-trip-total">{fmt(stats.total, currency)}</span>
+                  <span className="gb-trip-per">{fmt(stats.perPerson, currency)} pp</span>
+                </div>
+                <div className="gb-trip-foot">
+                  <div className="gb-trip-faces">
+                    {tm.slice(0, 4).map((m, i) => (
+                      <span
+                        key={m.id}
+                        className="gb-av gb-trip-face"
+                        style={{ width: 24, height: 24, fontSize: 10, background: m.color || AV_HUES[i % AV_HUES.length] }}
+                      >
+                        {initials(m.name)}
+                      </span>
+                    ))}
+                    {tm.length > 4 && <span className="gb-trip-facemore">+{tm.length - 4}</span>}
+                  </div>
+                  <span className="gb-trip-count">
+                    {(trip.expenses ?? []).length} expense{(trip.expenses ?? []).length === 1 ? "" : "s"}
+                  </span>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+        <button type="button" className="gb-trip-card gb-trip-card--add" onClick={() => setModal("new")}>
+          <span className="gb-trip-add-plus">＋</span>
+          Plan a trip
+        </button>
+      </div>
+      {modalNode}
+    </>
+  );
+}

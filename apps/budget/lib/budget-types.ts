@@ -42,6 +42,7 @@ export interface BudgetExpense {
 export interface BudgetTrip {
   id: string;
   name: string;
+  emoji?: string;
   destination?: string;
   startDate?: string;
   endDate?: string;
@@ -131,6 +132,7 @@ export function normalizeBudget(raw: unknown): BudgetState {
         .map((t: any) => ({
           id: t.id,
           name: t.name,
+          emoji: typeof t.emoji === "string" ? t.emoji : undefined,
           destination: typeof t.destination === "string" ? t.destination : undefined,
           startDate: typeof t.startDate === "string" ? t.startDate : undefined,
           endDate: typeof t.endDate === "string" ? t.endDate : undefined,

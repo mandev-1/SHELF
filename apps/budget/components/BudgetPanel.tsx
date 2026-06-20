@@ -7,8 +7,11 @@ import type {
   BudgetSplitBasis,
   BudgetMember,
   BudgetExpense,
+  BudgetTrip,
 } from "../lib/budget-types";
 import "./budget.css";
+import { TripsView } from "./TripsView";
+import { PeopleView } from "./PeopleView";
 
 const CURRENCIES: BudgetCurrency[] = ["CZK", "PLN", "EUR"];
 const BASES: { id: BudgetSplitBasis; label: string }[] = [
@@ -124,12 +127,15 @@ interface Props {
 export function BudgetPanel({ budget, setBudget, budgetId = null, activeMemberId = null }: Props) {
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
   const [personModal, setPersonModal] = useState<BudgetMember | "new" | null>(null);
+  const [view, setView] = useState<"people" | "trips">("people");
 
   const { balances, total, transfers } = useMemo(() => computeBalances(budget), [budget]);
   const currency = budget.currency;
 
   const setCurrency = (c: BudgetCurrency) => setBudget((p) => ({ ...p, currency: c }));
   const setBasis = (b: BudgetSplitBasis) => setBudget((p) => ({ ...p, splitBasis: b }));
+  const setTrips = (updater: (prev: BudgetTrip[]) => BudgetTrip[]) =>
+    setBudget((p) => ({ ...p, trips: updater(p.trips ?? []) }));
 
   const addPerson = () => setPersonModal("new");
   const editPerson = (m: BudgetMember) => setPersonModal(m);
@@ -176,203 +182,56 @@ export function BudgetPanel({ budget, setBudget, budgetId = null, activeMemberId
       {/* Header */}
       <div className="gb-head">
         <div className="gb-head-l">
-          <h1 className="gb-title">Shared Budget</h1>
-          {activeMember && (
-            <span
-              title="You opened a personal link"
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: "var(--accent-deep)",
-                background: "color-mix(in srgb, var(--accent) 12%, transparent)",
-                padding: "4px 10px",
-                borderRadius: 999,
-              }}
-            >
-              You&apos;re {activeMember.name}
-            </span>
-          )}
-          <div className="seg gb-cur-seg" role="tablist" aria-label="Currency">
-            {CURRENCIES.map((c) => (
-              <button key={c} type="button" className={`seg-btn${currency === c ? " on" : ""}`} onClick={() => setCurrency(c)}>{c}</button>
-            ))}
-          </div>
-        </div>
-        <button type="button" className="ghost-btn gb-add-btn" onClick={() => setExpenseModal("new")} disabled={budget.members.length === 0}>
-          ＋ Add expense
-        </button>
-      </div>
-
-      {/* Member bar */}
-      <div className="gb-memberbar">
-        {balances.map((b, i) => (
-          <button key={b.member.id} type="button" className="gb-memchip on" onClick={() => editPerson(b.member)}>
-            <Avatar member={b.member} idx={i} />
-            <span className="gb-memchip-main">
-              <span className="gb-memchip-name">{b.member.name}</span>
-              <span className="gb-memchip-bal" style={{ color: Math.abs(b.net) < 0.5 ? "var(--dim)" : b.net > 0 ? "var(--gb-pos)" : "var(--gb-neg)" }}>
-                {Math.abs(b.net) < 0.5 ? "settled" : b.net > 0 ? `gets ${fmt(b.net, currency)}` : `owes ${fmt(-b.net, currency)}`}
+          <span className="card-eyebrow" style={{ display: "block", marginBottom: 2 }}>STRATEGIE · SHARED BUDGET</span>
+          <h1 className="gb-title">{view === "trips" ? "Trips & travel" : "People"}</h1>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginTop: 10 }}>
+            <div className="seg gb-viewseg" role="tablist" aria-label="View">
+              <button type="button" className={`seg-btn${view === "people" ? " on" : ""}`} onClick={() => setView("people")}>People</button>
+              <button type="button" className={`seg-btn${view === "trips" ? " on" : ""}`} onClick={() => setView("trips")}>
+                Trips<span className="gb-viewseg-n">{(budget.trips ?? []).length}</span>
+              </button>
+            </div>
+            {activeMember && (
+              <span
+                title="You opened a personal link"
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "var(--accent-deep)",
+                  background: "color-mix(in srgb, var(--accent) 12%, transparent)",
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                }}
+              >
+                You&apos;re {activeMember.name}
               </span>
-            </span>
-            <span className="gb-memchip-edit">✎</span>
-          </button>
-        ))}
-        <button type="button" className="gb-memchip gb-memchip--add" onClick={addPerson}>
-          ＋ <span>Add person</span>
-        </button>
-      </div>
-
-      {budget.members.length === 0 ? (
-        <div className="gb-empty" style={{ marginTop: 24 }}>Add the people sharing this budget to get started.</div>
-      ) : (
-        <div className="gb-grid">
-          {/* Stats / board */}
-          <div className="gb-board">
-            <div className="gb-board-tiles">
-              <div className="gb-board-tile">
-                <span className="gb-board-meta">Shared spend</span>
-                <span className="gb-board-net">{fmt(total, currency)}</span>
-                <span className="gb-board-state">{budget.expenses.length} expense{budget.expenses.length === 1 ? "" : "s"}</span>
-              </div>
-              {me && (
-                <div className="gb-board-tile">
-                  <span className="gb-board-meta">{me.member.name}'s position</span>
-                  <span className="gb-board-net" style={{ color: Math.abs(me.net) < 0.5 ? undefined : me.net > 0 ? "var(--gb-pos)" : "var(--gb-neg)" }}>{fmt(me.net, currency)}</span>
-                  <span className="gb-board-state">{Math.abs(me.net) < 0.5 ? "all square" : me.net > 0 ? "owed to you" : "you owe"}</span>
-                </div>
-              )}
-              {me && (
-                <div className="gb-board-tile">
-                  <span className="gb-board-meta">{me.member.name}'s fair share</span>
-                  <span className="gb-board-net">{fmt(me.owed, currency)}</span>
-                  <span className="gb-board-state">paid {fmt(me.paid, currency)}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Settle up */}
-          <div className="card span-4 gb-settle">
-            <div className="card-head"><span className="card-eyebrow">Reconcile</span><span className="card-title">Settle up</span></div>
-            <div className="gb-settle-body">
-              <div className="gb-bal-list">
-                {balances.map((b, i) => {
-                  const max = Math.max(1, ...balances.map((x) => Math.abs(x.net)));
-                  return (
-                    <div key={b.member.id} className="gb-bal-row">
-                      <Avatar member={b.member} idx={i} size={26} />
-                      <span className="gb-bal-name">{b.member.name}</span>
-                      <span className="gb-bal-track">
-                        <span className="gb-bal-fill" style={{ width: `${(Math.abs(b.net) / max) * 100}%`, background: b.net >= 0 ? "var(--gb-pos)" : "var(--gb-neg)", marginLeft: b.net >= 0 ? "50%" : undefined }} />
-                      </span>
-                      <span className="gb-bal-net" style={{ color: Math.abs(b.net) < 0.5 ? "var(--dim)" : b.net > 0 ? "var(--gb-pos)" : "var(--gb-neg)" }}>{fmt(b.net, currency)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              {transfers.length === 0 ? (
-                <div className="gb-settle-clear">✓ Everyone's square</div>
-              ) : (
-                <>
-                  <div className="gb-settle-lab">Suggested transfers</div>
-                  {transfers.map((t, i) => (
-                    <div key={i} className="gb-settle-row">
-                      <strong>{t.from.name}</strong> → <strong>{t.to.name}</strong>
-                      <span className="gb-settle-amt">{fmt(t.amount, currency)}</span>
-                    </div>
-                  ))}
-                  <button type="button" className="gb-settle-btn" onClick={() => {
-                    if (window.confirm("Mark everyone as settled? This clears the current shared expenses.")) {
-                      setBudget((p) => ({ ...p, expenses: [] }));
-                    }
-                  }}>Settle up</button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Ledger */}
-          <div className="card span-8 gb-ledger">
-            <div className="card-head">
-              <span className="card-eyebrow">This month</span>
-              <span className="card-title">Who paid what</span>
-              <button type="button" className="ghost-btn gb-add-btn" onClick={() => setExpenseModal("new")}>＋ Add expense</button>
-            </div>
-            <div className="gb-ledger-body">
-              {budget.expenses.length === 0 ? (
-                <div className="gb-empty">No shared expenses yet — add the first one.</div>
-              ) : (
-                <div className="gb-activity-list">
-                  {budget.expenses.map((e) => {
-                    const payer = memberById(e.paidBy);
-                    return (
-                      <button key={e.id} type="button" className="gb-act-row" onClick={() => setExpenseModal(e)}>
-                        {payer && <Avatar member={payer} idx={budget.members.indexOf(payer)} size={30} />}
-                        <span className="gb-act-main">
-                          <span className="gb-act-label">{e.title || "Expense"}</span>
-                          <span className="gb-act-meta">
-                            {payer?.name ?? "?"} paid · {e.date}{e.category ? ` · ${e.category}` : ""}
-                          </span>
-                        </span>
-                        <span className="gb-act-amt">{fmt(e.amount, e.currency)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Split basis */}
-          <div className="card span-4 gb-split-card">
-            <div className="card-head"><span className="card-eyebrow">Fairness</span><span className="card-title">Split basis</span></div>
-            <div className="gb-split-body">
-              <div className="seg gb-basis-seg" role="tablist">
-                {BASES.map((b) => (
-                  <button key={b.id} type="button" className={`seg-btn${budget.splitBasis === b.id ? " on" : ""}`} onClick={() => setBasis(b.id)}>{b.label}</button>
-                ))}
-              </div>
-              <p className="gb-basis-hint">
-                {budget.splitBasis === "equal" && "Everyone pays an equal share."}
-                {budget.splitBasis === "share" && "Split by each person's share weight."}
-                {budget.splitBasis === "income" && "Split proportionally to income."}
-              </p>
-              <div className="gb-mem-list">
-                {budget.members.map((m, i) => {
-                  const totalW = budget.members.reduce((s, x) => s + memberWeight(x, budget.splitBasis), 0) || 1;
-                  const pct = Math.round((memberWeight(m, budget.splitBasis) / totalW) * 100);
-                  return (
-                    <div key={m.id} className="gb-mem-row">
-                      <Avatar member={m} idx={i} size={26} />
-                      <span className="gb-mem-info">
-                        <span className="gb-mem-name">{m.name}</span>
-                        <span className="gb-mem-sub">
-                          {budget.splitBasis === "equal" && "equal share"}
-                          {budget.splitBasis === "share" && (
-                            <button type="button" className="gb-mem-edit" onClick={() => {
-                              const v = window.prompt(`${m.name}'s share weight`, String(m.share ?? 1));
-                              if (v != null) setBudget((p) => ({ ...p, members: p.members.map((x) => x.id === m.id ? { ...x, share: Math.max(0, Number(v) || 0) } : x) }));
-                            }}>weight {m.share ?? 1}</button>
-                          )}
-                          {budget.splitBasis === "income" && (
-                            <button type="button" className="gb-mem-edit" onClick={() => {
-                              const v = window.prompt(`${m.name}'s income`, String(m.income ?? 0));
-                              if (v != null) setBudget((p) => ({ ...p, members: p.members.map((x) => x.id === m.id ? { ...x, income: Math.max(0, Number(v) || 0) } : x) }));
-                            }}>income {fmt(m.income ?? 0, currency)}</button>
-                          )}
-                        </span>
-                      </span>
-                      <span className="gb-mem-share">
-                        <span className="gb-mem-pct">{pct}%</span>
-                        <span className="gb-mem-pctbar"><span style={{ width: `${pct}%` }} /></span>
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+            )}
+            <div className="seg gb-cur-seg" role="tablist" aria-label="Currency">
+              {CURRENCIES.map((c) => (
+                <button key={c} type="button" className={`seg-btn${currency === c ? " on" : ""}`} onClick={() => setCurrency(c)}>{c}</button>
+              ))}
             </div>
           </div>
         </div>
+      </div>
+
+      {view === "trips" ? (
+        <TripsView
+          trips={budget.trips ?? []}
+          members={budget.members}
+          currency={currency}
+          splitBasis={budget.splitBasis}
+          budgetId={budgetId}
+          setTrips={setTrips}
+        />
+      ) : (
+        <PeopleView
+          balances={balances}
+          currency={currency}
+          budgetId={budgetId}
+          onEdit={editPerson}
+          onAdd={addPerson}
+        />
       )}
 
       {expenseModal && (
@@ -400,7 +259,7 @@ export function BudgetPanel({ budget, setBudget, budgetId = null, activeMemberId
   );
 }
 
-function ExpenseModal({ expense, members, currency, defaultPaidBy, onSave, onRemove, onClose }: {
+export function ExpenseModal({ expense, members, currency, defaultPaidBy, onSave, onRemove, onClose }: {
   expense: BudgetExpense | null;
   members: BudgetMember[];
   currency: BudgetCurrency;
