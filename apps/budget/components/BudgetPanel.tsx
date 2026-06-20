@@ -178,6 +178,12 @@ export function BudgetPanel({
     onUpdateUser((personModal as BudgetMember).id, { name: trimmed });
     setPersonModal(null);
   };
+  const applyPerson = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || personModal === "new") return;
+    onUpdateUser((personModal as BudgetMember).id, { name: trimmed });
+    toast("Changes applied");
+  };
   const removePerson = () => {
     if (personModal && personModal !== "new") {
       onRemoveUser((personModal as BudgetMember).id);
@@ -361,6 +367,7 @@ export function BudgetPanel({
           budgetId={budgetId}
           trips={budget.trips ?? []}
           onSave={savePerson}
+          onApply={applyPerson}
           onRemove={personModal === "new" ? undefined : removePerson}
           onClose={() => setPersonModal(null)}
         />
@@ -477,11 +484,12 @@ export function ExpenseModal({ expense, members, currency, defaultPaidBy, onSave
   );
 }
 
-function PersonModal({ member, budgetId, trips, onSave, onRemove, onClose }: {
+function PersonModal({ member, budgetId, trips, onSave, onApply, onRemove, onClose }: {
   member: BudgetMember | null;
   budgetId?: string | null;
   trips: BudgetTrip[];
   onSave: (name: string) => void;
+  onApply?: (name: string) => void;
   onRemove?: () => void;
   onClose: () => void;
 }) {
@@ -563,10 +571,39 @@ function PersonModal({ member, budgetId, trips, onSave, onRemove, onClose }: {
         <div className="gb-modal-foot">
           {member && onRemove && <button type="button" className="gb-modal-del" onClick={onRemove}>Remove</button>}
           <span style={{ flex: 1 }} />
-          <button type="button" className="gb-modal-cancel" onClick={onClose}>{member ? "Done" : "Cancel"}</button>
-          <button type="button" className="gb-settle-btn" style={{ width: "auto", marginTop: 0, padding: "10px 18px" }} disabled={!valid} onClick={submit}>
-            {member ? "Save" : "Add person"}
-          </button>
+          {member ? (
+            <>
+              <button
+                type="button"
+                onClick={() => { if (valid) onApply?.(name); }}
+                disabled={!valid}
+                style={{
+                  fontFamily: "inherit",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "var(--accent)",
+                  background: "none",
+                  border: "1px solid color-mix(in srgb, var(--accent) 40%, var(--line))",
+                  borderRadius: 10,
+                  padding: "9px 16px",
+                  cursor: valid ? "pointer" : "default",
+                  opacity: valid ? 1 : 0.5,
+                }}
+              >
+                Apply
+              </button>
+              <button type="button" className="gb-settle-btn" style={{ width: "auto", marginTop: 0, padding: "10px 18px" }} disabled={!valid} onClick={submit}>
+                Save
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="gb-modal-cancel" onClick={onClose}>Cancel</button>
+              <button type="button" className="gb-settle-btn" style={{ width: "auto", marginTop: 0, padding: "10px 18px" }} disabled={!valid} onClick={submit}>
+                Add person
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
