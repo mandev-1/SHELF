@@ -37,3 +37,51 @@ begin
 exception
   when duplicate_object then null; -- already added; ignore on re-run
 end $$;
+
+-- ============================================================================
+-- users — the people in the budget. Source of truth for the roster + sessions.
+-- Ids are reused as the member ids that expenses/trips reference. `id` is text
+-- (not uuid) so it accepts the client-generated ids the app already created.
+-- Open RLS — soft model, same as budgets. (Sessions/superuser are client-side;
+-- the password is hardcoded in the app, so this is a guardrail, not security.)
+-- ============================================================================
+create table if not exists public.users (
+  id         text primary key,
+  name       text not null,
+  role       text not null default 'member', -- 'member' | 'superuser'
+  share      numeric,
+  income     numeric,
+  color      text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.users enable row level security;
+
+drop policy if exists "open users access" on public.users;
+create policy "open users access" on public.users
+  for all
+  to anon, authenticated
+  using (true)
+  with check (true);
+
+do $$
+begin
+  alter publication supabase_realtime add table public.users;
+exception
+  when duplicate_object then null;
+end $$;
+
+-- One-time migration: lift any existing blob members into the users table
+-- (same ids), so nothing is lost when members move out of budgets.data.
+insert into public.users (id, name, share, income, color, created_at)
+select m ->> 'id',
+       m ->> 'name',
+       nullif(m ->> 'share', '')::numeric,
+       nullif(m ->> 'income', '')::numeric,
+       m ->> 'color',
+       coalesce(nullif(m ->> 'createdAt', '')::timestamptz, now())
+from public.budgets b,
+     jsonb_array_elements(b.data -> 'members') m
+where coalesce(m ->> 'id', '') <> ''
+  and coalesce(m ->> 'name', '') <> ''
+on conflict (id) do nothing;

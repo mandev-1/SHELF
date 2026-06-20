@@ -126,6 +126,12 @@ interface Props {
   activeMemberId?: string | null;
   /** Trip-scoped link (?trip=<id>) → render guest mode for just that trip. */
   scopedTripId?: string | null;
+  isSuperuser?: boolean;
+  /** People CRUD against the Supabase users table (people live there now). */
+  onAddUser: (name: string) => Promise<BudgetMember | null>;
+  onUpdateUser: (id: string, patch: Partial<BudgetMember>) => void;
+  onRemoveUser: (id: string) => void;
+  onLogout?: () => void;
 }
 
 export function BudgetPanel({
@@ -134,6 +140,11 @@ export function BudgetPanel({
   budgetId = null,
   activeMemberId = null,
   scopedTripId = null,
+  isSuperuser = false,
+  onAddUser,
+  onUpdateUser,
+  onRemoveUser,
+  onLogout,
 }: Props) {
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
   const [personModal, setPersonModal] = useState<BudgetMember | "new" | null>(null);
@@ -149,24 +160,21 @@ export function BudgetPanel({
 
   const addPerson = () => setPersonModal("new");
   const editPerson = (m: BudgetMember) => setPersonModal(m);
-  const savePerson = (name: string) => {
+  const savePerson = async (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     if (personModal === "new") {
-      const m: BudgetMember = { id: uid(), name: trimmed, createdAt: nowIso() };
-      setBudget((p) => ({ ...p, members: [...p.members, m] }));
-      // Reopen in edit mode so the owner immediately sees this person's share link.
-      setPersonModal(m);
+      const m = await onAddUser(trimmed);
+      // Reopen in edit mode so the host immediately sees this person's share link.
+      setPersonModal(m ?? null);
       return;
     }
-    const target = personModal as BudgetMember;
-    setBudget((p) => ({ ...p, members: p.members.map((x) => (x.id === target.id ? { ...x, name: trimmed } : x)) }));
+    onUpdateUser((personModal as BudgetMember).id, { name: trimmed });
     setPersonModal(null);
   };
   const removePerson = () => {
     if (personModal && personModal !== "new") {
-      const target = personModal as BudgetMember;
-      setBudget((p) => ({ ...p, members: p.members.filter((x) => x.id !== target.id) }));
+      onRemoveUser((personModal as BudgetMember).id);
     }
     setPersonModal(null);
   };
@@ -245,6 +253,30 @@ export function BudgetPanel({
 
   return (
     <div className="gb">
+      {onLogout && (
+        <button
+          type="button"
+          onClick={onLogout}
+          style={{
+            position: "fixed",
+            bottom: 12,
+            left: 12,
+            zIndex: 50,
+            fontFamily: "inherit",
+            fontSize: 11.5,
+            fontWeight: 600,
+            color: "var(--dim)",
+            background: "var(--surface, #fff)",
+            border: "1px solid var(--line)",
+            borderRadius: 8,
+            padding: "5px 10px",
+            cursor: "pointer",
+            opacity: 0.9,
+          }}
+        >
+          {isSuperuser ? "Sign out" : "Leave"}
+        </button>
+      )}
       {/* Header */}
       <div className="gb-head">
         <div className="gb-head-l" style={{ flexDirection: "column", alignItems: "flex-start", gap: 0 }}>
