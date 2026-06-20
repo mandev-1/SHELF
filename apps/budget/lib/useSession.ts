@@ -51,6 +51,11 @@ export function useSession(): UseSessionResult {
   const logout = useCallback(() => {
     clearSession();
     setSession(null);
+    // Drop ?user/?trip so a reload can't re-establish the member session — this
+    // is also how "Log in as admin instead" reaches the gate.
+    if (typeof window !== "undefined") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   }, []);
 
   return { session, ready, login, logout };

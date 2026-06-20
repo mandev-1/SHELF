@@ -13,6 +13,7 @@ import "./budget.css";
 import { TripsView } from "./TripsView";
 import { PeopleView } from "./PeopleView";
 import { TripDetail } from "./TripDetail";
+import { ErrorCard } from "./ErrorCard";
 import { toast } from "../lib/toast";
 
 const CURRENCIES: BudgetCurrency[] = ["CZK", "PLN", "EUR"];
@@ -201,9 +202,12 @@ export function BudgetPanel({
     const scopedTrip = (budget.trips ?? []).find((t) => t.id === scopedTripId);
     if (!scopedTrip) {
       return (
-        <div className="gb">
-          <div className="gb-empty" style={{ marginTop: 48 }}>This trip link is no longer valid.</div>
-        </div>
+        <ErrorCard
+          emoji="🧭"
+          title="This trip link isn't valid anymore"
+          message="The trip may have been removed, or the link is out of date. Ask the host for a fresh invite."
+          onAdmin={onLogout}
+        />
       );
     }
     return (
