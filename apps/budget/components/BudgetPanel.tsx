@@ -119,6 +119,7 @@ interface Props {
 
 export function BudgetPanel({ budget, setBudget }: Props) {
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
+  const [personModal, setPersonModal] = useState<BudgetMember | "new" | null>(null);
 
   const { balances, total, transfers } = useMemo(() => computeBalances(budget), [budget]);
   const currency = budget.currency;
