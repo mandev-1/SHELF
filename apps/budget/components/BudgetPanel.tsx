@@ -127,22 +127,27 @@ export function BudgetPanel({ budget, setBudget }: Props) {
   const setCurrency = (c: BudgetCurrency) => setBudget((p) => ({ ...p, currency: c }));
   const setBasis = (b: BudgetSplitBasis) => setBudget((p) => ({ ...p, splitBasis: b }));
 
-  const addPerson = () => {
-    const name = window.prompt("Add a person — their name?");
-    if (!name?.trim()) return;
-    const m: BudgetMember = { id: uid(), name: name.trim(), createdAt: nowIso() };
-    setBudget((p) => ({ ...p, members: [...p.members, m] }));
-  };
-  const renamePerson = (m: BudgetMember) => {
-    const name = window.prompt("Rename", m.name);
-    if (name == null) return;
-    if (!name.trim()) {
-      if (window.confirm(`Remove ${m.name}?`)) {
-        setBudget((p) => ({ ...p, members: p.members.filter((x) => x.id !== m.id) }));
+  const addPerson = () => setPersonModal("new");
+  const editPerson = (m: BudgetMember) => setPersonModal(m);
+  const savePerson = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setBudget((p) => {
+      if (personModal === "new") {
+        const m: BudgetMember = { id: uid(), name: trimmed, createdAt: nowIso() };
+        return { ...p, members: [...p.members, m] };
       }
-      return;
+      const target = personModal as BudgetMember;
+      return { ...p, members: p.members.map((x) => (x.id === target.id ? { ...x, name: trimmed } : x)) };
+    });
+    setPersonModal(null);
+  };
+  const removePerson = () => {
+    if (personModal && personModal !== "new") {
+      const target = personModal as BudgetMember;
+      setBudget((p) => ({ ...p, members: p.members.filter((x) => x.id !== target.id) }));
     }
-    setBudget((p) => ({ ...p, members: p.members.map((x) => x.id === m.id ? { ...x, name: name.trim() } : x) }));
+    setPersonModal(null);
   };
 
   const saveExpense = (e: BudgetExpense) => {
@@ -180,7 +185,7 @@ export function BudgetPanel({ budget, setBudget }: Props) {
       {/* Member bar */}
       <div className="gb-memberbar">
         {balances.map((b, i) => (
-          <button key={b.member.id} type="button" className="gb-memchip on" onClick={() => renamePerson(b.member)}>
+          <button key={b.member.id} type="button" className="gb-memchip on" onClick={() => editPerson(b.member)}>
             <Avatar member={b.member} idx={i} />
             <span className="gb-memchip-main">
               <span className="gb-memchip-name">{b.member.name}</span>
@@ -359,6 +364,15 @@ export function BudgetPanel({ budget, setBudget }: Props) {
           onClose={() => setExpenseModal(null)}
         />
       )}
+
+      {personModal && (
+        <PersonModal
+          member={personModal === "new" ? null : personModal}
+          onSave={savePerson}
+          onRemove={personModal === "new" ? undefined : removePerson}
+          onClose={() => setPersonModal(null)}
+        />
+      )}
     </div>
   );
 }
@@ -463,6 +477,48 @@ function ExpenseModal({ expense, members, currency, onSave, onRemove, onClose }:
           <button type="button" className="gb-modal-cancel" onClick={onClose}>Cancel</button>
           <button type="button" className="gb-settle-btn" style={{ width: "auto", marginTop: 0, padding: "10px 18px" }} disabled={!valid} onClick={submit}>
             {expense ? "Save changes" : "Add expense"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PersonModal({ member, onSave, onRemove, onClose }: {
+  member: BudgetMember | null;
+  onSave: (name: string) => void;
+  onRemove?: () => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(member?.name ?? "");
+  const valid = name.trim().length > 0;
+  const submit = () => { if (valid) onSave(name); };
+
+  return (
+    <div className="gb-modal-backdrop" onClick={onClose}>
+      <div className="gb-modal gb-modal--sm" onClick={(e) => e.stopPropagation()}>
+        <div className="gb-modal-head">
+          <span className="card-eyebrow">{member ? "Edit person" : "Add a person"}</span>
+          <button type="button" className="gb-modal-x" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="gb-modal-body">
+          <label className="gb-fld" style={{ gridColumn: "1 / -1" }}>
+            <span className="gb-fld-lab">Name</span>
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+              placeholder="e.g. Carl"
+            />
+          </label>
+        </div>
+        <div className="gb-modal-foot">
+          {member && onRemove && <button type="button" className="gb-modal-del" onClick={onRemove}>Remove</button>}
+          <span style={{ flex: 1 }} />
+          <button type="button" className="gb-modal-cancel" onClick={onClose}>Cancel</button>
+          <button type="button" className="gb-settle-btn" style={{ width: "auto", marginTop: 0, padding: "10px 18px" }} disabled={!valid} onClick={submit}>
+            {member ? "Save" : "Add person"}
           </button>
         </div>
       </div>

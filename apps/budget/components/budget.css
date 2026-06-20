@@ -3804,3 +3804,25 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 .gb-fld-row { display: flex; gap: 12px; }
 .gb-fld input, .gb-fld select { width: 100%; font: inherit; font-size: 14px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; outline: none; }
 .gb-fld input:focus, .gb-fld select:focus { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+
+/* ── gb-modal glass surface ──────────────────────────────────────────────
+   The ported base only set max-width on .gb-modal, leaving the dialog box
+   transparent (fields floated on the page). Mirror .card / .se-modal so it
+   reads as a floating frosted panel. Theme rules add the blur on light themes. */
+.gb-modal {
+  width: min(560px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: calc(var(--r-card) + 6px);
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  animation: se-rise 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.gb-modal--sm { width: min(420px, 100%); }
+[data-theme="sap"] .gb-modal,
+[data-theme="day"] .gb-modal {
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: var(--sh-3), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
