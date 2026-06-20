@@ -82,3 +82,5 @@ persistence; live sync; zero-login hosting.
 
 **Possible next:** the import feature (from the handoff); an optional passcode/slug gate;
 normalized tables only if concurrent-edit safety ever becomes a real need.
+
+boo

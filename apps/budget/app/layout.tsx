@@ -10,7 +10,9 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    // data-theme="sap" = the light blue "office" theme the handoff/extension use.
+    // data-density="compact" matches the extension's spacing.
+    <html lang="en" data-theme="sap" data-density="compact">
       <body>
         {/* DM Sans / DM Mono — budget.css references these by name (its embedded
             font files were stripped during the port). Next hoists these to <head>. */}
@@ -20,6 +22,8 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
+        {/* SAP office backdrop: graph-paper ruling behind the cards (sap theme only). */}
+        <div className="office-paper" aria-hidden="true" />
         {children}
       </body>
     </html>

@@ -1,9 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
+/* Drive page chrome from budget.css's theme tokens (set by data-theme="sap"
+   on <html>), so the standalone matches the handoff instead of a forced dark. */
 body {
-  @apply bg-neutral-950 text-neutral-100 antialiased;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
 }
