@@ -41,6 +41,7 @@ export function useBudget(): UseBudgetResult {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      try {
       const supabase = getSupabase();
       const params = new URLSearchParams(window.location.search);
       const bParam = params.get("b");
@@ -102,6 +103,13 @@ export function useBudget(): UseBudgetResult {
       setBudgetId(row.id);
       setBudgetState(state);
       setLoading(false);
+      } catch (e) {
+        // Boot failures (missing Supabase env vars, network, etc.) land here so
+        // the UI shows the friendly error screen instead of hanging on "Loading".
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "The budget failed to start.");
+        setLoading(false);
+      }
     })();
 
     return () => {
