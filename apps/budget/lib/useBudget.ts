@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { supabase } from "./supabase/client";
+import { getSupabase } from "./supabase/client";
 import {
   type BudgetState,
   DEFAULT_BUDGET_STATE,
@@ -11,6 +11,9 @@ import {
 export interface UseBudgetResult {
   budget: BudgetState | null;
   setBudget: (next: BudgetState | ((prev: BudgetState) => BudgetState)) => void;
+  budgetId: string | null;
+  /** Member id from a personal link (?me=<id>); null when opened normally. */
+  activeMemberId: string | null;
   loading: boolean;
   error: string | null;
 }
@@ -23,6 +26,7 @@ const SAVE_DEBOUNCE_MS = 600;
 export function useBudget(): UseBudgetResult {
   const [budget, setBudgetState] = useState<BudgetState | null>(null);
   const [budgetId, setBudgetId] = useState<string | null>(null);
+  const [activeMemberId, setActiveMemberId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,36 +34,66 @@ export function useBudget(): UseBudgetResult {
   const lastSyncedRef = useRef<string>(""); // JSON we last wrote or received
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load (or create) the single shared budget row.
+  // Load the budget. A personal link carries ?b=<budgetId>&me=<memberId>:
+  //   - ?b present → load that specific budget (the friend's link)
+  //   - no ?b      → the owner's single shared budget (created on first run)
+  // ?me records which member "you" are, for attributing expenses.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data: rows, error: selErr } = await supabase
-        .from("budgets")
-        .select("id,data")
-        .order("created_at", { ascending: true })
-        .limit(1);
-      if (cancelled) return;
-      if (selErr) {
-        setError(selErr.message);
-        setLoading(false);
-        return;
-      }
+      const supabase = getSupabase();
+      const params = new URLSearchParams(window.location.search);
+      const bParam = params.get("b");
+      const meParam = params.get("me");
+      if (meParam) setActiveMemberId(meParam);
 
-      let row = rows?.[0];
-      if (!row) {
-        const { data: created, error: insErr } = await supabase
+      let row: { id: string; data: unknown } | undefined;
+
+      if (bParam) {
+        const { data, error: selErr } = await supabase
           .from("budgets")
-          .insert({})
           .select("id,data")
-          .single();
+          .eq("id", bParam)
+          .maybeSingle();
         if (cancelled) return;
-        if (insErr || !created) {
-          setError(insErr?.message ?? "Could not create budget");
+        if (selErr) {
+          setError(selErr.message);
           setLoading(false);
           return;
         }
-        row = created;
+        if (!data) {
+          setError("That budget link is invalid or was removed.");
+          setLoading(false);
+          return;
+        }
+        row = data;
+      } else {
+        const { data: rows, error: selErr } = await supabase
+          .from("budgets")
+          .select("id,data")
+          .order("created_at", { ascending: true })
+          .limit(1);
+        if (cancelled) return;
+        if (selErr) {
+          setError(selErr.message);
+          setLoading(false);
+          return;
+        }
+        row = rows?.[0];
+        if (!row) {
+          const { data: created, error: insErr } = await supabase
+            .from("budgets")
+            .insert({})
+            .select("id,data")
+            .single();
+          if (cancelled) return;
+          if (insErr || !created) {
+            setError(insErr?.message ?? "Could not create budget");
+            setLoading(false);
+            return;
+          }
+          row = created;
+        }
       }
 
       const state = normalizeBudget(row.data);
@@ -78,6 +112,7 @@ export function useBudget(): UseBudgetResult {
   // Realtime: apply remote edits from other people.
   useEffect(() => {
     if (!budgetId) return;
+    const supabase = getSupabase();
     const channel = supabase
       .channel(`budget:${budgetId}`)
       .on(
@@ -107,7 +142,7 @@ export function useBudget(): UseBudgetResult {
     const id = idRef.current;
     if (!id) return;
     lastSyncedRef.current = JSON.stringify(state);
-    void supabase
+    void getSupabase()
       .from("budgets")
       .update({ data: state, updated_at: new Date().toISOString() })
       .eq("id", id);
@@ -136,5 +171,5 @@ export function useBudget(): UseBudgetResult {
     [],
   );
 
-  return { budget, setBudget, loading, error };
+  return { budget, setBudget, budgetId, activeMemberId, loading, error };
 }

@@ -115,9 +115,13 @@ function Avatar({ member, idx, size = 30 }: { member: BudgetMember; idx: number;
 interface Props {
   budget: BudgetState;
   setBudget: (next: BudgetState | ((prev: BudgetState) => BudgetState)) => void;
+  /** The Supabase budget row id — used to build per-person share links. */
+  budgetId?: string | null;
+  /** When opened via a personal link (?me=<id>), the member you are. */
+  activeMemberId?: string | null;
 }
 
-export function BudgetPanel({ budget, setBudget }: Props) {
+export function BudgetPanel({ budget, setBudget, budgetId = null, activeMemberId = null }: Props) {
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
   const [personModal, setPersonModal] = useState<BudgetMember | "new" | null>(null);
 
@@ -132,14 +136,15 @@ export function BudgetPanel({ budget, setBudget }: Props) {
   const savePerson = (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    setBudget((p) => {
-      if (personModal === "new") {
-        const m: BudgetMember = { id: uid(), name: trimmed, createdAt: nowIso() };
-        return { ...p, members: [...p.members, m] };
-      }
-      const target = personModal as BudgetMember;
-      return { ...p, members: p.members.map((x) => (x.id === target.id ? { ...x, name: trimmed } : x)) };
-    });
+    if (personModal === "new") {
+      const m: BudgetMember = { id: uid(), name: trimmed, createdAt: nowIso() };
+      setBudget((p) => ({ ...p, members: [...p.members, m] }));
+      // Reopen in edit mode so the owner immediately sees this person's share link.
+      setPersonModal(m);
+      return;
+    }
+    const target = personModal as BudgetMember;
+    setBudget((p) => ({ ...p, members: p.members.map((x) => (x.id === target.id ? { ...x, name: trimmed } : x)) }));
     setPersonModal(null);
   };
   const removePerson = () => {
@@ -164,6 +169,7 @@ export function BudgetPanel({ budget, setBudget }: Props) {
 
   const memberById = (id: string) => budget.members.find((m) => m.id === id);
   const me = balances[0];
+  const activeMember = activeMemberId ? budget.members.find((m) => m.id === activeMemberId) : undefined;
 
   return (
     <div className="gb">
@@ -171,6 +177,21 @@ export function BudgetPanel({ budget, setBudget }: Props) {
       <div className="gb-head">
         <div className="gb-head-l">
           <h1 className="gb-title">Shared Budget</h1>
+          {activeMember && (
+            <span
+              title="You opened a personal link"
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--accent-deep)",
+                background: "color-mix(in srgb, var(--accent) 12%, transparent)",
+                padding: "4px 10px",
+                borderRadius: 999,
+              }}
+            >
+              You&apos;re {activeMember.name}
+            </span>
+          )}
           <div className="seg gb-cur-seg" role="tablist" aria-label="Currency">
             {CURRENCIES.map((c) => (
               <button key={c} type="button" className={`seg-btn${currency === c ? " on" : ""}`} onClick={() => setCurrency(c)}>{c}</button>
@@ -359,6 +380,7 @@ export function BudgetPanel({ budget, setBudget }: Props) {
           expense={expenseModal === "new" ? null : expenseModal}
           members={budget.members}
           currency={currency}
+          defaultPaidBy={activeMemberId ?? undefined}
           onSave={saveExpense}
           onRemove={removeExpense}
           onClose={() => setExpenseModal(null)}
@@ -368,6 +390,7 @@ export function BudgetPanel({ budget, setBudget }: Props) {
       {personModal && (
         <PersonModal
           member={personModal === "new" ? null : personModal}
+          budgetId={budgetId}
           onSave={savePerson}
           onRemove={personModal === "new" ? undefined : removePerson}
           onClose={() => setPersonModal(null)}
@@ -377,10 +400,11 @@ export function BudgetPanel({ budget, setBudget }: Props) {
   );
 }
 
-function ExpenseModal({ expense, members, currency, onSave, onRemove, onClose }: {
+function ExpenseModal({ expense, members, currency, defaultPaidBy, onSave, onRemove, onClose }: {
   expense: BudgetExpense | null;
   members: BudgetMember[];
   currency: BudgetCurrency;
+  defaultPaidBy?: string;
   onSave: (e: BudgetExpense) => void;
   onRemove: (id: string) => void;
   onClose: () => void;
@@ -390,7 +414,7 @@ function ExpenseModal({ expense, members, currency, onSave, onRemove, onClose }:
   const [cur, setCur] = useState<BudgetCurrency>(expense?.currency ?? currency);
   const [category, setCategory] = useState(expense?.category ?? "");
   const [date, setDate] = useState(expense?.date ?? today());
-  const [paidBy, setPaidBy] = useState(expense?.paidBy ?? members[0]?.id ?? "");
+  const [paidBy, setPaidBy] = useState(expense?.paidBy ?? defaultPaidBy ?? members[0]?.id ?? "");
   const [among, setAmong] = useState<string[]>(expense?.splitAmong?.length ? expense.splitAmong : members.map((m) => m.id));
 
   const valid = title.trim() && Number(amount) > 0 && paidBy && among.length > 0;
@@ -484,15 +508,22 @@ function ExpenseModal({ expense, members, currency, onSave, onRemove, onClose }:
   );
 }
 
-function PersonModal({ member, onSave, onRemove, onClose }: {
+function PersonModal({ member, budgetId, onSave, onRemove, onClose }: {
   member: BudgetMember | null;
+  budgetId?: string | null;
   onSave: (name: string) => void;
   onRemove?: () => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(member?.name ?? "");
+  const [copied, setCopied] = useState(false);
   const valid = name.trim().length > 0;
   const submit = () => { if (valid) onSave(name); };
+
+  // Personal link: opening it identifies the friend as this member, so their
+  // expenses are auto-attributed to them. Only valid once the member exists.
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const shareUrl = member && budgetId ? `${origin}/?b=${budgetId}&me=${member.id}` : "";
 
   return (
     <div className="gb-modal-backdrop" onClick={onClose}>
@@ -512,11 +543,34 @@ function PersonModal({ member, onSave, onRemove, onClose }: {
               placeholder="e.g. Carl"
             />
           </label>
+
+          {shareUrl && (
+            <div className="gb-fld" style={{ gridColumn: "1 / -1" }}>
+              <span className="gb-fld-lab">
+                Personal link — send to {name || "them"} so they can add expenses as themselves
+              </span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input readOnly value={shareUrl} onFocus={(e) => e.currentTarget.select()} style={{ flex: 1 }} />
+                <button
+                  type="button"
+                  className="gb-settle-btn"
+                  style={{ width: "auto", marginTop: 0, padding: "10px 16px", whiteSpace: "nowrap" }}
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareUrl);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  }}
+                >
+                  {copied ? "Copied ✓" : "Copy link"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         <div className="gb-modal-foot">
           {member && onRemove && <button type="button" className="gb-modal-del" onClick={onRemove}>Remove</button>}
           <span style={{ flex: 1 }} />
-          <button type="button" className="gb-modal-cancel" onClick={onClose}>Cancel</button>
+          <button type="button" className="gb-modal-cancel" onClick={onClose}>{member ? "Done" : "Cancel"}</button>
           <button type="button" className="gb-settle-btn" style={{ width: "auto", marginTop: 0, padding: "10px 18px" }} disabled={!valid} onClick={submit}>
             {member ? "Save" : "Add person"}
           </button>

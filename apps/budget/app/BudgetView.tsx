@@ -4,7 +4,7 @@ import { useBudget } from "@/lib/useBudget";
 import { BudgetPanel } from "@/components/BudgetPanel";
 
 export function BudgetView() {
-  const { budget, setBudget, loading, error } = useBudget();
+  const { budget, setBudget, budgetId, activeMemberId, loading, error } = useBudget();
 
   if (loading) {
     return <p className="p-8 text-sm text-neutral-400">Loading budget…</p>;
@@ -14,6 +14,12 @@ export function BudgetView() {
   }
   if (!budget) return null;
 
-  // The ported feature — unchanged from the extension.
-  return <BudgetPanel budget={budget} setBudget={setBudget} />;
+  return (
+    <BudgetPanel
+      budget={budget}
+      setBudget={setBudget}
+      budgetId={budgetId}
+      activeMemberId={activeMemberId}
+    />
+  );
 }
