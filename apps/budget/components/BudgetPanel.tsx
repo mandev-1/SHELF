@@ -132,6 +132,10 @@ interface Props {
   onAddUser: (name: string) => Promise<BudgetMember | null>;
   onUpdateUser: (id: string, patch: Partial<BudgetMember>) => void;
   onRemoveUser: (id: string) => void;
+  /** Trip CRUD against the Supabase trips table (trips live there now). */
+  onAddTrip: (trip: BudgetTrip) => void;
+  onUpdateTrip: (trip: BudgetTrip) => void;
+  onRemoveTrip: (id: string) => void;
   onLogout?: () => void;
 }
 
@@ -145,6 +149,9 @@ export function BudgetPanel({
   onAddUser,
   onUpdateUser,
   onRemoveUser,
+  onAddTrip,
+  onUpdateTrip,
+  onRemoveTrip,
   onLogout,
 }: Props) {
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
@@ -156,8 +163,6 @@ export function BudgetPanel({
 
   const setCurrency = (c: BudgetCurrency) => setBudget((p) => ({ ...p, currency: c }));
   const setBasis = (b: BudgetSplitBasis) => setBudget((p) => ({ ...p, splitBasis: b }));
-  const setTrips = (updater: (prev: BudgetTrip[]) => BudgetTrip[]) =>
-    setBudget((p) => ({ ...p, trips: updater(p.trips ?? []) }));
 
   const addPerson = () => setPersonModal("new");
   const editPerson = (m: BudgetMember) => setPersonModal(m);
@@ -249,7 +254,7 @@ export function BudgetPanel({
           guest
           onBack={() => {}}
           onEdit={() => {}}
-          onUpdate={(t) => setTrips((prev) => prev.map((x) => (x.id === t.id ? t : x)))}
+          onUpdate={onUpdateTrip}
         />
       </div>
     );
@@ -324,7 +329,9 @@ export function BudgetPanel({
           currency={currency}
           splitBasis={budget.splitBasis}
           budgetId={budgetId}
-          setTrips={setTrips}
+          onAddTrip={onAddTrip}
+          onUpdateTrip={onUpdateTrip}
+          onRemoveTrip={onRemoveTrip}
         />
       ) : (
         <PeopleView

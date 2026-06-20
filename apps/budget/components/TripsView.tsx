@@ -13,10 +13,21 @@ interface TripsViewProps {
   currency: BudgetCurrency;
   splitBasis: BudgetSplitBasis;
   budgetId?: string | null;
-  setTrips: (updater: (prev: BudgetTrip[]) => BudgetTrip[]) => void;
+  onAddTrip: (trip: BudgetTrip) => void;
+  onUpdateTrip: (trip: BudgetTrip) => void;
+  onRemoveTrip: (id: string) => void;
 }
 
-export function TripsView({ trips, members, currency, splitBasis, budgetId, setTrips }: TripsViewProps) {
+export function TripsView({
+  trips,
+  members,
+  currency,
+  splitBasis,
+  budgetId,
+  onAddTrip,
+  onUpdateTrip,
+  onRemoveTrip,
+}: TripsViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modal, setModal] = useState<BudgetTrip | "new" | null>(null);
 
@@ -27,16 +38,19 @@ export function TripsView({ trips, members, currency, splitBasis, budgetId, setT
       trip={modal === "new" ? null : modal}
       members={members}
       onSave={(t) => {
-        setTrips((prev) => (modal === "new" ? [t, ...prev] : prev.map((x) => (x.id === t.id ? t : x))));
-        if (modal === "new") setSelectedId(t.id);
+        if (modal === "new") {
+          onAddTrip(t);
+          setSelectedId(t.id);
+        } else {
+          onUpdateTrip(t);
+        }
         setModal(null);
       }}
       onRemove={
         modal === "new"
           ? undefined
           : () => {
-              const id = (modal as BudgetTrip).id;
-              setTrips((prev) => prev.filter((x) => x.id !== id));
+              onRemoveTrip((modal as BudgetTrip).id);
               setSelectedId(null);
               setModal(null);
             }
@@ -56,7 +70,7 @@ export function TripsView({ trips, members, currency, splitBasis, budgetId, setT
           budgetId={budgetId}
           onBack={() => setSelectedId(null)}
           onEdit={() => setModal(selected)}
-          onUpdate={(t) => setTrips((prev) => prev.map((x) => (x.id === t.id ? t : x)))}
+          onUpdate={onUpdateTrip}
         />
         {modalNode}
       </>

@@ -2,6 +2,7 @@
 
 import { useBudget } from "@/lib/useBudget";
 import { useUsers } from "@/lib/useUsers";
+import { useTrips } from "@/lib/useTrips";
 import { useSession } from "@/lib/useSession";
 import { BudgetPanel } from "@/components/BudgetPanel";
 import { BootError } from "@/components/BootError";
@@ -11,12 +12,13 @@ import { Toaster } from "@/components/Toaster";
 export function BudgetView() {
   const { session, ready: sessionReady, login, logout } = useSession();
   const { users, ready: usersReady, addUser, updateUser, removeUser } = useUsers();
+  const { trips, ready: tripsReady, addTrip, updateTrip, removeTrip } = useTrips();
   const { budget, setBudget, budgetId, loading, error } = useBudget();
 
   if (error) {
     return <BootError detail={error} />;
   }
-  if (!sessionReady || loading || !usersReady) {
+  if (!sessionReady || loading || !usersReady || !tripsReady) {
     return <p className="p-8 text-sm text-neutral-400">Loading budget…</p>;
   }
   // No session and no invite link → ask for the host password (or use a link).
@@ -32,8 +34,8 @@ export function BudgetView() {
   return (
     <>
       <BudgetPanel
-        // People now come from the Supabase users table, injected as members.
-        budget={{ ...budget, members: users }}
+        // People + trips now come from their own Supabase tables, injected here.
+        budget={{ ...budget, members: users, trips }}
         setBudget={setBudget}
         budgetId={budgetId}
         activeMemberId={activeMemberId}
@@ -42,6 +44,9 @@ export function BudgetView() {
         onAddUser={addUser}
         onUpdateUser={updateUser}
         onRemoveUser={removeUser}
+        onAddTrip={addTrip}
+        onUpdateTrip={updateTrip}
+        onRemoveTrip={removeTrip}
         onLogout={logout}
       />
       <Toaster />
