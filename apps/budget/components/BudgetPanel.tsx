@@ -462,6 +462,10 @@ export function ExpenseModal({ expense, members, currency, defaultPaidBy, dateRa
   const amt = Number(amount) || 0;
   const perHead = splitIds.length ? amt / splitIds.length : 0;
 
+  // TODO (later version): receipts are stored inline as base64 data URLs on the
+  // expense — fine for small images but it bloats the jsonb blob and risks the
+  // Go API's 8 MiB body cap for big photos. Move to object storage (Supabase
+  // Storage / S3) and persist only a URL/key; ideally OCR on upload. See SSoT §10.
   const onReceiptFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;

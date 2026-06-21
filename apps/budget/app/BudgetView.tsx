@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useBudget } from "@/lib/useBudget";
 import { useUsers } from "@/lib/useUsers";
 import { useTrips } from "@/lib/useTrips";
@@ -14,6 +15,26 @@ export function BudgetView() {
   const { users, ready: usersReady, addUser, updateUser, removeUser } = useUsers();
   const { trips, ready: tripsReady, addTrip, updateTrip, removeTrip } = useTrips();
   const { budget, setBudget, budgetId, loading, error } = useBudget();
+
+  // Track the *visual* viewport (which shrinks when the mobile keyboard opens —
+  // unlike dvh/vh) into CSS vars so modals can size/position to the visible area
+  // and stay fully reachable above the keyboard.
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const root = document.documentElement;
+    const apply = () => {
+      root.style.setProperty("--vvh", `${vv.height}px`);
+      root.style.setProperty("--vvt", `${vv.offsetTop}px`);
+    };
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => {
+      vv.removeEventListener("resize", apply);
+      vv.removeEventListener("scroll", apply);
+    };
+  }, []);
 
   if (error) {
     // Even when the data layer fails (e.g. the API token is wrong), let the host

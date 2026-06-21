@@ -3818,7 +3818,12 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 .gb-mem-edit { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--accent); }
 .gb-mem-edit:hover { text-decoration: underline; }
 
-.gb-modal-backdrop { position: fixed; inset: 0; z-index: 220; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.45); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.gb-modal-backdrop { position: fixed; left: 0; width: 100%;
+  /* Pin to the VISUAL viewport (set by BudgetView) so an open modal sits in the
+     area above the mobile keyboard instead of behind it. Falls back to dvh. */
+  top: var(--vvt, 0px); height: var(--vvh, 100dvh);
+  z-index: 220; display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: rgba(0,0,0,0.45); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
 .gb-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 0; flex: 0 0 auto; }
 .gb-modal-x { background: none; border: 0; cursor: pointer; font-size: 15px; color: var(--dim); padding: 4px 8px; border-radius: 8px; }
 .gb-modal-x:hover { background: var(--surface-2); color: var(--fg); }
@@ -3839,10 +3844,11 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
    reads as a floating frosted panel. Theme rules add the blur on light themes. */
 .gb-modal {
   width: min(560px, 100%);
-  /* Never taller than the viewport (minus the backdrop's 20px padding); the body
-     scrolls while the header + footer stay pinned. */
-  max-height: calc(100vh - 40px);
-  max-height: calc(100dvh - 40px);
+  /* Never taller than the VISIBLE viewport (minus the backdrop's padding); the
+     body scrolls while header + footer stay pinned. --vvh shrinks with the mobile
+     keyboard so the modal always fits above it. Falls back to dvh/vh. */
+  max-height: calc(100vh - 32px);
+  max-height: calc(var(--vvh, 100dvh) - 32px);
   display: flex;
   flex-direction: column;
   background: var(--panel);
