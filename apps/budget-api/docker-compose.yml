@@ -1,0 +1,26 @@
+# Local-only convenience: build the production Docker image and run it the same
+# way Render does — as a container whose configuration comes from REAL env vars
+# (supplied here from .env.local). This is the closest local mirror of Render,
+# so it's the best way to prove the DATABASE_URL value itself is good: if the
+# container connects here, the code + image + connection string are all fine and
+# any remaining 28P01 is purely Render's stored env-var value.
+#
+#   docker compose up --build      # build + run, stream logs (Ctrl+C to stop)
+#   docker compose down            # remove the container
+#
+# Render does NOT use this file — it builds straight from the Dockerfile and
+# injects env vars from its dashboard.
+services:
+  budget-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Secrets come from your gitignored .env.local (DATABASE_URL, API_TOKEN, …).
+    # These arrive as real container env vars — exactly like Render — not via
+    # the .env.local file-loader (that file isn't copied into the image).
+    env_file:
+      - .env.local
+    ports:
+      # host:container — .env.local sets PORT=8080, so the server listens on 8080.
+      - "8080:8080"
+    restart: "no"

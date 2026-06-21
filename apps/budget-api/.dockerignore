@@ -1,0 +1,15 @@
+# Keep the build context small and keep secrets / local cruft out of image
+# layers. The build only needs Go source + go.mod/go.sum + internal/.
+.env
+.env.local
+.env.example
+.git
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+*.md
+server
+bapi
+bapi-test
+*.test
