@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useBudget } from "@/lib/useBudget";
 import { useUsers } from "@/lib/useUsers";
 import { useTrips } from "@/lib/useTrips";
@@ -36,6 +36,16 @@ export function BudgetView() {
     };
   }, []);
 
+  // Keep the loader up for at least 300ms so it never flashes, and greet the
+  // member by name once we know who they are.
+  const [minElapsed, setMinElapsed] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMinElapsed(true), 300);
+    return () => clearTimeout(t);
+  }, []);
+  const activeName =
+    session?.role === "member" ? users.find((u) => u.id === session.userId)?.name : undefined;
+
   if (error) {
     // Even when the data layer fails (e.g. the API token is wrong), let the host
     // log in as admin from here — the session is client-side and persists, so a
@@ -47,7 +57,7 @@ export function BudgetView() {
       />
     );
   }
-  if (!sessionReady || loading || !usersReady || !tripsReady) {
+  if (!sessionReady || loading || !usersReady || !tripsReady || !minElapsed) {
     return (
       <div className="gb-loader" role="status" aria-label="Loading budget">
         <div className="gb-loader-dots">
@@ -55,7 +65,9 @@ export function BudgetView() {
           <span className="gb-loader-dot" />
           <span className="gb-loader-dot" />
         </div>
-        <span className="gb-loader-label ink-on-paper">Loading budget…</span>
+        <span className="gb-loader-label ink-on-paper">
+          {activeName ? `Welcome, ${activeName}` : "Loading budget…"}
+        </span>
       </div>
     );
   }

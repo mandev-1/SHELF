@@ -76,10 +76,11 @@ export function PeopleView({ balances, currency, budgetId, trips, onEdit, onAdd 
               </span>
             </button>
             {(() => {
+              const isAdmin = (b.member.role ?? "") === "admin";
               const pt = trips.filter((t) => (t.memberIds ?? []).includes(b.member.id));
               return (
                 <div className="gb-access-row">
-                  {pt.length === 0 ? (
+                  {isAdmin || pt.length === 0 ? (
                     <span className="gb-access-chip gb-access-full">🔑 Full access</span>
                   ) : (
                     pt.map((t) => (

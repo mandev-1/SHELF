@@ -29,6 +29,7 @@ function dtoToMember(r: UserDTO): BudgetMember {
   return {
     id: r.id,
     name: r.name,
+    role: r.role ?? undefined,
     share: r.share ?? undefined,
     income: r.income ?? undefined,
     color: r.color ?? undefined,
@@ -127,6 +128,7 @@ export function useUsers(): UseUsersResult {
       track(
         api.patch<UserDTO>(`/users/${id}`, {
           name: merged.name,
+          role: merged.role,
           share: merged.share,
           income: merged.income,
           color: merged.color,

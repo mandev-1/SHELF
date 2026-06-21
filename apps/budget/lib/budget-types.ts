@@ -11,6 +11,8 @@ export type BudgetSplitBasis = "equal" | "share" | "income";
 export interface BudgetMember {
   id: string;
   name: string;
+  /** "admin" = full access to everything; anything else = scoped to one trip. */
+  role?: string;
   /** Weight for "by share" basis (defaults to 1). */
   share?: number;
   /** Monthly income for "by income" basis. */
@@ -109,6 +111,7 @@ function normBudgetMember(o: any): BudgetMember | null {
   return {
     id: o.id,
     name: o.name,
+    role: typeof o.role === "string" ? o.role : undefined,
     share: typeof o.share === "number" ? o.share : undefined,
     income: typeof o.income === "number" ? o.income : undefined,
     color: typeof o.color === "string" ? o.color : undefined,

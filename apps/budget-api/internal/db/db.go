@@ -114,10 +114,11 @@ func (s *Store) UpdateUser(ctx context.Context, id string, patch models.User) (m
 		SET name = $2,
 		    share = $3,
 		    income = $4,
-		    color = $5
+		    color = $5,
+		    role = COALESCE(NULLIF($6, ''), role)
 		WHERE id = $1
 		RETURNING id, name, role, share, income, color, created_at`,
-		id, patch.Name, patch.Share, patch.Income, patch.Color,
+		id, patch.Name, patch.Share, patch.Income, patch.Color, patch.Role,
 	).Scan(&out.ID, &out.Name, &out.Role, &out.Share, &out.Income, &out.Color, &out.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

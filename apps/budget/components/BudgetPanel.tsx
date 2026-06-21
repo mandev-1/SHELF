@@ -23,6 +23,9 @@ const BASES: { id: BudgetSplitBasis; label: string }[] = [
   { id: "income", label: "By income" },
 ];
 const CATEGORIES = ["Groceries", "Dining", "Transport", "Housing", "Fun", "Health", "Fees", "Other"];
+
+// A person is either an admin (full access) or a member scoped to one trip.
+type PersonAccess = { isAdmin: boolean; tripId: string };
 // Avatar hues cycle through ShELF's tokens.
 const AV_HUES = ["var(--hue-blue)", "var(--hue-rose)", "var(--hue-purple)", "var(--hue-orange)", "var(--hue-green)", "var(--hue-zinc)"];
 
@@ -171,16 +174,24 @@ export function BudgetPanel({
 
   const addPerson = () => setPersonModal("new");
   const editPerson = (m: BudgetMember) => setPersonModal(m);
-  // Scoping a person to a trip adds them to that trip's roster ("Who's on the
-  // trip") so trip access and membership stay in sync (both via trips.memberIds).
-  const scopeMemberToTrip = (memberId: string, tripId: string) => {
-    const trip = (budget.trips ?? []).find((t) => t.id === tripId);
-    if (!trip) return;
-    const ids = trip.memberIds ?? [];
-    if (ids.includes(memberId)) return;
-    onUpdateTrip({ ...trip, memberIds: [...ids, memberId], updatedAt: nowIso() });
+  // A non-admin person is scoped to exactly ONE trip — enforced via that trip's
+  // roster (trips.memberIds): join the chosen trip, leave all others.
+  const setExclusiveTripMembership = (memberId: string, tripId: string) => {
+    (budget.trips ?? []).forEach((trip) => {
+      const ids = trip.memberIds ?? [];
+      const has = ids.includes(memberId);
+      if (trip.id === tripId && !has) {
+        onUpdateTrip({ ...trip, memberIds: [...ids, memberId], updatedAt: nowIso() });
+      } else if (trip.id !== tripId && has) {
+        onUpdateTrip({ ...trip, memberIds: ids.filter((x) => x !== memberId), updatedAt: nowIso() });
+      }
+    });
   };
-  const savePerson = async (name: string, scope = "full") => {
+  const persistAccess = (id: string, name: string, access?: PersonAccess) => {
+    onUpdateUser(id, { name, ...(access ? { role: access.isAdmin ? "admin" : "member" } : {}) });
+    if (access && !access.isAdmin && access.tripId) setExclusiveTripMembership(id, access.tripId);
+  };
+  const savePerson = async (name: string, access?: PersonAccess) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     if (personModal === "new") {
@@ -195,17 +206,13 @@ export function BudgetPanel({
       }
       return;
     }
-    const id = (personModal as BudgetMember).id;
-    onUpdateUser(id, { name: trimmed });
-    if (scope !== "full") scopeMemberToTrip(id, scope);
+    persistAccess((personModal as BudgetMember).id, trimmed, access);
     setPersonModal(null);
   };
-  const applyPerson = (name: string, scope = "full") => {
+  const applyPerson = (name: string, access?: PersonAccess) => {
     const trimmed = name.trim();
     if (!trimmed || personModal === "new") return;
-    const id = (personModal as BudgetMember).id;
-    onUpdateUser(id, { name: trimmed });
-    if (scope !== "full") scopeMemberToTrip(id, scope);
+    persistAccess((personModal as BudgetMember).id, trimmed, access);
     toast("Changes applied");
   };
   const removePerson = () => {
@@ -666,23 +673,26 @@ function PersonModal({ member, budgetId, trips, onSave, onApply, onRemove, onClo
   member: BudgetMember | null;
   budgetId?: string | null;
   trips: BudgetTrip[];
-  onSave: (name: string, scope?: string) => void;
-  onApply?: (name: string, scope?: string) => void;
+  onSave: (name: string, access?: PersonAccess) => void;
+  onApply?: (name: string, access?: PersonAccess) => void;
   onRemove?: () => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(member?.name ?? "");
-  // Trip access reflects membership: a person on exactly one trip defaults to it.
+  // Access: admin (role "admin" → full access) vs a single trip. Defaults reflect
+  // saved state — the role flag, and the one trip they're currently a member of.
   const memberTrips = member ? trips.filter((t) => (t.memberIds ?? []).includes(member.id)) : [];
-  const [scope, setScope] = useState<string>(memberTrips.length === 1 ? memberTrips[0].id : "full"); // "full" | tripId
+  const [isAdmin, setIsAdmin] = useState((member?.role ?? "") === "admin");
+  const [tripId, setTripId] = useState<string>(memberTrips[0]?.id ?? trips[0]?.id ?? "");
   const [copied, setCopied] = useState(false);
   const valid = name.trim().length > 0;
-  const submit = () => { if (valid) onSave(name, scope); };
+  const access: PersonAccess = { isAdmin, tripId };
+  const submit = () => { if (valid) onSave(name, access); };
 
-  // Personal link carries explicit ?user=<id> (who you are) and, when scoped,
+  // Personal link carries explicit ?user=<id> (who you are) and, for non-admins,
   // &trip=<id> (the only trip they can open). budget id rides along as ?b=.
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const scopeTrip = scope !== "full" ? trips.find((t) => t.id === scope) : undefined;
+  const scopeTrip = !isAdmin ? trips.find((t) => t.id === tripId) : undefined;
   const shareUrl =
     member && budgetId
       ? `${origin}/?b=${budgetId}&user=${member.id}${scopeTrip ? `&trip=${scopeTrip.id}` : ""}`
@@ -709,14 +719,34 @@ function PersonModal({ member, budgetId, trips, onSave, onApply, onRemove, onClo
 
           {shareUrl && (
             <>
-              {trips.length > 0 && (
+              <label className="gb-fld" style={{ gridColumn: "1 / -1" }}>
+                <span className="gb-fld-lab">Access</span>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 9,
+                    cursor: "pointer",
+                    fontSize: 14,
+                    color: "var(--fg)",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isAdmin}
+                    onChange={(e) => setIsAdmin(e.target.checked)}
+                    style={{ width: 16, height: 16, accentColor: "var(--accent)" }}
+                  />
+                  Admin — full access to everything
+                </label>
+              </label>
+              {!isAdmin && trips.length > 0 && (
                 <label className="gb-fld" style={{ gridColumn: "1 / -1" }}>
-                  <span className="gb-fld-lab">Trip access</span>
-                  <select value={scope} onChange={(e) => setScope(e.target.value)}>
-                    <option value="full">Full access — everything</option>
+                  <span className="gb-fld-lab">Trip access — the only trip they can open</span>
+                  <select value={tripId} onChange={(e) => setTripId(e.target.value)}>
                     {trips.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {(t.emoji ? t.emoji + " " : "") + t.name} only
+                        {(t.emoji ? t.emoji + " " : "") + t.name}
                       </option>
                     ))}
                   </select>
@@ -755,7 +785,7 @@ function PersonModal({ member, budgetId, trips, onSave, onApply, onRemove, onClo
             <>
               <button
                 type="button"
-                onClick={() => { if (valid) onApply?.(name, scope); }}
+                onClick={() => { if (valid) onApply?.(name, access); }}
                 disabled={!valid}
                 style={{
                   fontFamily: "inherit",
