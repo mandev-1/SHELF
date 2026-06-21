@@ -319,8 +319,8 @@ export function BudgetPanel({
       {/* Header */}
       <div className="gb-head">
         <div className="gb-head-l" style={{ flexDirection: "column", alignItems: "flex-start", gap: 0 }}>
-          <span className="card-eyebrow" style={{ display: "block", marginBottom: 2 }}>STRATEGIE · SHARED BUDGET</span>
-          <h1 className="gb-title">{view === "trips" ? "Trips & travel" : "People"}</h1>
+          <span className="card-eyebrow ink-on-paper" style={{ display: "block", marginBottom: 2 }}>STRATEGIE · SHARED BUDGET</span>
+          <h1 className="gb-title ink-on-paper">{view === "trips" ? "Trips & travel" : "People"}</h1>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginTop: 10 }}>
             <div className="seg gb-viewseg" role="tablist" aria-label="View">
               <button type="button" className={`seg-btn${view === "people" ? " on" : ""}`} onClick={() => setView("people")}>People</button>

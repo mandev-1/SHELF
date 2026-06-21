@@ -3065,7 +3065,8 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
   color: var(--accent-deep);
 }
 /* office backdrop: graph-paper ruling + paper grain behind the cards */
-[data-theme="sap"] body { background-color: var(--bg); }
+/* paper colour from handoff 007 so nothing dark peeks behind the .notebook-page */
+[data-theme="sap"] body { background-color: #fbfdff; }
 .office-paper { display: none; }
 [data-theme="sap"] .office-paper {
   display: block; position: fixed; inset: 0; z-index: 0; pointer-events: none;

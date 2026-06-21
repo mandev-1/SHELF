@@ -1,0 +1,60 @@
+/* ============================================================================
+   Summer-notebook background — handoff snippet
+   ----------------------------------------------------------------------------
+   A handmade-notebook page: white paper, hand-drawn (gently wavy) blue ruled
+   lines, a blue margin rule down the left edge, and a soft sky glow at the top.
+   Lifted verbatim from the Holiday Budget app's light theme.
+
+   USAGE
+     <div class="notebook-page"> …your content… </div>
+   The page paints the background; put content in normal-flow children. Headings
+   that sit directly on the page get a white "paper halo" so the ruled lines
+   don't cut through them — apply .ink-on-paper (or copy the text-shadow) to any
+   text placed straight on the background.
+
+   NOTES
+   - The wavy rule is an inline SVG data-URI (a real bezier path — no SVG
+     filters, so it renders reliably on mobile Safari/Chrome). Tile = 200×32px.
+   - Ruled lines repeat every 32px; tweak background-size's height to change the
+     line spacing. The margin rule sits at x=26px.
+   - Colors: paper #fbfdff, rule #7db0e2, margin rgba(86,142,200,.40).
+   ========================================================================== */
+
+.notebook-page {
+  position: relative;
+  background-color: #fbfdff;
+  background-image:
+    /* 1 — blue margin rule down the left */
+    linear-gradient(90deg, transparent 0 26px, rgba(86, 142, 200, 0.40) 26px 27.6px, transparent 27.6px),
+    /* 2 — hand-drawn wavy blue ruled line, tiled */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='32'%3E%3Cpath d='M0 24 C16 22.5 33 25.3 50 24 C67 22.7 83 25.4 100 24 C117 22.5 133 25.3 150 24 C167 22.7 183 25.4 200 24' stroke='%237db0e2' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat, repeat;
+  background-size: auto, 200px 32px;
+  background-position: 0 0, 0 8px;
+}
+
+/* soft sky glow at the top of the page (behind content) */
+.notebook-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(95% 46% at 50% -10%, rgba(176, 210, 240, 0.30), transparent 74%);
+}
+
+/* keep real content above the ::before glow */
+.notebook-page > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* paper halo — apply to text that sits directly on the ruled page so the blue
+   lines don't cut through it (headings, captions, standalone notes) */
+.ink-on-paper {
+  text-shadow:
+    0 0 5px #fbfdff,
+    0 0 5px #fbfdff,
+    0 0 11px #fbfdff,
+    0 1px 2px #fbfdff;
+}

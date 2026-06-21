@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+// Handoff 007 — ported 1:1 (verbatim). The .notebook-page wrapper is applied in page.tsx.
+import "../components/notebook-background.css";
 
 export const metadata: Metadata = {
   title: "Budget",
@@ -22,8 +24,6 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
-        {/* SAP office backdrop: graph-paper ruling behind the cards (sap theme only). */}
-        <div className="office-paper" aria-hidden="true" />
         {children}
       </body>
     </html>

@@ -55,7 +55,7 @@ export function BudgetView() {
           <span className="gb-loader-dot" />
           <span className="gb-loader-dot" />
         </div>
-        <span className="gb-loader-label">Loading budget…</span>
+        <span className="gb-loader-label ink-on-paper">Loading budget…</span>
       </div>
     );
   }
