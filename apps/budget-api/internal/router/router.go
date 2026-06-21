@@ -32,6 +32,8 @@ func New(store *db.Store, cfg config.Config) http.Handler {
 
 	mux.HandleFunc("GET /api/budget", bh.Get)
 	mux.HandleFunc("PATCH /api/budget", bh.Update)
+	mux.HandleFunc("GET /api/budget/{id}", bh.GetByID)
+	mux.HandleFunc("PATCH /api/budget/{id}", bh.UpdateByID)
 
 	return middleware.Chain(
 		mux,

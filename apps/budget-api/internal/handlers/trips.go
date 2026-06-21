@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"log"
 	"net/http"
 
@@ -73,6 +74,10 @@ func (h *TripsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.Store.DeleteTrip(r.Context(), id); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			httpx.Error(w, http.StatusNotFound, "trip not found")
+			return
+		}
 		log.Printf("trips.Delete: %v", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to delete trip")
 		return

@@ -1,0 +1,25 @@
+# Render Blueprint — MUST live at the repository ROOT so Render's
+# "New → Blueprint" flow discovers it. `rootDir` scopes the build to the Go API
+# subfolder (apps/budget-api), and dockerfilePath/dockerContext resolve relative
+# to that rootDir. (The rest of this repo — the ShELF extension and the Next.js
+# budget app on Vercel — is unaffected by this file.)
+services:
+  - type: web
+    name: budget-api
+    runtime: docker
+    rootDir: apps/budget-api
+    dockerfilePath: ./Dockerfile # relative to rootDir
+    dockerContext: . # relative to rootDir
+    healthCheckPath: /healthz
+    envVars:
+      # Supabase Postgres connection string (Session pooler, port 5432).
+      # Set in the Render dashboard — never commit the real value.
+      - key: DATABASE_URL
+        sync: false
+      # Comma-separated allowlist of frontend origins for CORS.
+      - key: ALLOWED_ORIGIN
+        value: https://shelf-d1uq.vercel.app
+      # Optional bearer token to lock the API down. Set in the dashboard.
+      - key: API_TOKEN
+        sync: false
+# Render injects PORT automatically; do not set it here or in the dashboard.

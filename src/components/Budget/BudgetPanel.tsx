@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type {
   BudgetState,
   BudgetCurrency,
@@ -6,6 +6,7 @@ import type {
   BudgetMember,
   BudgetExpense,
 } from "../../types/grid";
+import { scanReceipt } from "./receiptScan";
 import "./budget.css";
 
 const CURRENCIES: BudgetCurrency[] = ["CZK", "PLN", "EUR"];
@@ -14,9 +15,32 @@ const BASES: { id: BudgetSplitBasis; label: string }[] = [
   { id: "share", label: "By share" },
   { id: "income", label: "By income" },
 ];
-const CATEGORIES = ["Groceries", "Dining", "Transport", "Housing", "Fun", "Health", "Fees", "Other"];
+// 1:1 with the handoff's expense-category select (value → display label).
+const EXPENSE_CATEGORIES: { value: string; label: string }[] = [
+  { value: "cash", label: "Cash (ATM)" },
+  { value: "charity", label: "Charity" },
+  { value: "clothing", label: "Clothing" },
+  { value: "credit", label: "Credit card" },
+  { value: "eating", label: "Eating out" },
+  { value: "electronics", label: "Electronics" },
+  { value: "fees", label: "Fees" },
+  { value: "fun", label: "Fun" },
+  { value: "food", label: "Groceries" },
+  { value: "health", label: "Health" },
+  { value: "home", label: "Home" },
+  { value: "housing", label: "Housing" },
+  { value: "shopping", label: "Shopping" },
+  { value: "taxi", label: "Taxi & delivery" },
+  { value: "transport", label: "Transport" },
+  { value: "vending", label: "Vending" },
+  { value: "other", label: "Other" },
+];
 // Avatar hues cycle through ShELF's tokens.
 const AV_HUES = ["var(--hue-blue)", "var(--hue-rose)", "var(--hue-purple)", "var(--hue-orange)", "var(--hue-green)", "var(--hue-zinc)"];
+
+function curSymbol(c: BudgetCurrency): string {
+  return c === "CZK" ? "Kč" : c === "PLN" ? "zł" : "€";
+}
 
 function uid() {
   return (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : "b" + Math.random().toString(36).slice(2);
@@ -70,7 +94,11 @@ function computeBalances(state: BudgetState): { balances: Balance[]; total: numb
     const among = (e.splitAmong.length ? e.splitAmong : state.members.map((m) => m.id)).filter((id) => byId.has(id));
     if (among.length === 0) continue;
     const basis = e.basis ?? state.splitBasis;
-    let weights = among.map((id) => ({ id, w: memberWeight(byId.get(id)!, basis) }));
+    const useCustom = e.customWeights && Object.keys(e.customWeights).length > 0;
+    let weights = among.map((id) => ({
+      id,
+      w: useCustom ? (e.customWeights![id] ?? 0) : memberWeight(byId.get(id)!, basis),
+    }));
     let totalW = weights.reduce((s, x) => s + x.w, 0);
     if (totalW <= 0) { weights = among.map((id) => ({ id, w: 1 })); totalW = among.length; }
     for (const { id, w } of weights) {
@@ -351,6 +379,7 @@ export function BudgetPanel({ budget, setBudget }: Props) {
           expense={expenseModal === "new" ? null : expenseModal}
           members={budget.members}
           currency={currency}
+          groupBasis={budget.splitBasis}
           onSave={saveExpense}
           onRemove={removeExpense}
           onClose={() => setExpenseModal(null)}
@@ -360,78 +389,187 @@ export function BudgetPanel({ budget, setBudget }: Props) {
   );
 }
 
-function ExpenseModal({ expense, members, currency, onSave, onRemove, onClose }: {
+// 1:1 reconstruction of the handoff "Add an expense" modal (se-*/gb-* classes),
+// with a working Scan-a-receipt dropzone (client-side OCR) and group/custom split.
+function ExpenseModal({ expense, members, currency, groupBasis, onSave, onRemove, onClose }: {
   expense: BudgetExpense | null;
   members: BudgetMember[];
   currency: BudgetCurrency;
+  groupBasis: BudgetSplitBasis;
   onSave: (e: BudgetExpense) => void;
   onRemove: (id: string) => void;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(expense?.title ?? "");
   const [amount, setAmount] = useState(expense ? String(expense.amount) : "");
-  const [cur, setCur] = useState<BudgetCurrency>(expense?.currency ?? currency);
-  const [category, setCategory] = useState(expense?.category ?? "");
+  const [category, setCategory] = useState(expense?.category ?? "food");
   const [date, setDate] = useState(expense?.date ?? today());
   const [paidBy, setPaidBy] = useState(expense?.paidBy ?? members[0]?.id ?? "");
-  const [among, setAmong] = useState<string[]>(expense?.splitAmong?.length ? expense.splitAmong : members.map((m) => m.id));
+  const startsCustom = !!(expense?.customWeights && Object.keys(expense.customWeights).length);
+  const [splitMode, setSplitMode] = useState<"group" | "custom">(startsCustom ? "custom" : "group");
+  const [among, setAmong] = useState<string[]>(
+    expense?.splitAmong?.length ? expense.splitAmong : members.map((m) => m.id)
+  );
+  const [weights, setWeights] = useState<Record<string, number>>(expense?.customWeights ?? {});
 
-  const valid = title.trim() && Number(amount) > 0 && paidBy && among.length > 0;
+  // Receipt scan state
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [thumb, setThumb] = useState<string | null>(null);
+  const [scanStatus, setScanStatus] = useState<"idle" | "scanning" | "done" | "error">("idle");
+  const [scanMsg, setScanMsg] = useState("");
+
+  const sym = curSymbol(currency);
+  const included = splitMode === "group" ? members.map((m) => m.id) : among;
+
+  // Live per-member split preview.
+  const amountNum = Number(String(amount).replace(",", ".")) || 0;
+  const splitPreview = useMemo(() => {
+    const ids = included;
+    const ws = ids.map((id) => {
+      const m = members.find((x) => x.id === id);
+      const w = splitMode === "custom" ? (weights[id] ?? 1) : memberWeight(m!, groupBasis);
+      return { id, w };
+    });
+    let totalW = ws.reduce((s, x) => s + x.w, 0);
+    if (totalW <= 0) { ws.forEach((x) => (x.w = 1)); totalW = ws.length || 1; }
+    return ws.map((x) => ({ id: x.id, amt: (amountNum * x.w) / totalW, w: x.w }));
+  }, [included, weights, splitMode, groupBasis, amountNum, members]);
+
+  const basisLabel = groupBasis === "share" ? "share" : groupBasis === "income" ? "income" : "equal";
+
+  const handleFile = async (file: File) => {
+    setThumb(URL.createObjectURL(file));
+    setScanStatus("scanning");
+    setScanMsg("Reading the receipt…");
+    try {
+      const r = await scanReceipt(file);
+      if (r.merchant && !title.trim()) setTitle(r.merchant);
+      if (r.total != null) setAmount(String(r.total));
+      if (r.date) setDate(r.date);
+      setScanStatus("done");
+      setScanMsg(r.total != null || r.merchant ? "Read it — double-check the fields." : "Couldn't read much — type it in.");
+    } catch {
+      setScanStatus("error");
+      setScanMsg("Couldn't read that one — just type it in.");
+    }
+  };
+
+  const valid = title.trim() && amountNum > 0 && paidBy && included.length > 0;
   const submit = () => {
     if (!valid) return;
-    const base: BudgetExpense = expense ?? { id: uid(), title: "", amount: 0, currency: cur, date, paidBy, splitAmong: among, createdAt: nowIso(), updatedAt: nowIso() };
+    const base: BudgetExpense = expense ?? {
+      id: uid(), title: "", amount: 0, currency, date, paidBy, splitAmong: included,
+      createdAt: nowIso(), updatedAt: nowIso(),
+    };
+    const customWeights = splitMode === "custom"
+      ? Object.fromEntries(among.map((id) => [id, weights[id] ?? 1]))
+      : undefined;
     onSave({
       ...base,
       title: title.trim(),
-      amount: Number(amount),
-      currency: cur,
+      amount: amountNum,
+      currency,
       category: category || undefined,
       date,
       paidBy,
-      splitAmong: among,
+      splitAmong: included,
+      basis: undefined,
+      customWeights,
+      // Note: the scanned image is used for OCR only; we don't persist the
+      // ephemeral object URL (it wouldn't survive a reload). Receipt image
+      // storage (as a data URL) can come later if wanted.
+      receipt: base.receipt,
       updatedAt: nowIso(),
     });
   };
 
   return (
-    <div className="gb-modal-backdrop" onClick={onClose}>
-      <div className="gb-modal gb-modal--sm" onClick={(e) => e.stopPropagation()}>
-        <div className="gb-modal-head">
-          <span className="card-eyebrow">{expense ? "Edit expense" : "Add an expense"}</span>
-          <button type="button" className="gb-modal-x" onClick={onClose} aria-label="Close">✕</button>
+    <div className="se-backdrop" onClick={onClose} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="se-modal gb-modal" role="dialog" aria-modal="true" aria-label="Expense" onClick={(e) => e.stopPropagation()}>
+        <div className="se-head">
+          <div className="se-head-l">
+            <div className="se-eyebrow">Shared expense</div>
+            <h2 className="se-title">{expense ? "Edit expense" : "Add an expense"}</h2>
+            <p className="se-lede">Log what was bought, who paid, and how it splits. It feeds the budget and the settle-up.</p>
+          </div>
+          <button className="se-close" aria-label="Close" onClick={onClose}>✕</button>
         </div>
+
         <div className="gb-modal-body">
-          <label className="gb-fld">
-            <span className="gb-fld-lab">What was it?</span>
-            <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Groceries + wine" />
-          </label>
-          <div className="gb-fld-row">
-            <label className="gb-fld">
-              <span className="gb-fld-lab">Amount</span>
-              <input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
-            </label>
-            <label className="gb-fld">
-              <span className="gb-fld-lab">Currency</span>
-              <select value={cur} onChange={(e) => setCur(e.target.value as BudgetCurrency)}>
-                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </label>
+          {/* Scan a receipt */}
+          <div className="gb-field gb-field--label gb-scan-field">
+            <div
+              className={`gb-scan-drop${thumb ? " gb-scan-attached" : ""}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => fileRef.current?.click()}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileRef.current?.click(); }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f); }}
+            >
+              {thumb ? (
+                <>
+                  <span className="gb-scan-thumbwrap"><img className="gb-scan-thumb" src={thumb} alt="" /></span>
+                  <span className="gb-scan-att-info">
+                    <span className="gb-scan-main">{scanStatus === "scanning" ? "Reading…" : "Receipt attached"}</span>
+                    <span className="gb-scan-status">{scanMsg}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="gb-scan-remove"
+                    aria-label="Remove receipt"
+                    onClick={(e) => { e.stopPropagation(); setThumb(null); setScanStatus("idle"); setScanMsg(""); }}
+                  >✕</button>
+                </>
+              ) : (
+                <>
+                  <span className="gb-scan-ico" aria-hidden="true">📷</span>
+                  <span className="gb-scan-main">Scan a receipt</span>
+                  <span className="gb-scan-sub">Drop a photo or screenshot — we’ll read the merchant, total and date. Or just type it in below.</span>
+                </>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+              />
+            </div>
           </div>
-          <div className="gb-fld-row">
-            <label className="gb-fld">
-              <span className="gb-fld-lab">Category</span>
-              <select value={category} onChange={(e) => setCategory(e.target.value)}>
-                <option value="">—</option>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </label>
-            <label className="gb-fld">
-              <span className="gb-fld-lab">Date</span>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </label>
+
+          {/* What was it */}
+          <div className="gb-field gb-field--label">
+            <label>What was it?</label>
+            <input className="se-label" autoFocus placeholder="e.g. Groceries — Lidl" value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
-          <label className="gb-fld">
-            <span className="gb-fld-lab">Paid by</span>
+
+          {/* Amount */}
+          <div className="gb-field">
+            <label>Amount</label>
+            <div className="se-amt gb-amt">
+              <span className="se-cur">{sym}</span>
+              <input className="se-amt-input" inputMode="numeric" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d.,]/g, ""))} />
+            </div>
+          </div>
+
+          {/* Category */}
+          <div className="gb-field">
+            <label>Category</label>
+            <select className="se-cat" value={category} onChange={(e) => setCategory(e.target.value)}>
+              {EXPENSE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          </div>
+
+          {/* Date */}
+          <div className="gb-field">
+            <label>Date</label>
+            <input className="se-date gb-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+
+          {/* Paid by */}
+          <div className="gb-field gb-field--label">
+            <label>Paid by</label>
             <div className="gb-paidby">
               {members.map((m, i) => (
                 <button key={m.id} type="button" className={`gb-paid-chip${paidBy === m.id ? " on" : ""}`} onClick={() => setPaidBy(m.id)}>
@@ -439,28 +577,65 @@ function ExpenseModal({ expense, members, currency, onSave, onRemove, onClose }:
                 </button>
               ))}
             </div>
-          </label>
-          <label className="gb-fld">
-            <span className="gb-fld-lab">Split among</span>
-            <div className="gb-paidby">
+          </div>
+
+          {/* How does it split */}
+          <div className="gb-field gb-field--label">
+            <label>How does it split?</label>
+            <div className="seg gb-splitseg">
+              <button type="button" className={`seg-btn${splitMode === "group" ? " on" : ""}`} onClick={() => setSplitMode("group")}>Group default</button>
+              <button type="button" className={`seg-btn${splitMode === "custom" ? " on" : ""}`} onClick={() => setSplitMode("custom")}>Custom</button>
+            </div>
+            <div className="gb-split-list">
               {members.map((m, i) => {
-                const on = among.includes(m.id);
+                const on = splitMode === "group" || among.includes(m.id);
+                const row = splitPreview.find((p) => p.id === m.id);
                 return (
-                  <button key={m.id} type="button" className={`gb-paid-chip${on ? " on" : ""}`} onClick={() => setAmong((prev) => on ? prev.filter((x) => x !== m.id) : [...prev, m.id])}>
-                    <Avatar member={m} idx={i} size={22} /> {m.name}
-                  </button>
+                  <div key={m.id} className={`gb-split-row${on ? "" : " off"}`}>
+                    <Avatar member={m} idx={i} size={22} />
+                    {splitMode === "custom" ? (
+                      <button
+                        type="button"
+                        className="gb-split-name"
+                        style={{ textAlign: "left", background: "none", border: 0, cursor: "pointer", font: "inherit" }}
+                        onClick={() => setAmong((prev) => prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id])}
+                      >
+                        {m.name}
+                      </button>
+                    ) : (
+                      <span className="gb-split-name">{m.name}</span>
+                    )}
+                    {splitMode === "custom" && on ? (
+                      <span className="gb-split-weights">
+                        <input
+                          type="number"
+                          min={0}
+                          value={weights[m.id] ?? 1}
+                          onChange={(e) => setWeights((w) => ({ ...w, [m.id]: Math.max(0, Number(e.target.value) || 0) }))}
+                          style={{ width: 48, textAlign: "right", font: "inherit", borderRadius: 6, border: "1px solid var(--line)", background: "var(--surface)", padding: "2px 6px" }}
+                        />
+                      </span>
+                    ) : (
+                      <span className="gb-split-basis">{on ? basisLabel : "—"}</span>
+                    )}
+                    <span className="gb-split-amt">{on && row ? fmt(row.amt, currency) : `0 ${sym}`}</span>
+                  </div>
                 );
               })}
             </div>
-          </label>
+          </div>
         </div>
-        <div className="gb-modal-foot">
-          {expense && <button type="button" className="gb-modal-del" onClick={() => onRemove(expense.id)}>Delete</button>}
-          <span style={{ flex: 1 }} />
-          <button type="button" className="gb-modal-cancel" onClick={onClose}>Cancel</button>
-          <button type="button" className="gb-settle-btn" style={{ width: "auto", marginTop: 0, padding: "10px 18px" }} disabled={!valid} onClick={submit}>
-            {expense ? "Save changes" : "Add expense"}
-          </button>
+
+        <div className="se-foot gb-modal-foot">
+          {expense ? (
+            <button type="button" className="se-btn se-btn--ghost" style={{ color: "var(--gb-neg)" }} onClick={() => onRemove(expense.id)}>Delete</button>
+          ) : <span />}
+          <div className="se-actions">
+            <button type="button" className="se-btn se-btn--ghost" onClick={onClose}>Cancel</button>
+            <button type="button" className="se-btn se-btn--primary" disabled={!valid} onClick={submit}>
+              {expense ? "Save changes" : "Add expense"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

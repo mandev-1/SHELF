@@ -3,12 +3,12 @@
 import type { CSSProperties } from "react";
 
 // Friendly boot-failure screen. Shown when the budget can't start — most often
-// because the Vercel deployment is missing its Supabase env vars, but it covers
+// because the Vercel deployment is missing its budget-API env vars, but it covers
 // any startup error. Illustration + a light-hearted line, with the technical
 // detail tucked underneath for whoever's deploying.
 
 function isConfigError(detail?: string): boolean {
-  return !!detail && /NEXT_PUBLIC_SUPABASE|supabaseUrl|env var/i.test(detail);
+  return !!detail && /BUDGET_API_URL|BUDGET_API_TOKEN|env var/i.test(detail);
 }
 
 export function BootError({ detail }: { detail?: string }) {
@@ -17,7 +17,7 @@ export function BootError({ detail }: { detail?: string }) {
     ? "This budget hasn't been handed its keys yet 🔑"
     : "Our budget wandered off to the beach 🏖️";
   const sub = config
-    ? "The app booted fine — it just can't find the vault. Someone forgot to give the deployment its Supabase keys."
+    ? "The app booted fine — it just can't reach the API. Someone forgot to give the deployment its budget-API settings."
     : "It started up but couldn't reach the money brain. Almost certainly our fault, not yours.";
 
   return (
@@ -76,8 +76,8 @@ export function BootError({ detail }: { detail?: string }) {
 
       {config && (
         <p style={{ fontSize: 12, color: "var(--dim)", maxWidth: 460, lineHeight: 1.5, margin: "4px 0 0" }}>
-          Fix: add <code style={code}>NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-          <code style={code}>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in Vercel → Settings → Environment Variables, then
+          Fix: add <code style={code}>BUDGET_API_URL</code> and{" "}
+          <code style={code}>BUDGET_API_TOKEN</code> in Vercel → Settings → Environment Variables, then
           redeploy.
         </p>
       )}

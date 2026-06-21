@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getSupabase } from "./supabase/client";
+import { api, ApiError } from "./api";
 import {
   type BudgetState,
   DEFAULT_BUDGET_STATE,
@@ -16,11 +16,19 @@ export interface UseBudgetResult {
   error: string | null;
 }
 
+interface BudgetDTO {
+  id: string;
+  name?: string;
+  data: unknown;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 const SAVE_DEBOUNCE_MS = 600;
 
-// One shared budget for the whole friend group. Loads the single budgets row
-// (creating it if missing), debounce-saves edits, and applies live changes from
-// other people via Realtime. No auth — last-writer-wins.
+// One shared budget for the whole friend group, served by the Go API. Loads the
+// budget (the singleton, or a specific one via ?b=), then debounce-saves edits.
+// The browser never touches Supabase — everything goes through /api/budget.
 export function useBudget(): UseBudgetResult {
   const [budget, setBudgetState] = useState<BudgetState | null>(null);
   const [budgetId, setBudgetId] = useState<string | null>(null);
@@ -28,82 +36,37 @@ export function useBudget(): UseBudgetResult {
   const [error, setError] = useState<string | null>(null);
 
   const idRef = useRef<string | null>(null);
-  const lastSyncedRef = useRef<string>(""); // JSON we last wrote or received
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRef = useRef<BudgetState | null>(null); // last value awaiting save
 
-  // Load the budget. A personal link carries ?b=<budgetId>&me=<memberId>:
+  // Load the budget. A personal link carries ?b=<budgetId>&user=<memberId>:
   //   - ?b present → load that specific budget (the friend's link)
-  //   - no ?b      → the owner's single shared budget (created on first run)
-  // ?me records which member "you" are, for attributing expenses.
+  //   - no ?b      → the owner's singleton budget (created on first run by the API)
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-      const supabase = getSupabase();
-      const params = new URLSearchParams(window.location.search);
-      const bParam = params.get("b");
-
-      let row: { id: string; data: unknown } | undefined;
-
-      if (bParam) {
-        const { data, error: selErr } = await supabase
-          .from("budgets")
-          .select("id,data")
-          .eq("id", bParam)
-          .maybeSingle();
+        const params = new URLSearchParams(window.location.search);
+        const bParam = params.get("b");
+        const dto = bParam
+          ? await api.get<BudgetDTO>(`/budget/${encodeURIComponent(bParam)}`)
+          : await api.get<BudgetDTO>("/budget");
         if (cancelled) return;
-        if (selErr) {
-          setError(selErr.message);
-          setLoading(false);
-          return;
-        }
-        if (!data) {
-          setError("That budget link is invalid or was removed.");
-          setLoading(false);
-          return;
-        }
-        row = data;
-      } else {
-        const { data: rows, error: selErr } = await supabase
-          .from("budgets")
-          .select("id,data")
-          .order("created_at", { ascending: true })
-          .limit(1);
-        if (cancelled) return;
-        if (selErr) {
-          setError(selErr.message);
-          setLoading(false);
-          return;
-        }
-        row = rows?.[0];
-        if (!row) {
-          const { data: created, error: insErr } = await supabase
-            .from("budgets")
-            .insert({})
-            .select("id,data")
-            .single();
-          if (cancelled) return;
-          if (insErr || !created) {
-            setError(insErr?.message ?? "Could not create budget");
-            setLoading(false);
-            return;
-          }
-          row = created;
-        }
-      }
 
-      const state = normalizeBudget(row.data);
-      idRef.current = row.id;
-      lastSyncedRef.current = JSON.stringify(state);
-      setBudgetId(row.id);
-      setBudgetState(state);
-      setLoading(false);
+        const state = normalizeBudget(dto.data);
+        idRef.current = dto.id;
+        setBudgetId(dto.id);
+        setBudgetState(state);
+        setLoading(false);
       } catch (e) {
-        // Boot failures (missing Supabase env vars, network, etc.) land here so
-        // the UI shows the friendly error screen instead of hanging on "Loading".
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "The budget failed to start.");
+        // 404 on a ?b link → that budget is gone; anything else → generic boot
+        // failure (missing BUDGET_API_URL, API down, etc.) → the friendly screen.
+        if (e instanceof ApiError && e.status === 404) {
+          setError("That budget link is invalid or was removed.");
+        } else {
+          setError(e instanceof Error ? e.message : "The budget failed to start.");
+        }
         setLoading(false);
       }
     })();
@@ -113,44 +76,16 @@ export function useBudget(): UseBudgetResult {
     };
   }, []);
 
-  // Realtime: apply remote edits from other people.
-  useEffect(() => {
-    if (!budgetId) return;
-    const supabase = getSupabase();
-    const channel = supabase
-      .channel(`budget:${budgetId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "budgets",
-          filter: `id=eq.${budgetId}`,
-        },
-        (payload) => {
-          const incoming = normalizeBudget((payload.new as any)?.data);
-          const json = JSON.stringify(incoming);
-          if (json === lastSyncedRef.current) return; // our own echo
-          lastSyncedRef.current = json;
-          setBudgetState(incoming);
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [budgetId]);
-
   const persist = useCallback((state: BudgetState) => {
     const id = idRef.current;
     if (!id) return;
-    lastSyncedRef.current = JSON.stringify(state);
     pendingRef.current = null;
-    void getSupabase()
-      .from("budgets")
-      .update({ data: state, updated_at: new Date().toISOString() })
-      .eq("id", id);
+    // members live in the users table and trips in the trips table now — don't
+    // re-persist stale snapshots into the budget blob (one source of truth per
+    // field). The body IS the new `data` jsonb; last-writer-wins, and a failed
+    // save is retried on the next edit.
+    const data = { ...state, members: [], trips: [] };
+    void api.patch(`/budget/${id}`, data).catch(() => {});
   }, []);
 
   // Persist any pending (debounced) change immediately — used on unmount / tab

@@ -1,5 +1,7 @@
 # Budget API
 
+!! NOTE -- DEPLOYED AT `https://shelf-yh5b.onrender.com/`
+
 A standalone, production-grade Go REST API that fronts the existing Supabase
 Postgres database for the ShELF budget app. It is a real persistent HTTP server
 (`http.ListenAndServe`, **not** serverless) built on the Go 1.22 stdlib

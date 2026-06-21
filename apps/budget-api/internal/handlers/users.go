@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"log"
 	"net/http"
 
@@ -70,6 +71,10 @@ func (h *UsersHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	updated, err := h.Store.UpdateUser(r.Context(), id, patch)
 	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			httpx.Error(w, http.StatusNotFound, "user not found")
+			return
+		}
 		log.Printf("users.Update: %v", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to update user")
 		return
@@ -85,6 +90,10 @@ func (h *UsersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.Store.DeleteUser(r.Context(), id); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			httpx.Error(w, http.StatusNotFound, "user not found")
+			return
+		}
 		log.Printf("users.Delete: %v", err)
 		httpx.Error(w, http.StatusInternalServerError, "failed to delete user")
 		return

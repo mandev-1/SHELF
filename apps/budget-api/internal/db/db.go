@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"budgetapi/internal/models"
@@ -14,6 +15,24 @@ import (
 // defaultBudgetData is inserted the first time GetBudget is called and no
 // budget row exists yet.
 const defaultBudgetData = `{"currency":"CZK","splitBasis":"equal","members":[],"expenses":[],"trips":[]}`
+
+// ErrNotFound is returned by data-access methods when a row that was expected to
+// exist (matched by id) does not — e.g. updating or deleting an already-removed
+// record. Handlers map it to HTTP 404 so the frontend can reconcile (tell the
+// user "that was already removed" and refetch).
+var ErrNotFound = errors.New("not found")
+
+// isNotFound reports whether err means "no such row": either pgx.ErrNoRows, or a
+// Postgres 22P02 (invalid_text_representation) raised when a malformed id — e.g.
+// a tampered ?b= link that isn't a valid uuid — is compared against a uuid
+// column. Both should surface to the client as 404, not 500.
+func isNotFound(err error) bool {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "22P02"
+}
 
 // Store wraps a pgx connection pool and exposes typed data-access methods.
 type Store struct {
@@ -101,15 +120,24 @@ func (s *Store) UpdateUser(ctx context.Context, id string, patch models.User) (m
 		id, patch.Name, patch.Share, patch.Income, patch.Color,
 	).Scan(&out.ID, &out.Name, &out.Role, &out.Share, &out.Income, &out.Color, &out.CreatedAt)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.User{}, ErrNotFound
+		}
 		return models.User{}, err
 	}
 	return out, nil
 }
 
-// DeleteUser removes a user by id.
+// DeleteUser removes a user by id. Returns ErrNotFound if no such user exists.
 func (s *Store) DeleteUser(ctx context.Context, id string) error {
-	_, err := s.Pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -195,10 +223,16 @@ func (s *Store) UpsertTrip(ctx context.Context, t models.Trip) (models.Trip, err
 	return out, nil
 }
 
-// DeleteTrip removes a trip by id.
+// DeleteTrip removes a trip by id. Returns ErrNotFound if no such trip exists.
 func (s *Store) DeleteTrip(ctx context.Context, id string) error {
-	_, err := s.Pool.Exec(ctx, `DELETE FROM trips WHERE id = $1`, id)
-	return err
+	tag, err := s.Pool.Exec(ctx, `DELETE FROM trips WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -248,6 +282,48 @@ func (s *Store) UpdateBudgetData(ctx context.Context, data json.RawMessage) (mod
 		data,
 	).Scan(&out.ID, &out.Name, &out.Data, &out.CreatedAt, &out.UpdatedAt)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.Budget{}, ErrNotFound
+		}
+		return models.Budget{}, err
+	}
+	return out, nil
+}
+
+// GetBudgetByID returns a single budget row by id (used by ?b=<id> shared
+// links). Returns ErrNotFound if the id doesn't exist.
+func (s *Store) GetBudgetByID(ctx context.Context, id string) (models.Budget, error) {
+	var b models.Budget
+	err := s.Pool.QueryRow(ctx, `
+		SELECT id, name, data, created_at, updated_at
+		FROM budgets
+		WHERE id = $1`, id,
+	).Scan(&b.ID, &b.Name, &b.Data, &b.CreatedAt, &b.UpdatedAt)
+	if err != nil {
+		if isNotFound(err) {
+			return models.Budget{}, ErrNotFound
+		}
+		return models.Budget{}, err
+	}
+	return b, nil
+}
+
+// UpdateBudgetDataByID overwrites a specific budget's data jsonb by id and bumps
+// updated_at. Returns ErrNotFound if the id doesn't exist.
+func (s *Store) UpdateBudgetDataByID(ctx context.Context, id string, data json.RawMessage) (models.Budget, error) {
+	var out models.Budget
+	err := s.Pool.QueryRow(ctx, `
+		UPDATE budgets
+		SET data = $2,
+		    updated_at = now()
+		WHERE id = $1
+		RETURNING id, name, data, created_at, updated_at`,
+		id, data,
+	).Scan(&out.ID, &out.Name, &out.Data, &out.CreatedAt, &out.UpdatedAt)
+	if err != nil {
+		if isNotFound(err) {
+			return models.Budget{}, ErrNotFound
+		}
 		return models.Budget{}, err
 	}
 	return out, nil

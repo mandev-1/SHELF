@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type {
   BudgetState,
   BudgetCurrency,
@@ -157,6 +157,7 @@ export function BudgetPanel({
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
   const [personModal, setPersonModal] = useState<BudgetMember | "new" | null>(null);
   const [view, setView] = useState<"people" | "trips">("people");
+  const creatingRef = useRef(false); // guards against double-submit creating two people
 
   const { balances, total, transfers } = useMemo(() => computeBalances(budget), [budget]);
   const currency = budget.currency;
@@ -170,9 +171,15 @@ export function BudgetPanel({
     const trimmed = name.trim();
     if (!trimmed) return;
     if (personModal === "new") {
-      const m = await onAddUser(trimmed);
-      // Reopen in edit mode so the host immediately sees this person's share link.
-      setPersonModal(m ?? null);
+      if (creatingRef.current) return; // double-submit guard → no duplicate person
+      creatingRef.current = true;
+      try {
+        const m = await onAddUser(trimmed);
+        // Reopen in edit mode so the host immediately sees this person's share link.
+        setPersonModal(m ?? null);
+      } finally {
+        creatingRef.current = false;
+      }
       return;
     }
     onUpdateUser((personModal as BudgetMember).id, { name: trimmed });

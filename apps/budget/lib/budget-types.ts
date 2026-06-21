@@ -76,7 +76,7 @@ export const DEFAULT_BUDGET_STATE: BudgetState = {
 const BUDGET_CURRENCIES: BudgetCurrency[] = ["CZK", "PLN", "EUR"];
 const BUDGET_BASES: BudgetSplitBasis[] = ["equal", "share", "income"];
 
-function normBudgetExpense(o: any): BudgetExpense | null {
+export function normBudgetExpense(o: any): BudgetExpense | null {
   if (!o || typeof o !== "object") return null;
   if (typeof o.id !== "string" || typeof o.paidBy !== "string") return null;
   const nowIso = new Date().toISOString();
