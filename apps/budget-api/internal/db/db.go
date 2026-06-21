@@ -149,8 +149,8 @@ func (s *Store) DeleteUser(ctx context.Context, id string) error {
 func (s *Store) ListTrips(ctx context.Context) ([]models.Trip, error) {
 	rows, err := s.Pool.Query(ctx, `
 		SELECT id, name, emoji, destination, start_date, end_date,
-		       dates_tbd, color, cover, member_ids, expenses,
-		       created_at, updated_at
+		       dates_tbd, color, cover, main_currency, secondary_currency,
+		       member_ids, expenses, created_at, updated_at
 		FROM trips
 		ORDER BY created_at DESC`)
 	if err != nil {
@@ -163,8 +163,8 @@ func (s *Store) ListTrips(ctx context.Context) ([]models.Trip, error) {
 		var t models.Trip
 		if err := rows.Scan(
 			&t.ID, &t.Name, &t.Emoji, &t.Destination, &t.StartDate, &t.EndDate,
-			&t.DatesTBD, &t.Color, &t.Cover, &t.MemberIDs, &t.Expenses,
-			&t.CreatedAt, &t.UpdatedAt,
+			&t.DatesTBD, &t.Color, &t.Cover, &t.MainCurrency, &t.SecondaryCurrency,
+			&t.MemberIDs, &t.Expenses, &t.CreatedAt, &t.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -188,14 +188,23 @@ func (s *Store) UpsertTrip(ctx context.Context, t models.Trip) (models.Trip, err
 	if expenses == nil {
 		expenses = []byte("[]")
 	}
+	main := t.MainCurrency
+	if main == "" {
+		main = "CZK"
+	}
+	secondary := t.SecondaryCurrency
+	if secondary == "" {
+		secondary = "EUR"
+	}
 
 	var out models.Trip
 	err := s.Pool.QueryRow(ctx, `
 		INSERT INTO trips (
 			id, name, emoji, destination, start_date, end_date,
-			dates_tbd, color, cover, member_ids, expenses, updated_at
+			dates_tbd, color, cover, main_currency, secondary_currency,
+			member_ids, expenses, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
 		ON CONFLICT (id) DO UPDATE SET
 			name = EXCLUDED.name,
 			emoji = EXCLUDED.emoji,
@@ -205,18 +214,20 @@ func (s *Store) UpsertTrip(ctx context.Context, t models.Trip) (models.Trip, err
 			dates_tbd = EXCLUDED.dates_tbd,
 			color = EXCLUDED.color,
 			cover = EXCLUDED.cover,
+			main_currency = EXCLUDED.main_currency,
+			secondary_currency = EXCLUDED.secondary_currency,
 			member_ids = EXCLUDED.member_ids,
 			expenses = EXCLUDED.expenses,
 			updated_at = now()
 		RETURNING id, name, emoji, destination, start_date, end_date,
-		          dates_tbd, color, cover, member_ids, expenses,
-		          created_at, updated_at`,
+		          dates_tbd, color, cover, main_currency, secondary_currency,
+		          member_ids, expenses, created_at, updated_at`,
 		t.ID, t.Name, t.Emoji, t.Destination, t.StartDate, t.EndDate,
-		t.DatesTBD, t.Color, t.Cover, memberIDs, expenses,
+		t.DatesTBD, t.Color, t.Cover, main, secondary, memberIDs, expenses,
 	).Scan(
 		&out.ID, &out.Name, &out.Emoji, &out.Destination, &out.StartDate, &out.EndDate,
-		&out.DatesTBD, &out.Color, &out.Cover, &out.MemberIDs, &out.Expenses,
-		&out.CreatedAt, &out.UpdatedAt,
+		&out.DatesTBD, &out.Color, &out.Cover, &out.MainCurrency, &out.SecondaryCurrency,
+		&out.MemberIDs, &out.Expenses, &out.CreatedAt, &out.UpdatedAt,
 	)
 	if err != nil {
 		return models.Trip{}, err
@@ -328,4 +339,51 @@ func (s *Store) UpdateBudgetDataByID(ctx context.Context, id string, data json.R
 		return models.Budget{}, err
 	}
 	return out, nil
+}
+
+// ---------------------------------------------------------------------------
+// Expense logs (audit trail)
+// ---------------------------------------------------------------------------
+
+// InsertLog appends one expense-audit row. created_at is set by the DB.
+func (s *Store) InsertLog(ctx context.Context, l models.ExpenseLog) (models.ExpenseLog, error) {
+	var out models.ExpenseLog
+	err := s.Pool.QueryRow(ctx, `
+		INSERT INTO expense_logs (trip_id, expense_id, actor_id, actor_name, action, amount, currency, note)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, trip_id, expense_id, actor_id, actor_name, action, amount, currency, note, created_at`,
+		l.TripID, l.ExpenseID, l.ActorID, l.ActorName, l.Action, l.Amount, l.Currency, l.Note,
+	).Scan(&out.ID, &out.TripID, &out.ExpenseID, &out.ActorID, &out.ActorName,
+		&out.Action, &out.Amount, &out.Currency, &out.Note, &out.CreatedAt)
+	if err != nil {
+		return models.ExpenseLog{}, err
+	}
+	return out, nil
+}
+
+// ListLogs returns audit rows newest-first, optionally filtered by trip id.
+func (s *Store) ListLogs(ctx context.Context, tripID string) ([]models.ExpenseLog, error) {
+	rows, err := s.Pool.Query(ctx, `
+		SELECT id, trip_id, expense_id, actor_id, actor_name, action, amount, currency, note, created_at
+		FROM expense_logs
+		WHERE ($1 = '' OR trip_id = $1)
+		ORDER BY created_at DESC`, tripID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	logs := make([]models.ExpenseLog, 0)
+	for rows.Next() {
+		var l models.ExpenseLog
+		if err := rows.Scan(&l.ID, &l.TripID, &l.ExpenseID, &l.ActorID, &l.ActorName,
+			&l.Action, &l.Amount, &l.Currency, &l.Note, &l.CreatedAt); err != nil {
+			return nil, err
+		}
+		logs = append(logs, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return logs, nil
 }

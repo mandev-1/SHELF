@@ -30,10 +30,29 @@ type Trip struct {
 	DatesTBD    bool            `json:"datesTBD"`
 	Color       *string         `json:"color,omitempty"`
 	Cover       *string         `json:"cover,omitempty"`
-	MemberIDs   json.RawMessage `json:"memberIds"`
+	// Per-trip currencies: totals shown in MainCurrency, with SecondaryCurrency
+	// in parentheses. Default 'CZK' / 'EUR' (see migration 0003).
+	MainCurrency      string          `json:"mainCurrency"`
+	SecondaryCurrency string          `json:"secondaryCurrency"`
+	MemberIDs         json.RawMessage `json:"memberIds"`
 	Expenses    json.RawMessage `json:"expenses"`
 	CreatedAt   time.Time       `json:"createdAt"`
 	UpdatedAt   time.Time       `json:"updatedAt"`
+}
+
+// ExpenseLog mirrors the `expense_logs` audit table — one row per expense CRUD
+// action. Key ids: ActorID (who), TripID, ExpenseID. Append-only.
+type ExpenseLog struct {
+	ID        string    `json:"id"`
+	TripID    string    `json:"tripId"`
+	ExpenseID string    `json:"expenseId"`
+	ActorID   *string   `json:"actorId,omitempty"`
+	ActorName *string   `json:"actorName,omitempty"`
+	Action    string    `json:"action"` // create | update | delete
+	Amount    *float64  `json:"amount,omitempty"`
+	Currency  *string   `json:"currency,omitempty"`
+	Note      *string   `json:"note,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // Budget mirrors the Supabase `budgets` table. Data is the jsonb blob holding

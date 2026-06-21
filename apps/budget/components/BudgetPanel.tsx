@@ -169,7 +169,6 @@ export function BudgetPanel({
   const { balances, total, transfers } = useMemo(() => computeBalances(budget), [budget]);
   const currency = budget.currency;
 
-  const setCurrency = (c: BudgetCurrency) => setBudget((p) => ({ ...p, currency: c }));
   const setBasis = (b: BudgetSplitBasis) => setBudget((p) => ({ ...p, splitBasis: b }));
 
   const addPerson = () => setPersonModal("new");
@@ -274,11 +273,6 @@ export function BudgetPanel({
                   You&apos;re {activeMember.name}
                 </span>
               )}
-              <div className="seg gb-cur-seg" role="tablist" aria-label="Currency">
-                {CURRENCIES.map((c) => (
-                  <button key={c} type="button" className={`seg-btn${currency === c ? " on" : ""}`} onClick={() => setCurrency(c)}>{c}</button>
-                ))}
-              </div>
             </div>
           </div>
         </div>
@@ -289,6 +283,8 @@ export function BudgetPanel({
           splitBasis={budget.splitBasis}
           budgetId={budgetId}
           guest
+          actorId={activeMemberId}
+          actorName={activeMember?.name}
           onBack={() => {}}
           onEdit={() => {}}
           onUpdate={onUpdateTrip}
@@ -350,11 +346,6 @@ export function BudgetPanel({
                 You&apos;re {activeMember.name}
               </span>
             )}
-            <div className="seg gb-cur-seg" role="tablist" aria-label="Currency">
-              {CURRENCIES.map((c) => (
-                <button key={c} type="button" className={`seg-btn${currency === c ? " on" : ""}`} onClick={() => setCurrency(c)}>{c}</button>
-              ))}
-            </div>
           </div>
         </div>
       </div>
@@ -367,6 +358,8 @@ export function BudgetPanel({
           splitBasis={budget.splitBasis}
           budgetId={budgetId}
           canManage={isSuperuser}
+          actorId={activeMemberId}
+          actorName={activeMember?.name ?? (isSuperuser ? "Host" : undefined)}
           onAddTrip={onAddTrip}
           onUpdateTrip={onUpdateTrip}
           onRemoveTrip={onRemoveTrip}
@@ -428,10 +421,14 @@ function eachDayISO(startIso: string, endIso: string): string[] {
   return out;
 }
 
-export function ExpenseModal({ expense, members, currency, defaultPaidBy, dateRange, onSave, onRemove, onClose }: {
+export function ExpenseModal({ expense, members, currency, currencies, defaultCurrency, defaultPaidBy, dateRange, onSave, onRemove, onClose }: {
   expense: BudgetExpense | null;
   members: BudgetMember[];
   currency: BudgetCurrency;
+  /** Currency choices offered (trip = [main, secondary, EUR]); defaults to all. */
+  currencies?: BudgetCurrency[];
+  /** Pre-selected currency for a new expense (e.g. the trip's main currency). */
+  defaultCurrency?: BudgetCurrency;
   defaultPaidBy?: string;
   /** Trip date range — when set, the day picker offers the trip's days instead. */
   dateRange?: { start?: string; end?: string };
@@ -439,9 +436,10 @@ export function ExpenseModal({ expense, members, currency, defaultPaidBy, dateRa
   onRemove: (id: string) => void;
   onClose: () => void;
 }) {
+  const curOptions = currencies ?? CURRENCIES;
   const [title, setTitle] = useState(expense?.title ?? "");
   const [amount, setAmount] = useState(expense ? String(expense.amount) : "");
-  const [cur, setCur] = useState<BudgetCurrency>(expense?.currency ?? currency);
+  const [cur, setCur] = useState<BudgetCurrency>(expense?.currency ?? defaultCurrency ?? currency);
   const [category, setCategory] = useState(expense?.category ?? "");
 
   // Inside a trip, the day picker offers the trip's days; otherwise recent days.
@@ -463,10 +461,14 @@ export function ExpenseModal({ expense, members, currency, defaultPaidBy, dateRa
   const [receipt, setReceipt] = useState<string | undefined>(expense?.receipt);
 
   const allIds = members.map((m) => m.id);
-  const [splitMode, setSplitMode] = useState<"default" | "custom">(
-    expense?.splitAmong?.length && expense.splitAmong.length !== members.length ? "custom" : "default",
-  );
-  const splitIds = splitMode === "default" ? allIds : among;
+  const initialSplitMode: "equal" | "custom" | "me" = (() => {
+    const sa = expense?.splitAmong;
+    if (!sa || sa.length === 0 || sa.length === members.length) return "equal";
+    if (sa.length === 1) return "me";
+    return "custom";
+  })();
+  const [splitMode, setSplitMode] = useState<"equal" | "custom" | "me">(initialSplitMode);
+  const splitIds = splitMode === "equal" ? allIds : splitMode === "me" ? [paidBy] : among;
 
   // Day chips: the trip's days when in a trip, else the last 5 days (anchored so
   // the selected date is always one of the chips).
@@ -561,7 +563,7 @@ export function ExpenseModal({ expense, members, currency, defaultPaidBy, dateRa
             <span className="gb-fld-lab">Amount</span>
             <div className="gb-amt">
               <select className="gb-amt-cur" value={cur} onChange={(e) => setCur(e.target.value as BudgetCurrency)} aria-label="Currency">
-                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                {curOptions.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
               <input
                 className="se-amt-input"
@@ -615,22 +617,32 @@ export function ExpenseModal({ expense, members, currency, defaultPaidBy, dateRa
             <div className="seg gb-splitseg">
               <button
                 type="button"
-                className={`seg-btn${splitMode === "default" ? " on" : ""}`}
-                onClick={() => { setSplitMode("default"); setAmong(allIds); }}
+                className={`seg-btn${splitMode === "equal" ? " on" : ""}`}
+                onClick={() => setSplitMode("equal")}
               >
-                Group default
+                Split equally
               </button>
               <button
                 type="button"
                 className={`seg-btn${splitMode === "custom" ? " on" : ""}`}
-                onClick={() => setSplitMode("custom")}
+                onClick={() => {
+                  setSplitMode("custom");
+                  if (!among.length) setAmong(allIds);
+                }}
               >
-                Custom
+                Custom split
+              </button>
+              <button
+                type="button"
+                className={`seg-btn${splitMode === "me" ? " on" : ""}`}
+                onClick={() => setSplitMode("me")}
+              >
+                Only me
               </button>
             </div>
             <div className="gb-split-list">
               {members.map((m, i) => {
-                const on = splitMode === "default" || among.includes(m.id);
+                const on = splitIds.includes(m.id);
                 const interactive = splitMode === "custom";
                 return (
                   <div

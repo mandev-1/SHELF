@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, isNotFound } from "./api";
 import { toast } from "./toast";
-import { normBudgetExpense, type BudgetTrip, type BudgetExpense } from "./budget-types";
+import {
+  normBudgetExpense,
+  type BudgetTrip,
+  type BudgetExpense,
+  type BudgetCurrency,
+} from "./budget-types";
+
+const curOrDefault = (c: unknown, def: BudgetCurrency): BudgetCurrency =>
+  c === "CZK" || c === "PLN" || c === "EUR" ? c : def;
 
 // Trips live in their own `trips` table behind the Go API (one row per trip).
 // The browser talks ONLY to the same-origin API proxy (/api/trips) — never to
@@ -21,6 +29,8 @@ function dtoToTrip(r: any): BudgetTrip {
     datesTBD: !!r.datesTBD,
     color: r.color ?? undefined,
     cover: r.cover ?? undefined,
+    mainCurrency: curOrDefault(r.mainCurrency, "CZK"),
+    secondaryCurrency: curOrDefault(r.secondaryCurrency, "EUR"),
     memberIds: Array.isArray(r.memberIds) ? r.memberIds : [],
     expenses: Array.isArray(r.expenses)
       ? (r.expenses.map(normBudgetExpense).filter(Boolean) as BudgetExpense[])

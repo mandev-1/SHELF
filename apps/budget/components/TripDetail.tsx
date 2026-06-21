@@ -10,9 +10,11 @@ import type {
   BudgetExpense,
 } from "../lib/budget-types";
 import { Avatar, fmt, initials, AV_HUES, nowIso, uid } from "../lib/budget-format";
+import { convert, fmtSecondary, tripCurrencyOptions } from "../lib/currency";
 import { tripStats, tripMembers, tripMetaLabel } from "../lib/trips";
 import { ExpenseModal } from "./BudgetPanel";
 import { toast } from "../lib/toast";
+import { api } from "../lib/api";
 
 interface TripDetailProps {
   trip: BudgetTrip;
@@ -25,6 +27,9 @@ interface TripDetailProps {
   /** When false (a non-admin member), hide host-only edit actions and show a
    *  read-only list of the people on the trip instead. */
   canManage?: boolean;
+  /** Who is performing changes — recorded in the expense audit log. */
+  actorId?: string | null;
+  actorName?: string;
   onBack: () => void;
   onEdit: () => void;
   onUpdate: (trip: BudgetTrip) => void; // persist expense add/edit, cover, etc.
@@ -38,6 +43,8 @@ export function TripDetail({
   budgetId,
   guest = false,
   canManage = true,
+  actorId,
+  actorName,
   onBack,
   onEdit,
   onUpdate,
@@ -48,6 +55,20 @@ export function TripDetail({
   const tMembers = tripMembers(trip, members);
   const stats = tripStats(trip, members, splitBasis);
   const expenses = trip.expenses ?? [];
+
+  // Trip totals are shown in the main currency, with the secondary in parens.
+  const main = trip.mainCurrency ?? "CZK";
+  const secondary = trip.secondaryCurrency ?? "EUR";
+  const dual = (amt: number) => (
+    <>
+      {fmt(amt, main)}
+      {secondary !== main && (
+        <span style={{ fontSize: "0.56em", fontWeight: 600, color: "var(--dim)", marginLeft: 7 }}>
+          {fmtSecondary(convert(amt, main, secondary), secondary)}
+        </span>
+      )}
+    </>
+  );
 
   const heroStyle = { ["--trip-hue" as any]: trip.color || "var(--accent)" } as React.CSSProperties;
 
@@ -68,6 +89,22 @@ export function TripDetail({
     if (budgetId && tMembers[0]) {
       window.open(`${location.origin}/?b=${budgetId}&user=${tMembers[0].id}&trip=${trip.id}`, "_blank");
     }
+  };
+
+  // Audit log: one append-only record per expense CRUD action (fire-and-forget).
+  const logExpense = (action: "create" | "update" | "delete", e: BudgetExpense) => {
+    void api
+      .post("/logs", {
+        tripId: trip.id,
+        expenseId: e.id,
+        actorId: actorId ?? undefined,
+        actorName: actorName ?? undefined,
+        action,
+        amount: e.amount,
+        currency: e.currency,
+        note: e.title || undefined,
+      })
+      .catch(() => {});
   };
 
   return (
@@ -190,7 +227,7 @@ export function TripDetail({
               margin: "4px 0 2px",
             }}
           >
-            {fmt(stats.total, currency)}
+            {dual(stats.total)}
           </div>
           <div style={{ fontSize: 11.5, color: "var(--dim)" }}>
             {expenses.length} expense{expenses.length === 1 ? "" : "s"}
@@ -209,7 +246,7 @@ export function TripDetail({
               margin: "4px 0 2px",
             }}
           >
-            {fmt(stats.perPerson, currency)}
+            {dual(stats.perPerson)}
           </div>
           <div style={{ fontSize: 11.5, color: "var(--dim)" }}>{stats.travellers} travelling</div>
         </div>
@@ -233,7 +270,7 @@ export function TripDetail({
               margin: "4px 0 2px",
             }}
           >
-            {stats.squared ? "0" : fmt(stats.toSettle, currency)}
+            {dual(stats.squared ? 0 : stats.toSettle)}
           </div>
           <div style={{ fontSize: 11.5, color: "var(--dim)" }}>
             {stats.squared ? "all square" : "to settle"}
@@ -323,7 +360,7 @@ export function TripDetail({
                             : "var(--gb-neg)",
                     }}
                   >
-                    {fmt(b.net, currency)}
+                    {fmt(b.net, main)}
                   </span>
                 </div>
               );
@@ -335,7 +372,7 @@ export function TripDetail({
             stats.transfers.map((t, i) => (
               <div key={i} className="gb-settle-row">
                 <strong>{t.from.name}</strong> → <strong>{t.to.name}</strong>
-                <span className="gb-settle-amt">{fmt(t.amount, currency)}</span>
+                <span className="gb-settle-amt">{fmt(t.amount, main)}</span>
               </div>
             ))
           )}
@@ -346,25 +383,31 @@ export function TripDetail({
         <ExpenseModal
           expense={expenseModal === "new" ? null : expenseModal}
           members={tMembers}
-          currency={currency}
+          currency={main}
+          currencies={tripCurrencyOptions(main, secondary)}
+          defaultCurrency={main}
           defaultPaidBy={tMembers[0]?.id}
           dateRange={{ start: trip.startDate, end: trip.endDate }}
           onSave={(e) => {
+            const existed = (trip.expenses ?? []).some((x) => x.id === e.id);
             onUpdate({
               ...trip,
-              expenses: (trip.expenses ?? []).some((x) => x.id === e.id)
+              expenses: existed
                 ? (trip.expenses ?? []).map((x) => (x.id === e.id ? e : x))
                 : [e, ...(trip.expenses ?? [])],
               updatedAt: nowIso(),
             });
+            logExpense(existed ? "update" : "create", e);
             setExpenseModal(null);
           }}
           onRemove={(id) => {
+            const removed = (trip.expenses ?? []).find((x) => x.id === id);
             onUpdate({
               ...trip,
               expenses: (trip.expenses ?? []).filter((x) => x.id !== id),
               updatedAt: nowIso(),
             });
+            if (removed) logExpense("delete", removed);
             setExpenseModal(null);
           }}
           onClose={() => setExpenseModal(null)}

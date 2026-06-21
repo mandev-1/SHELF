@@ -15,6 +15,9 @@ interface TripsViewProps {
   budgetId?: string | null;
   /** Non-admin members can't manage trips (hide host-only edit actions). */
   canManage?: boolean;
+  /** Who is performing changes — recorded in the expense audit log. */
+  actorId?: string | null;
+  actorName?: string;
   onAddTrip: (trip: BudgetTrip) => void;
   onUpdateTrip: (trip: BudgetTrip) => void;
   onRemoveTrip: (id: string) => void;
@@ -27,6 +30,8 @@ export function TripsView({
   splitBasis,
   budgetId,
   canManage = true,
+  actorId,
+  actorName,
   onAddTrip,
   onUpdateTrip,
   onRemoveTrip,
@@ -72,6 +77,8 @@ export function TripsView({
           splitBasis={splitBasis}
           budgetId={budgetId}
           canManage={canManage}
+          actorId={actorId}
+          actorName={actorName}
           onBack={() => setSelectedId(null)}
           onEdit={() => setModal(selected)}
           onUpdate={onUpdateTrip}
@@ -87,6 +94,7 @@ export function TripsView({
         {trips.map((trip) => {
           const stats = tripStats(trip, members, splitBasis);
           const tm = tripMembers(trip, members);
+          const main = trip.mainCurrency ?? "CZK";
           return (
             <button
               type="button"
@@ -99,15 +107,15 @@ export function TripsView({
                 {trip.cover && <img className="gb-trip-img" src={trip.cover} data-filled="" alt="" />}
                 <span className="gb-trip-cover-fallback">{trip.emoji || "🏖️"}</span>
                 <span className={"gb-trip-status" + (stats.squared ? " ok" : "")}>
-                  {stats.squared ? "Squared up" : `${fmt(stats.toSettle, currency)} to settle`}
+                  {stats.squared ? "Squared up" : `${fmt(stats.toSettle, main)} to settle`}
                 </span>
               </div>
               <div className="gb-trip-body">
                 <h3 className="gb-trip-name">{trip.name}</h3>
                 <div className="gb-trip-meta">{tripMetaLabel(trip)}</div>
                 <div className="gb-trip-figs">
-                  <span className="gb-trip-total">{fmt(stats.total, currency)}</span>
-                  <span className="gb-trip-per">{fmt(stats.perPerson, currency)} pp</span>
+                  <span className="gb-trip-total">{fmt(stats.total, main)}</span>
+                  <span className="gb-trip-per">{fmt(stats.perPerson, main)} pp</span>
                 </div>
                 <div className="gb-trip-foot">
                   <div className="gb-trip-faces">

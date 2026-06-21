@@ -17,6 +17,7 @@ func New(store *db.Store, cfg config.Config) http.Handler {
 	uh := &handlers.UsersHandler{Store: store}
 	th := &handlers.TripsHandler{Store: store}
 	bh := &handlers.BudgetHandler{Store: store}
+	lh := &handlers.LogsHandler{Store: store}
 
 	mux.HandleFunc("GET /healthz", handlers.Health)
 
@@ -34,6 +35,9 @@ func New(store *db.Store, cfg config.Config) http.Handler {
 	mux.HandleFunc("PATCH /api/budget", bh.Update)
 	mux.HandleFunc("GET /api/budget/{id}", bh.GetByID)
 	mux.HandleFunc("PATCH /api/budget/{id}", bh.UpdateByID)
+
+	mux.HandleFunc("GET /api/logs", lh.List)
+	mux.HandleFunc("POST /api/logs", lh.Create)
 
 	return middleware.Chain(
 		mux,

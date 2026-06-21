@@ -7,6 +7,7 @@ import type {
   BudgetSplitBasis,
 } from "./budget-types";
 import { computeBalances, type Balance, type Transfer } from "./budget-format";
+import { convert } from "./currency";
 
 /** Nights between start and end (0 if dates missing/invalid). */
 export function tripNights(t: BudgetTrip): number {
@@ -57,7 +58,14 @@ export function tripStats(
   basis: BudgetSplitBasis,
 ): TripStats {
   const members = tripMembers(t, all);
-  const expenses = t.expenses ?? [];
+  // Convert every expense into the trip's main currency so mixed-currency spends
+  // settle correctly; all returned amounts are then in the main currency.
+  const main = t.mainCurrency ?? "CZK";
+  const expenses = (t.expenses ?? []).map((e) => ({
+    ...e,
+    amount: convert(e.amount, e.currency, main),
+    currency: main,
+  }));
   const { balances, total, transfers } = computeBalances(members, expenses, basis);
   const travellers = members.length;
   const perPerson = travellers > 0 ? total / travellers : 0;

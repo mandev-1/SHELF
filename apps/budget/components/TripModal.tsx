@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { BudgetTrip, BudgetMember } from "../lib/budget-types";
-import { Avatar, uid, nowIso, today, TRIP_EMOJIS, TRIP_ACCENTS } from "../lib/budget-format";
+import type { BudgetTrip, BudgetMember, BudgetCurrency } from "../lib/budget-types";
+import { Avatar, uid, nowIso, today, CURRENCIES, TRIP_EMOJIS, TRIP_ACCENTS } from "../lib/budget-format";
 
 interface TripModalProps {
   trip: BudgetTrip | null; // null = create mode
@@ -19,6 +19,10 @@ export function TripModal({ trip, members, onSave, onClose, onRemove }: TripModa
   const [end, setEnd] = useState(trip?.endDate ?? "");
   const [emoji, setEmoji] = useState(trip?.emoji ?? TRIP_EMOJIS[0]);
   const [accent, setAccent] = useState(trip?.color ?? TRIP_ACCENTS[0]);
+  const [mainCurrency, setMainCurrency] = useState<BudgetCurrency>(trip?.mainCurrency ?? "CZK");
+  const [secondaryCurrency, setSecondaryCurrency] = useState<BudgetCurrency>(
+    trip?.secondaryCurrency ?? "EUR",
+  );
   const [memberIds, setMemberIds] = useState<string[]>(
     trip?.memberIds?.length ? trip.memberIds : members.map((m) => m.id),
   );
@@ -56,6 +60,8 @@ export function TripModal({ trip, members, onSave, onClose, onRemove }: TripModa
       datesTBD: !start && !end,
       color: accent,
       cover: trip?.cover,
+      mainCurrency,
+      secondaryCurrency,
       memberIds,
       expenses: trip?.expenses ?? [],
       createdAt: trip?.createdAt ?? nowIso(),
@@ -141,6 +147,28 @@ export function TripModal({ trip, members, onSave, onClose, onRemove }: TripModa
               {dateError}
             </span>
           )}
+
+          <div className="gb-fld-row" style={{ gridColumn: "1 / -1" }}>
+            <label className="gb-fld">
+              <span className="gb-fld-lab">Main currency</span>
+              <select value={mainCurrency} onChange={(e) => setMainCurrency(e.target.value as BudgetCurrency)}>
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+            <label className="gb-fld">
+              <span className="gb-fld-lab">Secondary currency</span>
+              <select
+                value={secondaryCurrency}
+                onChange={(e) => setSecondaryCurrency(e.target.value as BudgetCurrency)}
+              >
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           <div className="gb-fld" style={{ gridColumn: "1 / -1" }}>
             <span className="gb-fld-lab">COVER ICON</span>

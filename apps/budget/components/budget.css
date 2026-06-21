@@ -3225,7 +3225,8 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 .gb-modal-title { font-size: 21px; font-weight: 800; letter-spacing: -0.02em; color: var(--fg); margin: 6px 0 0; line-height: 1.15; }
 .gb-modal-desc { font-size: 13px; line-height: 1.5; color: var(--dim); margin: 6px 0 0; }
 .gb-amt .gb-amt-cur { width: auto; flex: 0 0 auto; border: 0; background: none; box-shadow: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--dim); padding: 0 2px; outline: none; cursor: pointer; }
-.gb-splitseg { margin-top: 2px; }
+.gb-splitseg { margin-top: 2px; display: flex; }
+.gb-splitseg .seg-btn { flex: 1; text-align: center; }
 /* person-card access badges: "Full access" or a chip per trip the person is on */
 .gb-access-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .gb-access-chip {

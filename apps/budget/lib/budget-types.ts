@@ -51,6 +51,9 @@ export interface BudgetTrip {
   datesTBD?: boolean;
   color?: string;
   cover?: string;
+  /** Totals are shown in mainCurrency, with secondaryCurrency in parentheses. */
+  mainCurrency?: BudgetCurrency;
+  secondaryCurrency?: BudgetCurrency;
   memberIds?: string[];
   expenses?: BudgetExpense[];
   createdAt: string;
