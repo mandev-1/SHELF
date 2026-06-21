@@ -13,6 +13,8 @@ interface TripsViewProps {
   currency: BudgetCurrency;
   splitBasis: BudgetSplitBasis;
   budgetId?: string | null;
+  /** Non-admin members can't manage trips (hide host-only edit actions). */
+  canManage?: boolean;
   onAddTrip: (trip: BudgetTrip) => void;
   onUpdateTrip: (trip: BudgetTrip) => void;
   onRemoveTrip: (id: string) => void;
@@ -24,6 +26,7 @@ export function TripsView({
   currency,
   splitBasis,
   budgetId,
+  canManage = true,
   onAddTrip,
   onUpdateTrip,
   onRemoveTrip,
@@ -68,6 +71,7 @@ export function TripsView({
           currency={currency}
           splitBasis={splitBasis}
           budgetId={budgetId}
+          canManage={canManage}
           onBack={() => setSelectedId(null)}
           onEdit={() => setModal(selected)}
           onUpdate={onUpdateTrip}

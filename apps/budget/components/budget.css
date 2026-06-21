@@ -3201,6 +3201,11 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 .gb-amt { display: flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; background: var(--inset); }
 .gb-amt:focus-within { border-color: var(--accent); }
 .gb-amt .se-amt-input { border: 0; background: none; }
+/* add-expense: title/description header + currency affix inside the amount field */
+.gb-modal-title { font-size: 21px; font-weight: 800; letter-spacing: -0.02em; color: var(--fg); margin: 6px 0 0; line-height: 1.15; }
+.gb-modal-desc { font-size: 13px; line-height: 1.5; color: var(--dim); margin: 6px 0 0; }
+.gb-amt .gb-amt-cur { width: auto; flex: 0 0 auto; border: 0; background: none; box-shadow: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--dim); padding: 0 2px; outline: none; cursor: pointer; }
+.gb-splitseg { margin-top: 2px; }
 .gb-paidby { display: flex; flex-wrap: wrap; gap: 8px; }
 .gb-paid-chip { display: flex; align-items: center; gap: 7px; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--fg-2); border: 1.5px solid var(--line); background: var(--surface); border-radius: 11px; padding: 6px 12px 6px 7px; }
 .gb-paid-chip:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }

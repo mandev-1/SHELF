@@ -22,6 +22,9 @@ interface TripDetailProps {
   budgetId?: string | null;
   /** Guest mode (trip-scoped link): hide host-only actions. */
   guest?: boolean;
+  /** When false (a non-admin member), hide host-only edit actions and show a
+   *  read-only list of the people on the trip instead. */
+  canManage?: boolean;
   onBack: () => void;
   onEdit: () => void;
   onUpdate: (trip: BudgetTrip) => void; // persist expense add/edit, cover, etc.
@@ -34,6 +37,7 @@ export function TripDetail({
   splitBasis,
   budgetId,
   guest = false,
+  canManage = true,
   onBack,
   onEdit,
   onUpdate,
@@ -103,18 +107,52 @@ export function TripDetail({
             <div className="gb-trip-hero-emoji">{trip.emoji}</div>
             <h1 className="gb-trip-hero-name">{trip.name}</h1>
             <div className="gb-trip-hero-meta">{tripMetaLabel(trip)}</div>
-            {!guest && (
-              <div className="gb-trip-hero-actions">
-                <button type="button" className="gb-hero-btn" onClick={() => setInvite(true)}>
-                  ＋ Invite to reconcile
-                </button>
-                <button type="button" className="gb-hero-btn ghost" onClick={onEdit}>
-                  Edit trip
-                </button>
-              </div>
-            )}
+            {!guest &&
+              (canManage ? (
+                <div className="gb-trip-hero-actions">
+                  <button type="button" className="gb-hero-btn" onClick={() => setInvite(true)}>
+                    ＋ Invite to reconcile
+                  </button>
+                  <button type="button" className="gb-hero-btn ghost" onClick={onEdit}>
+                    Edit trip
+                  </button>
+                </div>
+              ) : (
+                // Non-admin members can't manage the trip — show who's on it instead.
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+                  {tMembers.map((m, i) => (
+                    <span
+                      key={m.id}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "4px 11px 4px 4px",
+                        borderRadius: 999,
+                        background: "rgba(0,0,0,0.32)",
+                        color: "#fff",
+                        fontSize: 12.5,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <span
+                        className="gb-av"
+                        style={{
+                          width: 22,
+                          height: 22,
+                          fontSize: 10,
+                          background: m.color || AV_HUES[i % AV_HUES.length],
+                        }}
+                      >
+                        {initials(m.name)}
+                      </span>
+                      {m.name}
+                    </span>
+                  ))}
+                </div>
+              ))}
           </div>
-          {!guest && (
+          {!guest && canManage && (
             <label
               style={{
                 cursor: "pointer",

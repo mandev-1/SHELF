@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import type {
   BudgetState,
   BudgetCurrency,
@@ -342,6 +342,7 @@ export function BudgetPanel({
           currency={currency}
           splitBasis={budget.splitBasis}
           budgetId={budgetId}
+          canManage={isSuperuser}
           onAddTrip={onAddTrip}
           onUpdateTrip={onUpdateTrip}
           onRemoveTrip={onRemoveTrip}
@@ -398,21 +399,53 @@ export function ExpenseModal({ expense, members, currency, defaultPaidBy, onSave
   const [category, setCategory] = useState(expense?.category ?? "");
   const [date, setDate] = useState(expense?.date ?? today());
   const [paidBy, setPaidBy] = useState(expense?.paidBy ?? defaultPaidBy ?? members[0]?.id ?? "");
-  const [among, setAmong] = useState<string[]>(expense?.splitAmong?.length ? expense.splitAmong : members.map((m) => m.id));
+  const [among, setAmong] = useState<string[]>(
+    expense?.splitAmong?.length ? expense.splitAmong : members.map((m) => m.id),
+  );
+  const [receipt, setReceipt] = useState<string | undefined>(expense?.receipt);
 
-  const valid = title.trim() && Number(amount) > 0 && paidBy && among.length > 0;
+  const allIds = members.map((m) => m.id);
+  const [splitMode, setSplitMode] = useState<"default" | "custom">(
+    expense?.splitAmong?.length && expense.splitAmong.length !== members.length ? "custom" : "default",
+  );
+  const splitIds = splitMode === "default" ? allIds : among;
+
+  // A 5-day quick picker, anchored so the selected date is always one of the chips.
+  const localIso = (d: Date) =>
+    new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const days = (() => {
+    const sel = new Date(`${date}T00:00:00`);
+    const t = new Date(`${today()}T00:00:00`);
+    const diff = Math.round((t.getTime() - sel.getTime()) / 86400000);
+    const anchor = diff >= 0 && diff <= 4 ? t : sel;
+    return [4, 3, 2, 1, 0].map((i) => new Date(anchor.getTime() - i * 86400000));
+  })();
+
+  const amt = Number(amount) || 0;
+  const perHead = splitIds.length ? amt / splitIds.length : 0;
+
+  const onReceiptFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setReceipt(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const valid = title.trim() && amt > 0 && paidBy && splitIds.length > 0;
   const submit = () => {
     if (!valid) return;
-    const base: BudgetExpense = expense ?? { id: uid(), title: "", amount: 0, currency: cur, date, paidBy, splitAmong: among, createdAt: nowIso(), updatedAt: nowIso() };
+    const base: BudgetExpense = expense ?? { id: uid(), title: "", amount: 0, currency: cur, date, paidBy, splitAmong: splitIds, createdAt: nowIso(), updatedAt: nowIso() };
     onSave({
       ...base,
       title: title.trim(),
-      amount: Number(amount),
+      amount: amt,
       currency: cur,
       category: category || undefined,
       date,
       paidBy,
-      splitAmong: among,
+      splitAmong: splitIds,
+      receipt: receipt || undefined,
       updatedAt: nowIso(),
     });
   };
@@ -421,40 +454,89 @@ export function ExpenseModal({ expense, members, currency, defaultPaidBy, onSave
     <div className="gb-modal-backdrop" onClick={onClose}>
       <div className="gb-modal gb-modal--sm" onClick={(e) => e.stopPropagation()}>
         <div className="gb-modal-head">
-          <span className="card-eyebrow">{expense ? "Edit expense" : "Add an expense"}</span>
+          <span className="card-eyebrow">Shared expense</span>
           <button type="button" className="gb-modal-x" onClick={onClose} aria-label="Close">✕</button>
         </div>
-        <div className="gb-modal-body">
-          <label className="gb-fld">
+        <div className="gb-modal-body" style={{ display: "block" }}>
+          <h2 className="gb-modal-title">{expense ? "Edit expense" : "Add an expense"}</h2>
+          <p className="gb-modal-desc">
+            Log what was bought, who paid, and how it splits. It feeds the budget and the settle-up.
+          </p>
+
+          <div className="gb-scan-field" style={{ marginTop: 14 }}>
+            {receipt ? (
+              <div className="gb-scan-attached">
+                <div className="gb-scan-thumbwrap">
+                  <img className="gb-scan-thumb" src={receipt} alt="receipt" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div className="gb-scan-main">Receipt attached</div>
+                  <div className="gb-scan-sub">Saved with this expense.</div>
+                </div>
+                <button type="button" className="gb-modal-cancel" onClick={() => setReceipt(undefined)}>
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <label className="gb-scan-drop">
+                <div className="gb-scan-ico">📸</div>
+                <div className="gb-scan-main">Scan a receipt</div>
+                <div className="gb-scan-sub">
+                  Drop a photo or screenshot — we’ll read the merchant, total and date. Or just type it in below.
+                </div>
+                <input type="file" accept="image/*" style={{ display: "none" }} onChange={onReceiptFile} />
+              </label>
+            )}
+          </div>
+
+          <label className="gb-fld" style={{ marginTop: 14 }}>
             <span className="gb-fld-lab">What was it?</span>
-            <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Groceries + wine" />
+            <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Groceries — Lidl" />
           </label>
-          <div className="gb-fld-row">
-            <label className="gb-fld">
-              <span className="gb-fld-lab">Amount</span>
-              <input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
-            </label>
-            <label className="gb-fld">
-              <span className="gb-fld-lab">Currency</span>
-              <select value={cur} onChange={(e) => setCur(e.target.value as BudgetCurrency)}>
+
+          <label className="gb-fld">
+            <span className="gb-fld-lab">Amount</span>
+            <div className="gb-amt">
+              <select className="gb-amt-cur" value={cur} onChange={(e) => setCur(e.target.value as BudgetCurrency)} aria-label="Currency">
                 {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
-            </label>
-          </div>
-          <div className="gb-fld-row">
-            <label className="gb-fld">
-              <span className="gb-fld-lab">Category</span>
-              <select value={category} onChange={(e) => setCategory(e.target.value)}>
-                <option value="">—</option>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </label>
-            <label className="gb-fld">
-              <span className="gb-fld-lab">Date</span>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </label>
-          </div>
+              <input
+                className="se-amt-input"
+                type="number"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0"
+                style={{ flex: 1, minWidth: 0, padding: 0, textAlign: "right", fontSize: 16, fontWeight: 700, color: "var(--fg)" }}
+              />
+            </div>
+          </label>
+
           <label className="gb-fld">
+            <span className="gb-fld-lab">Category</span>
+            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+              <option value="">—</option>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+
+          <div className="gb-fld">
+            <span className="gb-fld-lab">Which day?</span>
+            <div className="gb-daypick">
+              {days.map((d) => {
+                const di = localIso(d);
+                return (
+                  <button type="button" key={di} className={`gb-day${di === date ? " on" : ""}`} onClick={() => setDate(di)}>
+                    <span className="gb-day-dow">{d.toLocaleDateString("en", { weekday: "short" })}</span>
+                    <span className="gb-day-num">{d.getDate()}</span>
+                    <span className="gb-day-mon">{d.toLocaleDateString("en", { month: "short" })}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="gb-fld">
             <span className="gb-fld-lab">Paid by</span>
             <div className="gb-paidby">
               {members.map((m, i) => (
@@ -463,20 +545,53 @@ export function ExpenseModal({ expense, members, currency, defaultPaidBy, onSave
                 </button>
               ))}
             </div>
-          </label>
-          <label className="gb-fld">
-            <span className="gb-fld-lab">Split among</span>
-            <div className="gb-paidby">
+          </div>
+
+          <div className="gb-fld">
+            <span className="gb-fld-lab">How does it split?</span>
+            <div className="seg gb-splitseg">
+              <button
+                type="button"
+                className={`seg-btn${splitMode === "default" ? " on" : ""}`}
+                onClick={() => { setSplitMode("default"); setAmong(allIds); }}
+              >
+                Group default
+              </button>
+              <button
+                type="button"
+                className={`seg-btn${splitMode === "custom" ? " on" : ""}`}
+                onClick={() => setSplitMode("custom")}
+              >
+                Custom
+              </button>
+            </div>
+            <div className="gb-split-list">
               {members.map((m, i) => {
-                const on = among.includes(m.id);
+                const on = splitMode === "default" || among.includes(m.id);
+                const interactive = splitMode === "custom";
                 return (
-                  <button key={m.id} type="button" className={`gb-paid-chip${on ? " on" : ""}`} onClick={() => setAmong((prev) => on ? prev.filter((x) => x !== m.id) : [...prev, m.id])}>
-                    <Avatar member={m} idx={i} size={22} /> {m.name}
-                  </button>
+                  <div
+                    key={m.id}
+                    className={`gb-split-row${on ? "" : " off"}`}
+                    style={interactive ? { cursor: "pointer" } : undefined}
+                    onClick={
+                      interactive
+                        ? () =>
+                            setAmong((prev) =>
+                              prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id],
+                            )
+                        : undefined
+                    }
+                  >
+                    <Avatar member={m} idx={i} size={26} />
+                    <span className="gb-split-name">{m.name}</span>
+                    <span className="gb-split-basis">equal</span>
+                    <span className="gb-split-amt">{fmt(on ? perHead : 0, cur)}</span>
+                  </div>
                 );
               })}
             </div>
-          </label>
+          </div>
         </div>
         <div className="gb-modal-foot">
           {expense && <button type="button" className="gb-modal-del" onClick={() => onRemove(expense.id)}>Delete</button>}

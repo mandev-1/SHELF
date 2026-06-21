@@ -105,7 +105,29 @@ export function TripModal({ trip, members, onSave, onClose, onRemove }: TripModa
           </label>
 
           <label className="gb-fld" style={{ gridColumn: "1 / -1" }}>
-            <span className="gb-fld-lab">END</span>
+            <span
+              className="gb-fld-lab"
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
+            >
+              END
+              <button
+                type="button"
+                onClick={() => setEnd(today())}
+                style={{
+                  border: 0,
+                  background: "none",
+                  padding: 0,
+                  font: "inherit",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: "0.04em",
+                  color: "var(--accent, #0070f2)",
+                  cursor: "pointer",
+                }}
+              >
+                Set as today
+              </button>
+            </span>
             <input
               type="date"
               value={end}
