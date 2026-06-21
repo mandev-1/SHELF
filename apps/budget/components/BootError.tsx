@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 
 // Friendly boot-failure screen. Shown when the budget can't start — most often
 // because the Vercel deployment is missing its budget-API env vars, but it covers
@@ -11,7 +11,17 @@ function isConfigError(detail?: string): boolean {
   return !!detail && /BUDGET_API_URL|BUDGET_API_TOKEN|env var/i.test(detail);
 }
 
-export function BootError({ detail }: { detail?: string }) {
+export function BootError({
+  detail,
+  onLogin,
+}: {
+  detail?: string;
+  // When provided, an admin login is offered at the bottom so the host can still
+  // authorize even while the data layer is failing (the session is client-side).
+  onLogin?: (password: string) => boolean;
+}) {
+  const [pw, setPw] = useState("");
+  const [pwError, setPwError] = useState(false);
   const config = isConfigError(detail);
   const headline = config
     ? "This budget hasn't been handed its keys yet 🔑"
@@ -105,6 +115,72 @@ export function BootError({ detail }: { detail?: string }) {
             {detail}
           </pre>
         </details>
+      )}
+
+      {onLogin && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!onLogin(pw)) setPwError(true);
+          }}
+          style={{
+            width: "100%",
+            maxWidth: 460,
+            marginTop: 8,
+            paddingTop: 14,
+            borderTop: "1px solid var(--line, #d8e0ee)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            textAlign: "left",
+          }}
+        >
+          <span style={{ fontSize: 12, color: "var(--dim)" }}>Or log in as admin:</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              type="password"
+              value={pw}
+              onChange={(e) => {
+                setPw(e.target.value);
+                setPwError(false);
+              }}
+              placeholder="Host password"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                border: "1px solid var(--line-strong, #c2cfe6)",
+                borderRadius: 10,
+                padding: "10px 12px",
+                fontSize: 14,
+                background: "var(--inset, #f3f6fc)",
+                color: "var(--fg)",
+                outline: "none",
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                border: 0,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: 13.5,
+                fontWeight: 600,
+                color: "#fff",
+                background: "var(--accent, #0070f2)",
+                borderRadius: 10,
+                padding: "10px 16px",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Log in
+            </button>
+          </div>
+          {pwError && (
+            <span style={{ fontSize: 12.5, color: "var(--gb-neg, #e5484d)" }}>
+              That password didn&apos;t work.
+            </span>
+          )}
+        </form>
       )}
       </div>
     </div>

@@ -16,7 +16,15 @@ export function BudgetView() {
   const { budget, setBudget, budgetId, loading, error } = useBudget();
 
   if (error) {
-    return <BootError detail={error} />;
+    // Even when the data layer fails (e.g. the API token is wrong), let the host
+    // log in as admin from here — the session is client-side and persists, so a
+    // token fix + reload lands you straight in. Hidden once already superuser.
+    return (
+      <BootError
+        detail={error}
+        onLogin={session?.role === "superuser" ? undefined : login}
+      />
+    );
   }
   if (!sessionReady || loading || !usersReady || !tripsReady) {
     return <p className="p-8 text-sm text-neutral-400">Loading budget…</p>;
