@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Summer-notebook background — demo</title>
+<link rel="stylesheet" href="notebook-background.css" />
+<style>
+  /* demo chrome only — not part of the handoff */
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1f2b3a; }
+  .notebook-page { min-height: 100vh; min-height: 100dvh; box-sizing: border-box; padding: 40px 22px 56px; }
+  .demo-wrap { max-width: 620px; margin: 0 auto; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.12em; font-size: 12px; font-weight: 700; color: #5a86b8; margin-bottom: 14px; }
+  p { font-size: 15px; line-height: 1.6; color: #3a4a5e; }
+  .card {
+    margin-top: 22px; background: #fff; border: 1px solid rgba(86, 142, 200, 0.22);
+    border-radius: 14px; padding: 18px 20px; box-shadow: 0 8px 24px -16px rgba(40, 70, 110, 0.4);
+  }
+  .card h2 { margin: 0 0 6px; font-size: 17px; }
+  .card p { margin: 0; font-size: 14px; }
+  .note { margin-top: 20px; font-size: 14px; color: #44566b; }
+</style>
+</head>
+<body>
+<div class="notebook-page">
+  <div class="demo-wrap">
+    <div class="eyebrow ink-on-paper">Handoff demo</div>
+    <h1 class="ink-on-paper">Summer notebook background</h1>
+    <p class="ink-on-paper">
+      This text sits directly on the ruled page and uses <code>.ink-on-paper</code>
+      for a soft white halo, so the blue lines don't cut through it.
+    </p>
+
+    <div class="card">
+      <h2>Content on a card</h2>
+      <p>Cards keep their own solid background, so they read cleanly over the ruled paper with no halo needed.</p>
+    </div>
+
+    <p class="note ink-on-paper">
+      Drop <code>notebook-background.css</code> in, wrap a region in
+      <code>.notebook-page</code>, and add <code>.ink-on-paper</code> to any text
+      placed straight on the background.
+    </p>
+  </div>
+</div>
+</body>
+</html>

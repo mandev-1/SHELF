@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { BudgetCurrency, BudgetMember } from "../lib/budget-types";
+import type { BudgetCurrency, BudgetMember, BudgetTrip } from "../lib/budget-types";
 import { Avatar, fmt, type Balance } from "../lib/budget-format";
 import { toast } from "../lib/toast";
 import { QrModal } from "./QrModal";
@@ -10,13 +10,14 @@ interface PeopleViewProps {
   balances: Balance[];
   currency: BudgetCurrency;
   budgetId?: string | null;
+  trips: BudgetTrip[];
   onEdit: (m: BudgetMember) => void;
   onAdd: () => void;
 }
 
 // Manage the people sharing the budget: roster cards with each person's balance,
 // a copy of their personal link (?b=&me=), edit, and an "Add a person" card.
-export function PeopleView({ balances, currency, budgetId, onEdit, onAdd }: PeopleViewProps) {
+export function PeopleView({ balances, currency, budgetId, trips, onEdit, onAdd }: PeopleViewProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [qrFor, setQrFor] = useState<BudgetMember | null>(null);
 
@@ -74,6 +75,26 @@ export function PeopleView({ balances, currency, budgetId, onEdit, onAdd }: Peop
                 </span>
               </span>
             </button>
+            {(() => {
+              const pt = trips.filter((t) => (t.memberIds ?? []).includes(b.member.id));
+              return (
+                <div className="gb-access-row">
+                  {pt.length === 0 ? (
+                    <span className="gb-access-chip gb-access-full">🔑 Full access</span>
+                  ) : (
+                    pt.map((t) => (
+                      <span
+                        key={t.id}
+                        className="gb-access-chip"
+                        style={{ ["--chip" as any]: t.color || "var(--accent)" }}
+                      >
+                        <span aria-hidden>{t.emoji || "🏝️"}</span> {t.name}
+                      </span>
+                    ))
+                  )}
+                </div>
+              );
+            })()}
             <div style={{ display: "flex", gap: 8, marginTop: "auto" }}>
               <button type="button" className="gb-invite-act" onClick={() => onEdit(b.member)}>
                 Edit

@@ -171,7 +171,16 @@ export function BudgetPanel({
 
   const addPerson = () => setPersonModal("new");
   const editPerson = (m: BudgetMember) => setPersonModal(m);
-  const savePerson = async (name: string) => {
+  // Scoping a person to a trip adds them to that trip's roster ("Who's on the
+  // trip") so trip access and membership stay in sync (both via trips.memberIds).
+  const scopeMemberToTrip = (memberId: string, tripId: string) => {
+    const trip = (budget.trips ?? []).find((t) => t.id === tripId);
+    if (!trip) return;
+    const ids = trip.memberIds ?? [];
+    if (ids.includes(memberId)) return;
+    onUpdateTrip({ ...trip, memberIds: [...ids, memberId], updatedAt: nowIso() });
+  };
+  const savePerson = async (name: string, scope = "full") => {
     const trimmed = name.trim();
     if (!trimmed) return;
     if (personModal === "new") {
@@ -186,13 +195,17 @@ export function BudgetPanel({
       }
       return;
     }
-    onUpdateUser((personModal as BudgetMember).id, { name: trimmed });
+    const id = (personModal as BudgetMember).id;
+    onUpdateUser(id, { name: trimmed });
+    if (scope !== "full") scopeMemberToTrip(id, scope);
     setPersonModal(null);
   };
-  const applyPerson = (name: string) => {
+  const applyPerson = (name: string, scope = "full") => {
     const trimmed = name.trim();
     if (!trimmed || personModal === "new") return;
-    onUpdateUser((personModal as BudgetMember).id, { name: trimmed });
+    const id = (personModal as BudgetMember).id;
+    onUpdateUser(id, { name: trimmed });
+    if (scope !== "full") scopeMemberToTrip(id, scope);
     toast("Changes applied");
   };
   const removePerson = () => {
@@ -356,6 +369,7 @@ export function BudgetPanel({
           balances={balances}
           currency={currency}
           budgetId={budgetId}
+          trips={budget.trips ?? []}
           onEdit={editPerson}
           onAdd={addPerson}
         />
@@ -652,16 +666,18 @@ function PersonModal({ member, budgetId, trips, onSave, onApply, onRemove, onClo
   member: BudgetMember | null;
   budgetId?: string | null;
   trips: BudgetTrip[];
-  onSave: (name: string) => void;
-  onApply?: (name: string) => void;
+  onSave: (name: string, scope?: string) => void;
+  onApply?: (name: string, scope?: string) => void;
   onRemove?: () => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(member?.name ?? "");
-  const [scope, setScope] = useState<string>("full"); // "full" | tripId
+  // Trip access reflects membership: a person on exactly one trip defaults to it.
+  const memberTrips = member ? trips.filter((t) => (t.memberIds ?? []).includes(member.id)) : [];
+  const [scope, setScope] = useState<string>(memberTrips.length === 1 ? memberTrips[0].id : "full"); // "full" | tripId
   const [copied, setCopied] = useState(false);
   const valid = name.trim().length > 0;
-  const submit = () => { if (valid) onSave(name); };
+  const submit = () => { if (valid) onSave(name, scope); };
 
   // Personal link carries explicit ?user=<id> (who you are) and, when scoped,
   // &trip=<id> (the only trip they can open). budget id rides along as ?b=.
@@ -739,7 +755,7 @@ function PersonModal({ member, budgetId, trips, onSave, onApply, onRemove, onClo
             <>
               <button
                 type="button"
-                onClick={() => { if (valid) onApply?.(name); }}
+                onClick={() => { if (valid) onApply?.(name, scope); }}
                 disabled={!valid}
                 style={{
                   fontFamily: "inherit",

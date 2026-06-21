@@ -3225,6 +3225,17 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 .gb-modal-desc { font-size: 13px; line-height: 1.5; color: var(--dim); margin: 6px 0 0; }
 .gb-amt .gb-amt-cur { width: auto; flex: 0 0 auto; border: 0; background: none; box-shadow: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--dim); padding: 0 2px; outline: none; cursor: pointer; }
 .gb-splitseg { margin-top: 2px; }
+/* person-card access badges: "Full access" or a chip per trip the person is on */
+.gb-access-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.gb-access-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.01em;
+  padding: 3px 10px 3px 8px; border-radius: 999px;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--chip, var(--accent)) 16%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--chip, var(--accent)) 38%, transparent);
+}
+.gb-access-full { --chip: var(--accent); }
 .gb-paidby { display: flex; flex-wrap: wrap; gap: 8px; }
 .gb-paid-chip { display: flex; align-items: center; gap: 7px; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--fg-2); border: 1.5px solid var(--line); background: var(--surface); border-radius: 11px; padding: 6px 12px 6px 7px; }
 .gb-paid-chip:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
