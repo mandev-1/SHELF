@@ -384,11 +384,32 @@ export function BudgetPanel({
   );
 }
 
-export function ExpenseModal({ expense, members, currency, defaultPaidBy, onSave, onRemove, onClose }: {
+function localIso(d: Date): string {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+// Inclusive list of ISO days from start to end (guards against reversed/huge ranges).
+function eachDayISO(startIso: string, endIso: string): string[] {
+  const out: string[] = [];
+  let cur = new Date(`${startIso}T00:00:00`);
+  const end = new Date(`${endIso}T00:00:00`);
+  if (isNaN(cur.getTime()) || isNaN(end.getTime()) || end.getTime() < cur.getTime()) return out;
+  let guard = 0;
+  while (cur.getTime() <= end.getTime() && guard < 60) {
+    out.push(localIso(cur));
+    cur = new Date(cur.getTime() + 86400000);
+    guard++;
+  }
+  return out;
+}
+
+export function ExpenseModal({ expense, members, currency, defaultPaidBy, dateRange, onSave, onRemove, onClose }: {
   expense: BudgetExpense | null;
   members: BudgetMember[];
   currency: BudgetCurrency;
   defaultPaidBy?: string;
+  /** Trip date range — when set, the day picker offers the trip's days instead. */
+  dateRange?: { start?: string; end?: string };
   onSave: (e: BudgetExpense) => void;
   onRemove: (id: string) => void;
   onClose: () => void;
@@ -397,7 +418,19 @@ export function ExpenseModal({ expense, members, currency, defaultPaidBy, onSave
   const [amount, setAmount] = useState(expense ? String(expense.amount) : "");
   const [cur, setCur] = useState<BudgetCurrency>(expense?.currency ?? currency);
   const [category, setCategory] = useState(expense?.category ?? "");
-  const [date, setDate] = useState(expense?.date ?? today());
+
+  // Inside a trip, the day picker offers the trip's days; otherwise recent days.
+  const rangeDaysAll = dateRange?.start && dateRange?.end ? eachDayISO(dateRange.start, dateRange.end) : [];
+  const rangeDays = rangeDaysAll.length ? rangeDaysAll : null;
+  const clampToRange = (iso: string, list: string[]) => {
+    if (!list.length || list.includes(iso)) return iso;
+    if (iso < list[0]) return list[0];
+    if (iso > list[list.length - 1]) return list[list.length - 1];
+    return iso;
+  };
+  const [date, setDate] = useState(
+    expense?.date ?? (rangeDays ? clampToRange(today(), rangeDays) : today()),
+  );
   const [paidBy, setPaidBy] = useState(expense?.paidBy ?? defaultPaidBy ?? members[0]?.id ?? "");
   const [among, setAmong] = useState<string[]>(
     expense?.splitAmong?.length ? expense.splitAmong : members.map((m) => m.id),
@@ -410,16 +443,17 @@ export function ExpenseModal({ expense, members, currency, defaultPaidBy, onSave
   );
   const splitIds = splitMode === "default" ? allIds : among;
 
-  // A 5-day quick picker, anchored so the selected date is always one of the chips.
-  const localIso = (d: Date) =>
-    new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-  const days = (() => {
-    const sel = new Date(`${date}T00:00:00`);
-    const t = new Date(`${today()}T00:00:00`);
-    const diff = Math.round((t.getTime() - sel.getTime()) / 86400000);
-    const anchor = diff >= 0 && diff <= 4 ? t : sel;
-    return [4, 3, 2, 1, 0].map((i) => new Date(anchor.getTime() - i * 86400000));
-  })();
+  // Day chips: the trip's days when in a trip, else the last 5 days (anchored so
+  // the selected date is always one of the chips).
+  const dayList: string[] =
+    rangeDays ??
+    (() => {
+      const sel = new Date(`${date}T00:00:00`);
+      const t = new Date(`${today()}T00:00:00`);
+      const diff = Math.round((t.getTime() - sel.getTime()) / 86400000);
+      const anchor = diff >= 0 && diff <= 4 ? t : sel;
+      return [4, 3, 2, 1, 0].map((i) => localIso(new Date(anchor.getTime() - i * 86400000)));
+    })();
 
   const amt = Number(amount) || 0;
   const perHead = splitIds.length ? amt / splitIds.length : 0;
@@ -523,8 +557,8 @@ export function ExpenseModal({ expense, members, currency, defaultPaidBy, onSave
           <div className="gb-fld">
             <span className="gb-fld-lab">Which day?</span>
             <div className="gb-daypick">
-              {days.map((d) => {
-                const di = localIso(d);
+              {dayList.map((di) => {
+                const d = new Date(`${di}T00:00:00`);
                 return (
                   <button type="button" key={di} className={`gb-day${di === date ? " on" : ""}`} onClick={() => setDate(di)}>
                     <span className="gb-day-dow">{d.toLocaleDateString("en", { weekday: "short" })}</span>

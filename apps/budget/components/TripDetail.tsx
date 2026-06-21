@@ -348,6 +348,7 @@ export function TripDetail({
           members={tMembers}
           currency={currency}
           defaultPaidBy={tMembers[0]?.id}
+          dateRange={{ start: trip.startDate, end: trip.endDate }}
           onSave={(e) => {
             onUpdate({
               ...trip,
