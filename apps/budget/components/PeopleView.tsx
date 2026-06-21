@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { BudgetCurrency, BudgetMember } from "../lib/budget-types";
 import { Avatar, fmt, type Balance } from "../lib/budget-format";
 import { toast } from "../lib/toast";
+import { QrModal } from "./QrModal";
 
 interface PeopleViewProps {
   balances: Balance[];
@@ -17,6 +18,7 @@ interface PeopleViewProps {
 // a copy of their personal link (?b=&me=), edit, and an "Add a person" card.
 export function PeopleView({ balances, currency, budgetId, onEdit, onAdd }: PeopleViewProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [qrFor, setQrFor] = useState<BudgetMember | null>(null);
 
   const copyLink = (m: BudgetMember) => {
     if (!budgetId) return;
@@ -27,6 +29,7 @@ export function PeopleView({ balances, currency, budgetId, onEdit, onAdd }: Peop
   };
 
   return (
+    <>
     <div className="gb-trips-grid">
       {balances.map((b, i) => {
         const settled = Math.abs(b.net) < 0.5;
@@ -80,6 +83,11 @@ export function PeopleView({ balances, currency, budgetId, onEdit, onAdd }: Peop
                   {copiedId === b.member.id ? "Copied ✓" : "Copy link"}
                 </button>
               )}
+              {budgetId && (
+                <button type="button" className="gb-invite-act" onClick={() => setQrFor(b.member)}>
+                  QR
+                </button>
+              )}
             </div>
           </div>
         );
@@ -89,5 +97,13 @@ export function PeopleView({ balances, currency, budgetId, onEdit, onAdd }: Peop
         Add a person
       </button>
     </div>
+    {qrFor && budgetId && (
+      <QrModal
+        url={`${location.origin}/?b=${budgetId}&user=${qrFor.id}`}
+        title={qrFor.name}
+        onClose={() => setQrFor(null)}
+      />
+    )}
+    </>
   );
 }

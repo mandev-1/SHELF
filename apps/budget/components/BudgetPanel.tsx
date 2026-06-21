@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import type {
   BudgetState,
   BudgetCurrency,
@@ -157,6 +157,10 @@ export function BudgetPanel({
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
   const [personModal, setPersonModal] = useState<BudgetMember | "new" | null>(null);
   const [view, setView] = useState<"people" | "trips">("people");
+  // Always start a view at the top (switching tabs shouldn't keep the prior scroll).
+  useEffect(() => {
+    if (typeof window !== "undefined") window.scrollTo({ top: 0 });
+  }, [view]);
   const creatingRef = useRef(false); // guards against double-submit creating two people
 
   const { balances, total, transfers } = useMemo(() => computeBalances(budget), [budget]);

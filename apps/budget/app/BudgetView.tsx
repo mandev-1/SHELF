@@ -27,7 +27,16 @@ export function BudgetView() {
     );
   }
   if (!sessionReady || loading || !usersReady || !tripsReady) {
-    return <p className="p-8 text-sm text-neutral-400">Loading budget…</p>;
+    return (
+      <div className="gb-loader" role="status" aria-label="Loading budget">
+        <div className="gb-loader-dots">
+          <span className="gb-loader-dot" />
+          <span className="gb-loader-dot" />
+          <span className="gb-loader-dot" />
+        </div>
+        <span className="gb-loader-label">Loading budget…</span>
+      </div>
+    );
   }
   // No session and no invite link → ask for the host password (or use a link).
   if (!session) {
