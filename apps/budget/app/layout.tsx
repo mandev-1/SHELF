@@ -4,6 +4,8 @@ import "./globals.css";
 import "../components/notebook-background.css";
 // Handoff 008 — ported 1:1 (verbatim). The .add-expense-btn used in the trip header.
 import "../components/notebook-add-button.css";
+// Handoff 009 — trip cards ("On the road" + "Reconcile") used in TripDetail.
+import "../components/trip-cards.css";
 
 export const metadata: Metadata = {
   title: "Budget",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type * as React from "react";
 import type {
   BudgetTrip,
@@ -15,7 +15,18 @@ import { tripStats, tripMembers, tripMetaLabel } from "../lib/trips";
 import { ExpenseModal } from "./BudgetPanel";
 import { toast } from "../lib/toast";
 import { api } from "../lib/api";
-import { AddExpenseButton } from "./AddExpenseButton";
+
+// Category → dot hue for the "On the road" ledger (handoff 009).
+const CATEGORY_HUE: Record<string, string> = {
+  Groceries: "#34c891",
+  Dining: "#e0905a",
+  Transport: "#0070f2",
+  Housing: "#a384df",
+  Fun: "#e07a93",
+  Health: "#16b6c8",
+  Fees: "#8fa5c4",
+  Other: "#5e7698",
+};
 
 interface TripDetailProps {
   trip: BudgetTrip;
@@ -31,6 +42,8 @@ interface TripDetailProps {
   /** Who is performing changes — recorded in the expense audit log. */
   actorId?: string | null;
   actorName?: string;
+  /** Guest mode: a header CTA opens the Add-Expense modal by bumping this. */
+  addExpenseSignal?: number;
   onBack: () => void;
   onEdit: () => void;
   onUpdate: (trip: BudgetTrip) => void; // persist expense add/edit, cover, etc.
@@ -46,12 +59,18 @@ export function TripDetail({
   canManage = true,
   actorId,
   actorName,
+  addExpenseSignal,
   onBack,
   onEdit,
   onUpdate,
 }: TripDetailProps) {
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
   const [invite, setInvite] = useState(false);
+
+  // Guest header CTA opens the Add-Expense modal by bumping addExpenseSignal.
+  useEffect(() => {
+    if (addExpenseSignal) setExpenseModal("new");
+  }, [addExpenseSignal]);
 
   const tMembers = tripMembers(trip, members);
   const stats = tripStats(trip, members, splitBasis);
@@ -74,6 +93,20 @@ export function TripDetail({
   const heroStyle = { ["--trip-hue" as any]: trip.color || "var(--accent)" } as React.CSSProperties;
 
   const memberById = (id: string) => members.find((m) => m.id === id);
+  const hueOf = (m: BudgetMember) => m.color || AV_HUES[Math.max(0, members.indexOf(m)) % AV_HUES.length];
+  const catHue = (c?: string) => (c && CATEGORY_HUE[c]) || "#8fa5c4";
+  const dateLabel = (iso?: string) =>
+    iso
+      ? new Date(`${iso}T00:00:00`).toLocaleDateString("en", { day: "numeric", month: "short", year: "numeric" })
+      : "";
+  // Handoff 009 Reconcile card: the trip's cover photo behind a near-white scrim.
+  const recStyle = trip.cover
+    ? {
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.93) 0%, rgba(255,255,255,0.86) 45%, rgba(255,255,255,0.72) 100%), " +
+          `url("${trip.cover}") 50% 72% / cover no-repeat, var(--surface)`,
+      }
+    : undefined;
 
   const onCoverFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -110,10 +143,6 @@ export function TripDetail({
 
   return (
     <div>
-      {/* Add-expense action — top-right of the trip view (handoff 008 button). */}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <AddExpenseButton onClick={() => setExpenseModal("new")} />
-      </div>
       {/* Hero */}
       <div className="card gb-trip-hero" style={heroStyle}>
         {trip.cover && (
@@ -283,106 +312,113 @@ export function TripDetail({
         </div>
       </div>
 
-      {/* Who paid what */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-head">
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <span className="card-eyebrow">ON THE ROAD</span>
-            <span className="card-title">Who paid what</span>
+      {/* On the road · who paid what (handoff 009) */}
+      <section className="tc-card otr">
+        <div className="tc-head">
+          <div>
+            <div className="tc-eyebrow">On the road</div>
+            <div className="tc-title">Who paid what</div>
           </div>
           <button
+            className="tc-addbtn"
             type="button"
-            className="ghost-btn gb-add-btn"
             onClick={() => setExpenseModal("new")}
             disabled={tMembers.length === 0}
           >
-            ＋ Add expense
+            <span className="tc-plus">+</span>
+            <span>Add expense</span>
           </button>
         </div>
+
         {expenses.length === 0 ? (
           <div className="gb-empty">No expenses logged yet — add the first one.</div>
         ) : (
-          <div className="gb-activity-list">
+          <div className="tc-ledger">
             {expenses.map((e) => {
               const payer = memberById(e.paidBy);
+              const ids = e.splitAmong?.length ? e.splitAmong : tMembers.map((m) => m.id);
+              const participants = ids.map(memberById).filter(Boolean) as BudgetMember[];
               return (
-                <button
-                  key={e.id}
-                  type="button"
-                  className="gb-act-row"
-                  onClick={() => setExpenseModal(e)}
-                >
-                  {payer && <Avatar member={payer} idx={members.indexOf(payer)} size={30} />}
-                  <span className="gb-act-main">
-                    <span className="gb-act-label">{e.title || "Expense"}</span>
-                    <span className="gb-act-meta">
-                      {payer?.name ?? "?"} paid · {e.date}
-                      {e.category ? ` · ${e.category}` : ""}
+                <button key={e.id} className="tc-exp" type="button" onClick={() => setExpenseModal(e)}>
+                  <span className="tc-exp-dot" style={{ background: catHue(e.category) }} />
+                  <span className="tc-exp-amt">{fmt(e.amount, e.currency)}</span>
+                  <span className="tc-exp-main">
+                    <span className="tc-exp-label">{e.title || "Expense"}</span>
+                    <span className="tc-exp-meta">
+                      {e.category || "Other"} · {dateLabel(e.date)}
                     </span>
                   </span>
-                  <span className="gb-act-amt">{fmt(e.amount, e.currency)}</span>
+                  <span className="tc-exp-split">
+                    {participants.map((m) => (
+                      <span key={m.id} className="tc-av" style={{ backgroundColor: hueOf(m) }}>
+                        {m.name.charAt(0).toUpperCase()}
+                      </span>
+                    ))}
+                    <span className="tc-exp-splitlab">split {participants.length}</span>
+                  </span>
+                  <span className="tc-exp-paid">
+                    {payer && (
+                      <span className="tc-av" style={{ backgroundColor: hueOf(payer) }}>
+                        {payer.name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <span className="tc-exp-paidlab">paid</span>
+                  </span>
                 </button>
               );
             })}
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Settle up */}
-      <div className="card gb-settle">
-        <div className="card-head">
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <span className="card-eyebrow">RECONCILE</span>
-            <span className="card-title">Settle up</span>
+      {/* Reconcile · settle up (handoff 009) — trip cover behind a white scrim */}
+      <section className="tc-card rec" style={recStyle}>
+        <div className="tc-head">
+          <div>
+            <div className="tc-eyebrow">Reconcile</div>
+            <div className="tc-title">Settle up</div>
           </div>
         </div>
-        <div className="gb-settle-body">
-          <div className="gb-bal-list">
-            {stats.balances.map((b, i) => {
-              const max = Math.max(1, ...stats.balances.map((x) => Math.abs(x.net)));
-              return (
-                <div key={b.member.id} className="gb-bal-row">
-                  <Avatar member={b.member} idx={i} size={26} />
-                  <span className="gb-bal-name">{b.member.name}</span>
-                  <span className="gb-bal-track">
-                    <span
-                      className="gb-bal-fill"
-                      style={{
-                        width: `${(Math.abs(b.net) / max) * 100}%`,
-                        background: b.net >= 0 ? "var(--gb-pos)" : "var(--gb-neg)",
-                        marginLeft: b.net >= 0 ? "50%" : undefined,
-                      }}
-                    />
-                  </span>
-                  <span
-                    className="gb-bal-net"
-                    style={{
-                      color:
-                        Math.abs(b.net) < 0.5
-                          ? "var(--dim)"
-                          : b.net > 0
-                            ? "var(--gb-pos)"
-                            : "var(--gb-neg)",
-                    }}
-                  >
-                    {fmt(b.net, main)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          {stats.transfers.length === 0 ? (
-            <div className="gb-settle-clear">✓ This trip is squared up</div>
-          ) : (
-            stats.transfers.map((t, i) => (
-              <div key={i} className="gb-settle-row">
-                <strong>{t.from.name}</strong> → <strong>{t.to.name}</strong>
-                <span className="gb-settle-amt">{fmt(t.amount, main)}</span>
+
+        <div className="tc-bal-list">
+          {stats.balances.map((b) => {
+            const m = b.member;
+            const pos = b.net > 0.01;
+            const neg = b.net < -0.01;
+            const total = Math.max(1, stats.balances.reduce((s, x) => s + Math.abs(x.net), 0));
+            const w = Math.min(100, Math.round((Math.abs(b.net) / total) * 100 * stats.balances.length));
+            return (
+              <div key={m.id} className="tc-bal">
+                <span className="tc-av" style={{ backgroundColor: hueOf(m) }}>
+                  {m.name.charAt(0).toUpperCase()}
+                </span>
+                <span className="tc-bal-name">{m.name}</span>
+                <span className="tc-bal-track">
+                  {(pos || neg) && (
+                    <span className={"tc-bal-fill " + (pos ? "pos" : "neg")} style={{ width: w + "%" }} />
+                  )}
+                </span>
+                <span className={"tc-bal-net" + (pos ? " pos" : neg ? " neg" : "")}>{fmt(b.net, main)}</span>
               </div>
-            ))
-          )}
+            );
+          })}
         </div>
-      </div>
+
+        {stats.transfers.length === 0 ? (
+          <div className="tc-clear">✓ This trip is squared up</div>
+        ) : (
+          <div className="tc-tx-list">
+            {stats.transfers.map((t, i) => (
+              <div key={i} className="tc-tx">
+                <span className="tc-tx-name">{t.from.name}</span>
+                <span className="tc-tx-arrow">→</span>
+                <span className="tc-tx-name">{t.to.name}</span>
+                <span className="tc-tx-amt">{fmt(t.amount, main)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {expenseModal && (
         <ExpenseModal

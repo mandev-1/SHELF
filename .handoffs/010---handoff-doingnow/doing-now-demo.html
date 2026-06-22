@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Doing now — drawer demo</title>
+<link rel="stylesheet" href="doing-now.css" />
+<style>
+  html, body { margin: 0; height: 100%; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #e7edf6; color: #0a1c33; }
+  #root { height: 100vh; }
+
+  /* the positioned container the drawer lives in (YOUR canvas / work area) */
+  .dn-stage { position: relative; overflow: hidden; height: 100%; background:
+    radial-gradient(circle at 18px 18px, rgba(8,40,90,0.06) 1.4px, transparent 1.6px) 0 0 / 26px 26px,
+    linear-gradient(180deg, #fbfdff, #eef3fb); }
+
+  .dn-demo-head { padding: 26px 30px 8px; }
+  .dn-demo-head h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.02em; }
+  .dn-demo-head p { margin: 0; font-size: 13px; color: #5e7698; }
+
+  .dn-nodes { display: flex; flex-wrap: wrap; gap: 12px; padding: 18px 30px 240px; align-content: flex-start; }
+  .dn-fake-node {
+    width: 210px; border: 1px solid rgba(8,40,90,0.14); background: #fff; border-radius: 14px;
+    padding: 13px 15px; box-shadow: 0 4px 14px -10px rgba(8,40,90,0.5); cursor: context-menu;
+  }
+  .dn-fake-node.queued { outline: 2px solid color-mix(in srgb, #0070f2 45%, transparent); outline-offset: 2px; }
+  .dn-fake-head { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+  .dn-fake-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dn-fake-plane { font-size: 10px; font-weight: 600; color: #5e7698; letter-spacing: 0.04em; }
+  .dn-fake-title { font-size: 14.5px; font-weight: 700; line-height: 1.25; }
+  .dn-fake-note { font-size: 11.5px; color: #2a435f; margin-top: 5px; line-height: 1.4; }
+  .dn-fake-hint { font-size: 10px; color: #93a6c2; margin-top: 9px; }
+
+  /* tiny right-click menu */
+  .dn-menu-scrim { position: fixed; inset: 0; z-index: 90; }
+  .dn-menu { position: fixed; z-index: 91; background: #fff; border: 1px solid rgba(8,40,90,0.18); border-radius: 10px; box-shadow: 0 12px 34px -12px rgba(8,40,90,0.5); padding: 5px; min-width: 170px; }
+  .dn-menu button { display: block; width: 100%; text-align: left; border: 0; background: none; font-family: inherit; font-size: 13px; color: #0a1c33; padding: 8px 11px; border-radius: 7px; cursor: pointer; }
+  .dn-menu button:hover:not(:disabled) { background: #eef3fb; }
+  .dn-menu button:disabled { color: #93a6c2; cursor: default; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="DoingNow.jsx"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useMemo, useCallback } = React;
+
+// sample tasks (your nodes). plane keys match DOING_PLANES in DoingNow.jsx.
+const SAMPLE = [
+  { id: "n1", plane: "main",      title: "Wire the import parser",   subtitle: "CSV → rows", note: "Handle the German date format and minus-sign amounts.", tag: "DEV" },
+  { id: "n2", plane: "main",      title: "Reconcile June statement", note: "Two mystery charges from the 14th." },
+  { id: "g1", plane: "grazeland", title: "Fence the north paddock",  tag: "FARM" },
+  { id: "d1", plane: "drone",     title: "Calibrate the gimbal",     note: "Drifts ~2° on yaw after a warm start." },
+  { id: "n3", plane: "main",      title: "Ship the settle-up view",  subtitle: "mobile" },
+  { id: "b1", plane: "buneka",    title: "Sketch the onboarding",    tag: "IDEA" },
+  { id: "d2", plane: "drone",     title: "Order spare props" },
+];
+
+function Demo() {
+  const [done, setDone] = useState({});                 // id -> true
+  const [menu, setMenu] = useState(null);               // {id,x,y}
+  const byId = useMemo(() => Object.fromEntries(SAMPLE.map((t) => [t.id, t])), []);
+
+  // resolve merges live "done" state onto the static task
+  const resolve = useCallback((id) => {
+    const t = byId[id];
+    return t ? { ...t, done: !!done[id] } : undefined;
+  }, [byId, done]);
+
+  const pipe = useDoingPipeline({
+    resolve,
+    onComplete: (id) => setDone((d) => ({ ...d, [id]: true })),
+    onJump: (plane, id) => console.log("jump →", plane, id),
+    storageKey: "demo-doing-now",
+  });
+
+  return (
+    <div className="dn-stage">
+      <div className="dn-demo-head">
+        <h1>“Doing now” pipeline drawer</h1>
+        <p>Right-click any task to add it. Open the drawer with the bottom tab · ✓ Done &amp; next · ‹ pull to active · × remove.</p>
+      </div>
+
+      <div className="dn-nodes" onClick={() => setMenu(null)}>
+        {SAMPLE.map((t) => (
+          <div key={t.id} className={"dn-fake-node" + (pipe.inPipeline(t.id) ? " queued" : "")}
+            onContextMenu={(e) => { e.preventDefault(); setMenu({ id: t.id, x: e.clientX, y: e.clientY }); }}>
+            <div className="dn-fake-head">
+              <span className="dn-fake-dot" style={{ background: DOING_PLANES[t.plane].color }}></span>
+              <span className="dn-fake-plane">{DOING_PLANES[t.plane].label}</span>
+            </div>
+            <div className="dn-fake-title">{t.title}{t.subtitle ? " · " + t.subtitle : ""}</div>
+            {t.note && <div className="dn-fake-note">{t.note}</div>}
+            <div className="dn-fake-hint">right-click → {pipe.inPipeline(t.id) ? "remove" : "add to Doing now"}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* right-click menu */}
+      {menu && (
+        <React.Fragment>
+          <div className="dn-menu-scrim" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}></div>
+          <div className="dn-menu" style={{ left: Math.min(menu.x, window.innerWidth - 190), top: Math.min(menu.y, window.innerHeight - 90) }}>
+            {pipe.inPipeline(menu.id) ? (
+              <button onClick={() => { pipe.remove(menu.id); setMenu(null); }}>Remove from Doing now</button>
+            ) : (
+              <button disabled={pipe.isFull} onClick={() => { pipe.add(menu.id); setMenu(null); }}>
+                {pipe.isFull ? "Doing now is full (7)" : "Add to Doing now"}
+              </button>
+            )}
+            <button onClick={() => { pipe.promote(menu.id); pipe.setOpen(true); setMenu(null); }} disabled={!pipe.inPipeline(menu.id)}>Pull to active</button>
+          </div>
+        </React.Fragment>
+      )}
+
+      {/* THE DRAWER */}
+      <DoingNow {...pipe.drawerProps} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+/* ============================================================================
+   Trip cards — "On the road" (ledger) + "Reconcile" (settle up)
+   ----------------------------------------------------------------------------
+   1:1 with the live app. Open trip-cards-demo.html — that is the target.
+   Tokens inlined in :root so this is dependency-free; if your app already
+   defines them (SAP light theme), delete the :root block to inherit yours.
+
+   - .otr  On the road / Who paid what  → white card, expense ledger rows.
+   - .rec  Reconcile / Settle up        → the SAME card with the Kraków photo
+           behind a light white scrim (assets/krakow.png).
+   ========================================================================== */
+
+:root {
+  --surface: #ffffff;
+  --surface-2: #edf3fc;
+  --line: rgba(0, 84, 200, 0.16);
+  --line-strong: rgba(0, 84, 200, 0.34);
+  --fg: #071a35;
+  --fg-2: #173155;
+  --muted: #3f5878;
+  --dim: #5e7698;
+  --faint: #8fa5c4;
+  --accent: #0070f2;
+  --accent-deep: #0046ad;
+  --gb-pos: #34c891;
+  --gb-neg: #ef6b6b;
+  --member: #16b6c8;            /* the cyan member ("Me") avatar hue */
+  --card-radius: 20px;
+  --card-shadow: 0 2px 6px rgba(8, 48, 120, 0.10), 0 14px 30px -16px rgba(8, 48, 120, 0.26);
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ─────────────────────────── shared card shell ─────────────────────────── */
+.tc-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  padding: 20px 22px;
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+.tc-card + .tc-card { margin-top: 18px; }
+
+.tc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 8px; }
+.tc-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+.tc-title { font-size: 23px; font-weight: 800; letter-spacing: -0.02em; color: var(--fg); margin: 6px 0 0; white-space: nowrap; }
+
+/* "+ Add expense" ghost button */
+.tc-addbtn {
+  display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap;
+  font-family: inherit; font-size: 15px; font-weight: 700; color: var(--accent-deep);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 13px;
+  padding: 12px 18px; cursor: pointer; transition: border-color 0.14s, background-color 0.14s;
+}
+.tc-addbtn:hover { border-color: var(--line-strong); background: var(--surface-2); }
+.tc-addbtn .tc-plus { font-size: 18px; line-height: 1; }
+
+/* round member avatar (initial on a hue) */
+.tc-av {
+  flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; border-radius: 50%; line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18);
+  background-image: linear-gradient(155deg, rgba(255,255,255,0.26), rgba(255,255,255,0));
+}
+
+/* ───────────────────── On the road · expense ledger ─────────────────────
+   Each row wraps into three tiers: [dot · amount] / [label + meta] /
+   [split avatars · paid avatar]. The active/tapped row gets a soft tint. */
+.tc-ledger { display: flex; flex-direction: column; gap: 4px; padding-top: 10px; }
+
+.tc-exp {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+  padding: 13px 12px; border: 0; border-radius: 14px; cursor: pointer;
+  background: none; text-align: left; width: 100%; font-family: inherit;
+  transition: background-color 0.14s;
+}
+.tc-exp:hover, .tc-exp.is-active { background: var(--surface-2); }
+
+.tc-exp-dot { order: 0; width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.tc-exp-amt { order: 0; margin-left: auto; font-size: 18px; font-weight: 800; color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.tc-exp-main { order: 1; flex: 1 1 100%; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tc-exp-label { font-size: 17px; font-weight: 700; color: var(--fg); }
+.tc-exp-meta { font-size: 14px; color: var(--dim); }
+
+.tc-exp-split { order: 2; display: flex; align-items: center; gap: 5px; flex: 1 1 auto; }
+.tc-exp-split .tc-av { width: 26px; height: 26px; font-size: 11px; }
+.tc-exp-splitlab { font-size: 13.5px; color: var(--dim); margin-left: 4px; }
+
+.tc-exp-paid { order: 3; display: flex; align-items: center; gap: 7px; margin-left: auto; }
+.tc-exp-paid .tc-av { width: 28px; height: 28px; font-size: 12px; }
+.tc-exp-paidlab { font-size: 14px; color: var(--dim); }
+
+/* ───────────────────── Reconcile · settle up (Kraków photo) ─────────────────────
+   The settle card sits over a city photo dimmed by a near-white scrim so text
+   stays legible. Doubled selector mirrors the app (beats themed .card). */
+.tc-card.rec.rec {
+  position: relative; overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.93) 0%, rgba(255,255,255,0.86) 45%, rgba(255,255,255,0.72) 100%),
+    url("assets/krakow.png") 50% 72% / cover no-repeat,
+    var(--surface);
+}
+
+.tc-bal-list { display: flex; flex-direction: column; gap: 14px; padding-top: 12px; }
+.tc-bal { display: flex; align-items: center; gap: 12px; }
+.tc-bal .tc-av { width: 32px; height: 32px; font-size: 13px; }
+.tc-bal-name { font-size: 16px; font-weight: 700; color: var(--fg); width: 64px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* balance bar — left-anchored fill (green = owed, red = owes, empty = square) */
+.tc-bal-track { flex: 1; height: 9px; border-radius: 5px; background: var(--surface-2); overflow: hidden; position: relative; }
+.tc-bal-fill { display: block; height: 100%; border-radius: 5px; }
+.tc-bal-fill.pos { background: var(--gb-pos); }
+.tc-bal-fill.neg { background: var(--gb-neg); }
+.tc-bal-net { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; width: 60px; text-align: right; flex-shrink: 0; color: var(--faint); }
+.tc-bal-net.pos { color: var(--gb-pos); }
+.tc-bal-net.neg { color: var(--gb-neg); }
+
+/* "all square" banner */
+.tc-clear {
+  margin-top: 18px; text-align: center; font-size: 15px; font-weight: 600; color: var(--gb-pos);
+  padding: 18px; border: 1.5px dashed color-mix(in srgb, var(--gb-pos) 45%, transparent); border-radius: 14px;
+}
+
+/* who-pays-whom rows (shown when NOT squared up), hairline-separated */
+.tc-tx-list { margin-top: 18px; display: flex; flex-direction: column; }
+.tc-tx { display: flex; align-items: center; gap: 10px; padding: 14px 2px; border-top: 1px solid var(--line); font-size: 16px; }
+.tc-tx-name { font-weight: 700; color: var(--fg-2); }
+.tc-tx-arrow { color: var(--dim); }
+.tc-tx-amt { margin-left: auto; font-weight: 800; color: var(--fg); font-variant-numeric: tabular-nums; }

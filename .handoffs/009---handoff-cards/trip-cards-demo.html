@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Trip cards — On the road + Reconcile</title>
+<link rel="stylesheet" href="trip-cards.css" />
+<style>
+  /* demo chrome only — NOT part of the handoff */
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background-color: #fbfdff;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='32'%3E%3Cpath d='M0 24 C16 22.5 33 25.3 50 24 C67 22.7 83 25.4 100 24 C117 22.5 133 25.3 150 24 C167 22.7 183 25.4 200 24' stroke='%237db0e2' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: repeat; background-size: 200px 32px;
+  }
+  .phone { max-width: 720px; margin: 0 auto; padding: 26px 16px 60px; }
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <!-- ░░░░░░░░░░░░ ON THE ROAD ░░░░░░░░░░░░ -->
+  <section class="tc-card otr">
+    <div class="tc-head">
+      <div>
+        <div class="tc-eyebrow">On the road</div>
+        <div class="tc-title">Who paid what</div>
+      </div>
+      <button class="tc-addbtn" type="button">
+        <span class="tc-plus">+</span><span>Add expense</span>
+      </button>
+    </div>
+
+    <div class="tc-ledger">
+      <!-- the active/tapped row carries the soft tint -->
+      <button class="tc-exp is-active" type="button">
+        <span class="tc-exp-dot" style="background:#e0905a"></span>
+        <span class="tc-exp-amt">12 344 125 Kč</span>
+        <span class="tc-exp-main">
+          <span class="tc-exp-label">Test</span>
+          <span class="tc-exp-meta">Groceries · 17 Jun 2026</span>
+        </span>
+        <span class="tc-exp-split">
+          <span class="tc-av" style="background-color:#16b6c8">M</span>
+          <span class="tc-exp-splitlab">split 1</span>
+        </span>
+        <span class="tc-exp-paid">
+          <span class="tc-av" style="background-color:#16b6c8">M</span>
+          <span class="tc-exp-paidlab">paid</span>
+        </span>
+      </button>
+
+      <button class="tc-exp" type="button">
+        <span class="tc-exp-dot" style="background:#34c891"></span>
+        <span class="tc-exp-amt">42 Kč</span>
+        <span class="tc-exp-main">
+          <span class="tc-exp-label">Am I crazy</span>
+          <span class="tc-exp-meta">Home · 20 Jun 2026</span>
+        </span>
+        <span class="tc-exp-split">
+          <span class="tc-av" style="background-color:#16b6c8">M</span>
+          <span class="tc-exp-splitlab">split 1</span>
+        </span>
+        <span class="tc-exp-paid">
+          <span class="tc-av" style="background-color:#16b6c8">M</span>
+          <span class="tc-exp-paidlab">paid</span>
+        </span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ░░░░░░░░░░░░ RECONCILE (Kraków photo behind a white scrim) ░░░░░░░░░░░░ -->
+  <section class="tc-card rec">
+    <div class="tc-head">
+      <div>
+        <div class="tc-eyebrow">Reconcile</div>
+        <div class="tc-title">Settle up</div>
+      </div>
+    </div>
+
+    <div class="tc-bal-list">
+      <div class="tc-bal">
+        <span class="tc-av" style="background-color:#16b6c8">M</span>
+        <span class="tc-bal-name">Me</span>
+        <span class="tc-bal-track"></span>
+        <span class="tc-bal-net">0 zł</span>
+      </div>
+    </div>
+
+    <div class="tc-clear">✓ This trip is squared up</div>
+  </section>
+
+</div>
+</body>
+</html>

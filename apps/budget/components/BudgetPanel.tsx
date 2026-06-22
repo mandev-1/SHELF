@@ -14,6 +14,7 @@ import { TripsView } from "./TripsView";
 import { PeopleView } from "./PeopleView";
 import { TripDetail } from "./TripDetail";
 import { ErrorCard } from "./ErrorCard";
+import { AddExpenseButton } from "./AddExpenseButton";
 import { toast } from "../lib/toast";
 
 const CURRENCIES: BudgetCurrency[] = ["CZK", "PLN", "EUR"];
@@ -158,11 +159,16 @@ export function BudgetPanel({
   onLogout,
 }: Props) {
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
+  const [addExpenseSignal, setAddExpenseSignal] = useState(0); // bumping opens the scoped trip's Add-Expense modal
   const [personModal, setPersonModal] = useState<BudgetMember | "new" | null>(null);
   const [view, setView] = useState<"people" | "trips">("people");
-  // Always start a view at the top (switching tabs shouldn't keep the prior scroll).
+  // Which trip is open in the Trips tab — lifted here so the page header can show
+  // its "Add expense" action beside the title.
+  const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
+  // Always start a view at the top, and close any open trip when switching tabs.
   useEffect(() => {
     if (typeof window !== "undefined") window.scrollTo({ top: 0 });
+    setSelectedTripId(null);
   }, [view]);
   const creatingRef = useRef(false); // guards against double-submit creating two people
 
@@ -283,6 +289,7 @@ export function BudgetPanel({
               )}
             </div>
           </div>
+          <AddExpenseButton onClick={() => setAddExpenseSignal((s) => s + 1)} />
         </div>
         <TripDetail
           trip={scopedTrip}
@@ -293,6 +300,7 @@ export function BudgetPanel({
           guest
           actorId={activeMemberId}
           actorName={activeMember?.name}
+          addExpenseSignal={addExpenseSignal}
           onBack={() => {}}
           onEdit={() => {}}
           onUpdate={onUpdateTrip}
@@ -356,6 +364,9 @@ export function BudgetPanel({
             )}
           </div>
         </div>
+        {view === "trips" && selectedTripId && (
+          <AddExpenseButton onClick={() => setAddExpenseSignal((s) => s + 1)} />
+        )}
       </div>
 
       {view === "trips" ? (
@@ -368,6 +379,9 @@ export function BudgetPanel({
           canManage={isSuperuser}
           actorId={activeMemberId}
           actorName={activeMember?.name ?? (isSuperuser ? "Host" : undefined)}
+          selectedTripId={selectedTripId}
+          onSelectTrip={setSelectedTripId}
+          addExpenseSignal={addExpenseSignal}
           onAddTrip={onAddTrip}
           onUpdateTrip={onUpdateTrip}
           onRemoveTrip={onRemoveTrip}

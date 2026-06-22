@@ -18,6 +18,11 @@ interface TripsViewProps {
   /** Who is performing changes — recorded in the expense audit log. */
   actorId?: string | null;
   actorName?: string;
+  /** Open trip — lifted to BudgetPanel so the page header can show its actions. */
+  selectedTripId?: string | null;
+  onSelectTrip?: (id: string | null) => void;
+  /** Bumping this opens the open trip's Add-Expense modal (header CTA). */
+  addExpenseSignal?: number;
   onAddTrip: (trip: BudgetTrip) => void;
   onUpdateTrip: (trip: BudgetTrip) => void;
   onRemoveTrip: (id: string) => void;
@@ -32,14 +37,17 @@ export function TripsView({
   canManage = true,
   actorId,
   actorName,
+  selectedTripId = null,
+  onSelectTrip,
+  addExpenseSignal,
   onAddTrip,
   onUpdateTrip,
   onRemoveTrip,
 }: TripsViewProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const setSelectedId = (id: string | null) => onSelectTrip?.(id);
   const [modal, setModal] = useState<BudgetTrip | "new" | null>(null);
 
-  const selected = selectedId ? trips.find((t) => t.id === selectedId) ?? null : null;
+  const selected = selectedTripId ? trips.find((t) => t.id === selectedTripId) ?? null : null;
 
   const modalNode = modal && (
     <TripModal
@@ -79,6 +87,7 @@ export function TripsView({
           canManage={canManage}
           actorId={actorId}
           actorName={actorName}
+          addExpenseSignal={addExpenseSignal}
           onBack={() => setSelectedId(null)}
           onEdit={() => setModal(selected)}
           onUpdate={onUpdateTrip}
