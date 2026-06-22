@@ -689,6 +689,31 @@ export function useShelfStorage() {
           ...(raw.customPlaneEdges && typeof raw.customPlaneEdges === "object" ? { customPlaneEdges: raw.customPlaneEdges as Record<string, import("../types/grid").VisualFlowEdge[]> } : {}),
           ...(raw.customPlaneNodeSizes && typeof raw.customPlaneNodeSizes === "object" ? { customPlaneNodeSizes: raw.customPlaneNodeSizes as Record<string, Record<string, import("../types/grid").VisualFlowNodeSize>> } : {}),
           ...(raw.planeViewports && typeof raw.planeViewports === "object" ? { planeViewports: raw.planeViewports as Record<string, { x: number; y: number; zoom: number }> } : {}),
+          ...(raw.doingNow && typeof raw.doingNow === "object" && !Array.isArray(raw.doingNow)
+            ? {
+                doingNow: {
+                  pipeline: Array.isArray((raw.doingNow as any).pipeline)
+                    ? ((raw.doingNow as any).pipeline as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 7)
+                    : [],
+                  open: !!(raw.doingNow as any).open,
+                },
+              }
+            : {}),
+          ...(Array.isArray(raw.blockers)
+            ? {
+                blockers: (raw.blockers as unknown[])
+                  .filter((b): b is Record<string, unknown> => !!b && typeof b === "object")
+                  .map((b) => ({
+                    id: String((b as any).id ?? ""),
+                    x: Number((b as any).x) || 0,
+                    y: Number((b as any).y) || 0,
+                    label: typeof (b as any).label === "string" ? (b as any).label : "Blocker",
+                    due: Number((b as any).due) || 0,
+                    dur: Number((b as any).dur) || 30,
+                  }))
+                  .filter((b) => b.id),
+              }
+            : {}),
         });
       }
       setReady(true);

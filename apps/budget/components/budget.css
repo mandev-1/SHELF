@@ -3224,7 +3224,7 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 /* add-expense: title/description header + currency affix inside the amount field */
 .gb-modal-title { font-size: 21px; font-weight: 800; letter-spacing: -0.02em; color: var(--fg); margin: 6px 0 0; line-height: 1.15; }
 .gb-modal-desc { font-size: 13px; line-height: 1.5; color: var(--dim); margin: 6px 0 0; }
-.gb-amt .gb-amt-cur { width: auto; flex: 0 0 auto; border: 0; background: none; box-shadow: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--dim); padding: 0 2px; outline: none; cursor: pointer; }
+.gb-amt .gb-amt-cur { width: auto; flex: 0 0 auto; border: 0; background: none; box-shadow: none; font: inherit; font-size: 16px; font-weight: 700; color: var(--dim); padding: 0 2px; outline: none; cursor: pointer; }
 .gb-splitseg { margin-top: 2px; display: flex; }
 .gb-splitseg .seg-btn { flex: 1; text-align: center; }
 /* person-card access badges: "Full access" or a chip per trip the person is on */
@@ -3315,6 +3315,11 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 .gb-scan-ico { font-size: 24px; line-height: 1; margin-bottom: 3px; }
 .gb-scan-main { font-size: 13.5px; font-weight: 700; color: var(--fg); }
 .gb-scan-sub { font-size: 11.5px; color: var(--dim); line-height: 1.5; max-width: 380px; }
+/* compact receipt prompt shown while the keyboard is up (saves vertical space) */
+.gb-scan-mini { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; cursor: pointer;
+  font-size: 13.5px; font-weight: 700; color: var(--accent-deep);
+  background: var(--inset); border: 1px dashed var(--line-strong); border-radius: 11px; padding: 9px 14px; }
+.gb-scan-mini:hover { border-color: var(--accent); }
 .gb-scan-attached { display: flex; align-items: center; gap: 14px; border: 1px solid var(--line); border-radius: 13px; padding: 12px; background: var(--surface-2); }
 .gb-scan-thumbwrap { position: relative; width: 56px; height: 72px; border-radius: 8px; overflow: hidden; flex-shrink: 0; background: var(--inset); box-shadow: inset 0 0 0 1px var(--line); }
 .gb-scan-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -3806,9 +3811,37 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
  * fields) and lean on ShELF's shared design tokens.
  * ========================================================== */
 .gb-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
-/* App glue: handoff-008 ".add-expense-btn" sits top-right of the header, dropped
-   to roughly the title's level with a little breathing room from the edges. */
-.gb-head .add-expense-btn { align-self: flex-start; margin: 10px 4px 0 0; }
+/* App glue: handoff-008 ".add-expense-btn" sits top-right of the GUEST header
+   (a direct child); the host header puts it inline in the People/Trips row.
+   On the guest header it stretches to the full height of the three-row left
+   block (eyebrow + title + "You're …" pill) and is scaled up — content stays
+   vertically centred via the button's own align-items:center. */
+.gb-head > .add-expense-btn { align-self: stretch; margin: 0 4px 0 0; font-size: 18px; gap: 11px; }
+.gb-head > .add-expense-btn .ae-plus { width: 32px; height: 32px; }
+/* App glue: on desktop the trip detail is a two-column board — the left column
+   (.tc-board-main) stacks "Who paid what" (.otr) over the desktop-only "Spend
+   over time" curve (.tc-spend); the right column is "Settle up" (.rec). Ratio
+   mirrors the app's .gb-board-body. At ≤900px the grid collapses to one column
+   and the spend curve is hidden, so the phone layout is unchanged. Wrappers live
+   in TripDetail.tsx. Higher-specificity sibling rules cancel trip-cards.css's
+   .tc-card+.tc-card margin so the grid/flex gap owns spacing (no double gap). */
+.tc-board { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; align-items: start; margin-bottom: 16px; }
+.tc-board-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.tc-board-main > .tc-card + .tc-card { margin-top: 0; }
+.tc-spend-total { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tc-spend-chart { margin-top: 12px; }
+.tc-spend-chart svg { width: 100%; height: 150px; display: block; overflow: visible; }
+.tc-spend-axis { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) { .tc-board { grid-template-columns: 1fr; } .tc-spend { display: none; } }
+/* paper halo (handoff's .ink-on-paper trick) so the wavy ruled lines don't cut
+   through the label or the circled "+", and the underline reads as an underline
+   rather than blending into the ruling. */
+.gb-head > .add-expense-btn .ae-lab {
+  text-shadow: 0 0 5px #fbfdff, 0 0 5px #fbfdff, 0 0 11px #fbfdff, 0 1px 2px #fbfdff;
+}
+.gb-head > .add-expense-btn .ae-plus {
+  filter: drop-shadow(0 0 4px #fbfdff) drop-shadow(0 0 4px #fbfdff);
+}
 .gb-head-l { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .gb-title { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; color: var(--fg); margin: 0; }
 .gb-cur-seg { flex-shrink: 0; }
@@ -3834,11 +3867,12 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 .gb-mem-edit { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--accent); }
 .gb-mem-edit:hover { text-decoration: underline; }
 
-.gb-modal-backdrop { position: fixed; left: 0; width: 100%;
-  /* Pin to the VISUAL viewport (set by BudgetView) so an open modal sits in the
-     area above the mobile keyboard instead of behind it. Falls back to dvh. */
-  top: var(--vvt, 0px); height: var(--vvh, 100dvh);
-  z-index: 220; display: flex; align-items: center; justify-content: center; padding: 16px;
+.gb-modal-backdrop { position: fixed; inset: 0; z-index: 220;
+  display: flex; align-items: center; justify-content: center;
+  /* Full-screen dim+blur so it covers behind the iOS keyboard AND its accessory
+     bar. The modal is centred in the area ABOVE the keyboard via the bottom
+     padding, derived from the visual viewport (--vvh/--vvt set in BudgetView). */
+  padding: calc(16px + var(--vvt, 0px)) 16px calc(16px + 100dvh - var(--vvh, 100dvh) - var(--vvt, 0px));
   background: rgba(0,0,0,0.45); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
 .gb-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 0; flex: 0 0 auto; }
 .gb-modal-x { background: none; border: 0; cursor: pointer; font-size: 15px; color: var(--dim); padding: 4px 8px; border-radius: 8px; }
@@ -3851,7 +3885,8 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 .gb-fld { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; flex: 1; min-width: 0; }
 .gb-fld-lab { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
 .gb-fld-row { display: flex; gap: 12px; }
-.gb-fld input, .gb-fld select { width: 100%; font: inherit; font-size: 14px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; outline: none; }
+/* font-size 16px on focusable fields → iOS Safari does NOT zoom/crop on focus. */
+.gb-fld input, .gb-fld select { width: 100%; font: inherit; font-size: 16px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; outline: none; }
 .gb-fld input:focus, .gb-fld select:focus { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
 
 /* ── gb-modal glass surface ──────────────────────────────────────────────

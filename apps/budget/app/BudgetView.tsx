@@ -46,6 +46,26 @@ export function BudgetView() {
   const activeName =
     session?.role === "member" ? users.find((u) => u.id === session.userId)?.name : undefined;
 
+  // A signed-in member (guest with a trip link) still has a usable trip even when
+  // the budget fails to load — e.g. a stale/bad ?b= link. The trips table is
+  // fetched independently of the budget, so when it loaded we can offer a one-tap
+  // jump straight to their trip instead of just "Try again".
+  const memberSession = session?.role === "member" ? session : null;
+  const accessibleTrip = memberSession?.tripId
+    ? trips.find((t) => t.id === memberSession.tripId) ?? null
+    : null;
+  const goToTrip =
+    accessibleTrip && memberSession
+      ? () => {
+          // Drop the bad ?b= and reload scoped to the trip; the persisted session
+          // + singleton budget then resolve it.
+          const url = new URL(window.location.origin + window.location.pathname);
+          url.searchParams.set("user", memberSession.userId);
+          url.searchParams.set("trip", accessibleTrip.id);
+          window.location.href = url.toString();
+        }
+      : undefined;
+
   if (error) {
     // Even when the data layer fails (e.g. the API token is wrong), let the host
     // log in as admin from here — the session is client-side and persists, so a
@@ -54,6 +74,8 @@ export function BudgetView() {
       <BootError
         detail={error}
         onLogin={session?.role === "superuser" ? undefined : login}
+        trip={accessibleTrip ? { name: accessibleTrip.name } : null}
+        onGoToTrip={goToTrip}
       />
     );
   }

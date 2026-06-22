@@ -22,6 +22,10 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import "./doing-now.css";
+import { DoingNow, useDoingPipeline, type DoingTask, type DoingPipelineState } from "./DoingNow";
+import "./blockers.css";
+import { BlockerDraft, nfBlockerStatus, nfToDatetimeLocal, type BlockerDraftState } from "./Blockers";
 import { Input } from "@heroui/react";
 import {
   SECTOR_COLOR_OPTIONS,
@@ -33,6 +37,7 @@ import {
   type ShelfPillarTodoItem,
   type ShelfTodoBlockStatus,
   type ShelfTodoHandleConfig,
+  type Blocker,
   type VisualFlowData,
   type VisualFlowEdge,
   type VisualFlowNodeSize,
@@ -278,6 +283,18 @@ function getVisualFlowPlaneCountLabel(plane: VisualFlowPlane, count: number): st
   return count === 1 ? "item" : "items";
 }
 
+/** Label + dot color for a plane, used by the "Doing now" drawer (handoff 010). */
+function doingPlaneMeta(
+  planeKey: string,
+  customPlanes: { id: string; name: string; color?: string }[],
+): { label: string; color: string } {
+  if (planeKey === "main") return { label: "Main canvas", color: "var(--accent)" };
+  if (planeKey === "grazeland") return { label: "Grazeland", color: "#f59e0b" };
+  if (planeKey === "bin") return { label: "Bin", color: "#38bdf8" };
+  const cp = customPlanes.find((c) => c.id === planeKey);
+  return { label: cp?.name ?? planeKey, color: cp?.color || "var(--accent)" };
+}
+
 const VISUAL_FLOW_PLANE_LS_KEY = "shelf-visual-flow-plane";
 
 const EDIT_CARD_EXIT_MS = 400;
@@ -390,11 +407,14 @@ function NodeEditCard({
     const lineStart = value.lastIndexOf("\n", selectionStart - 1) + 1;
     const line = value.slice(lineStart, selectionStart);
 
-    // ordered (1. / 1)), unordered (- / *), or quote (>) markers
+    // checklist (- [ ] / - [x] / - []), ordered (1. / 1)), unordered (- / *), or
+    // quote (>) markers. Checklist is matched FIRST — otherwise the unordered
+    // regex swallows "[ ] text" as plain content and the box is lost on Enter.
+    const checklist = line.match(/^(\s*)([-*])(\s+)\[([ xX]?)\](\s+)(.*)$/);
     const ordered = line.match(/^(\s*)(\d+)([.)])(\s+)(.*)$/);
     const unordered = line.match(/^(\s*)([-*])(\s+)(.*)$/);
     const quote = line.match(/^(\s*)(>)(\s+)(.*)$/);
-    const match = ordered ?? unordered ?? quote;
+    const match = checklist ?? ordered ?? unordered ?? quote;
     if (!match) return;
 
     const indent = match[1];
@@ -410,7 +430,10 @@ function NodeEditCard({
       nextCaret = lineStart + indent.length;
     } else {
       let marker: string;
-      if (ordered) {
+      if (checklist) {
+        // Continue the checklist with a fresh UNCHECKED box, preserving spacing.
+        marker = `${indent}${checklist[2]}${checklist[3]}[ ]${checklist[5]}`;
+      } else if (ordered) {
         marker = `${indent}${Number(ordered[2]) + 1}${ordered[3]}${ordered[4]}`;
       } else if (unordered) {
         marker = `${indent}${unordered[2]}${unordered[3]}`;
@@ -1058,6 +1081,7 @@ const ARROW_COUNT = 4;
 const FOCUS_DRAWER_WIDTH = "20.5rem";         /* Width of the drawer panel */
 const FOCUS_DRAWER_CARD_MARGIN = "7rem";     /* Margin-right on the card (section) containing the canvas */
 const FOCUS_DRAWER_CANVAS_TRANSLATE = "-13rem"; /* translateX on the canvas — how far it slides left */
+const FOCUS_DRAWER_SLIDE_MS = 520;            /* Keep ≥ the CSS slide duration so content unmounts only after the slide-out finishes */
 const ARROW_LENGTH = 8;
 const ARROW_WIDTH = 5
 
@@ -1353,6 +1377,11 @@ function VisualFlowPanelInner({
   const [paneMenu, setPaneMenu] = useState<{ x: number; y: number } | null>(null);
   const [sectorManagerOpen, setSectorManagerOpen] = useState(false);
   const [editNodeId, setEditNodeId] = useState<string | null>(null);
+  // Nodes created via the "new task/item" flow that haven't been saved yet. If the
+  // edit modal is cancelled (or Escaped) while the node is still in this set, it's
+  // a blank default node and gets discarded rather than left on the canvas. Saving
+  // clears the id from the set (see the modal's onSave/onClose).
+  const freshNodeIdsRef = useRef<Set<string>>(new Set());
   // Which focus-card note is being edited inline (todo id), if any.
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   // Right-click menu for a focused-task card in the drawer.
@@ -1785,6 +1814,220 @@ function VisualFlowPanelInner({
     [flushCanvasToVisualFlow, getViewport, nodes, edges, plane, onUpdateVisualFlow]
   );
 
+  // ── Blockers (handoff 011): time-block entries that live in the Doing-now
+  // pipeline (NOT canvas nodes). visualFlow.blockers holds the metadata; the id
+  // also sits in visualFlow.doingNow.pipeline so it shows in Up Next and jumps to
+  // the active slot when its start time hits. A 15s clock drives the phases.
+  const [blockerNow, setBlockerNow] = useState(() => Date.now());
+  const [blockerDraft, setBlockerDraft] = useState<BlockerDraftState | null>(null);
+  const firedBlockersRef = useRef<Record<string, boolean>>({});
+
+  // Create a blocker AND enqueue it into the Doing-now pipeline (opens the drawer).
+  const addBlocker = useCallback(
+    (label: string, dueMs: number, dur: number) => {
+      const id = `blk-${Date.now().toString(36)}`;
+      onUpdateVisualFlow((prev) => {
+        const pipe = prev.doingNow?.pipeline ?? [];
+        const nextPipe = pipe.includes(id) || pipe.length >= 7 ? pipe : [...pipe, id];
+        return {
+          ...prev,
+          blockers: [...(prev.blockers ?? []), { id, label: label || "Blocker", due: dueMs, dur: dur || 30 }],
+          doingNow: { pipeline: nextPipe, open: true },
+        };
+      });
+    },
+    [onUpdateVisualFlow]
+  );
+  const updateBlocker = useCallback(
+    (id: string, patch: Partial<Blocker>) => {
+      onUpdateVisualFlow((prev) => ({ ...prev, blockers: (prev.blockers ?? []).map((b) => (b.id === id ? { ...b, ...patch } : b)) }));
+    },
+    [onUpdateVisualFlow]
+  );
+
+  // Reuse the toolbar's export-toast slot to surface the "blocking now" alert.
+  const flashToast = useCallback((msg: string) => {
+    setExportToast(msg);
+    if (exportToastTimerRef.current !== null) window.clearTimeout(exportToastTimerRef.current);
+    exportToastTimerRef.current = window.setTimeout(() => {
+      setExportToast(null);
+      exportToastTimerRef.current = null;
+    }, 3200);
+  }, []);
+
+  // Ticking clock for blocker phases (every 15s) — runs on every plane.
+  useEffect(() => {
+    const t = window.setInterval(() => setBlockerNow(Date.now()), 15000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  // ── "Doing now" pipeline (handoff 010 + 011 blockers) ───────────────────────
+  // Ordered id list in visualFlow.doingNow.pipeline (backup-covered). Ids resolve
+  // to either a task (across any plane) or a blocker. Index 0 is the active slot.
+  const doingState: DoingPipelineState = useMemo(() => {
+    const d = visualFlow.doingNow;
+    return { pipeline: Array.isArray(d?.pipeline) ? d!.pipeline : [], open: !!d?.open };
+  }, [visualFlow.doingNow]);
+
+  // Persist pipeline changes AND prune any blockers that just left the queue —
+  // keeps visualFlow.blockers ⊆ pipeline so removed blockers don't dangle.
+  const setDoingState = useCallback(
+    (next: DoingPipelineState) => {
+      onUpdateVisualFlow((prev) => {
+        const ids = new Set(next.pipeline);
+        return {
+          ...prev,
+          doingNow: { pipeline: next.pipeline, open: next.open },
+          blockers: (prev.blockers ?? []).filter((b) => ids.has(b.id)),
+        };
+      });
+    },
+    [onUpdateVisualFlow]
+  );
+
+  const resolveDoingItem = useCallback(
+    (id: string): DoingTask | null => {
+      const blk = (visualFlow.blockers ?? []).find((b) => b.id === id);
+      if (blk) {
+        const st = nfBlockerStatus(blk.due, blk.dur, blockerNow);
+        return { kind: "blocker", id: blk.id, title: blk.label, phase: st.phase, statusText: st.text };
+      }
+      const customPlanes = visualFlow.customPlanes ?? [];
+      const search: [string, ShelfPillarTodoItem[]][] = [
+        ["main", todos],
+        ["grazeland", grazelandItems],
+        ["bin", binItems],
+        ...Object.entries(visualFlow.customPlaneItems ?? {}),
+      ];
+      for (const [pk, items] of search) {
+        const t = items.find((x) => x.id === id);
+        if (t) {
+          const meta = doingPlaneMeta(pk, customPlanes);
+          return {
+            kind: "task",
+            id: t.id,
+            plane: pk,
+            planeLabel: meta.label,
+            planeColor: meta.color,
+            title: t.text,
+            subtitle: t.subtitle,
+            note: t.note,
+            tag: t.tag,
+            done: t.done,
+          };
+        }
+      }
+      return null;
+    },
+    [visualFlow.blockers, blockerNow, todos, grazelandItems, binItems, visualFlow.customPlaneItems, visualFlow.customPlanes]
+  );
+
+  // "✓ Done & next" / "✓ Clear" — for a task, complete it on its plane; for a
+  // blocker, nothing extra (setDoingState prunes it when it leaves the pipeline).
+  const completeDoingItem = useCallback(
+    (id: string) => {
+      if ((visualFlow.blockers ?? []).some((b) => b.id === id)) return;
+      const customItems = visualFlow.customPlaneItems ?? {};
+      let planeKey: string | null = null;
+      let item: ShelfPillarTodoItem | undefined;
+      if ((item = todos.find((t) => t.id === id))) planeKey = "main";
+      else if ((item = grazelandItems.find((t) => t.id === id))) planeKey = "grazeland";
+      else if ((item = binItems.find((t) => t.id === id))) planeKey = "bin";
+      else {
+        for (const [pk, items] of Object.entries(customItems)) {
+          const f = items.find((t) => t.id === id);
+          if (f) {
+            planeKey = pk;
+            item = f;
+            break;
+          }
+        }
+      }
+      if (!planeKey || !item) return;
+      if (planeKey === "main") onDeleteTodo?.(id);
+      else if (planeKey === "grazeland") onDeleteGrazelandItem?.(id);
+      else if (planeKey === "bin") onDeleteBinItem?.(id);
+      else {
+        const pk = planeKey;
+        onUpdateVisualFlow((prev) => ({
+          ...prev,
+          customPlaneItems: {
+            ...(prev.customPlaneItems ?? {}),
+            [pk]: (prev.customPlaneItems?.[pk] ?? []).filter((t) => t.id !== id),
+          },
+        }));
+      }
+      onTaskCompleted?.();
+      const customName =
+        planeKey !== "main" && planeKey !== "grazeland" && planeKey !== "bin"
+          ? (visualFlow.customPlanes ?? []).find((c) => c.id === planeKey)?.name
+          : undefined;
+      onTodoLog?.(
+        `${getVisualFlowPlaneLogLabel(planeKey as VisualFlowPlane, customName)}: completed ${getVisualFlowPlaneCountLabel(planeKey as VisualFlowPlane, 1)} ${item.text}`
+      );
+    },
+    [visualFlow.blockers, todos, grazelandItems, binItems, visualFlow.customPlaneItems, visualFlow.customPlanes, onDeleteTodo, onDeleteGrazelandItem, onDeleteBinItem, onUpdateVisualFlow, onTaskCompleted, onTodoLog]
+  );
+
+  // "Edit" — task opens its node editor (switching plane if needed); blocker opens
+  // the blocker editor popover.
+  const editDoingItem = useCallback(
+    (item: DoingTask) => {
+      if (item.kind === "blocker") {
+        const b = (visualFlow.blockers ?? []).find((x) => x.id === item.id);
+        if (!b) return;
+        setBlockerDraft({ x: Math.round(window.innerWidth / 2 - 135), y: 140, label: b.label, due: nfToDatetimeLocal(b.due), dur: b.dur, edit: b.id });
+        return;
+      }
+      if (item.plane && item.plane !== plane) {
+        switchPlane(item.plane);
+        window.setTimeout(() => setEditNodeId(item.id), 220);
+      } else {
+        setEditNodeId(item.id);
+      }
+    },
+    [visualFlow.blockers, plane, switchPlane]
+  );
+
+  const doingPipeline = useDoingPipeline({
+    state: doingState,
+    onChange: setDoingState,
+    resolve: resolveDoingItem,
+    onComplete: completeDoingItem,
+    onEdit: editDoingItem,
+  });
+
+  // When a blocker crosses into its active window, jump it to the active slot
+  // (handoff 011) + toast, once; re-arm while pending.
+  const promoteDoing = doingPipeline.promote;
+  const inDoing = doingPipeline.inPipeline;
+  useEffect(() => {
+    (visualFlow.blockers ?? []).forEach((b) => {
+      const st = nfBlockerStatus(b.due, b.dur, blockerNow);
+      if (st.phase === "active" && !firedBlockersRef.current[b.id]) {
+        firedBlockersRef.current[b.id] = true;
+        if (inDoing(b.id)) promoteDoing(b.id);
+        flashToast(`⛔ Blocking now — ${b.label}`);
+        onTodoLog?.(`Visual Flow: blocker started "${b.label}"`);
+      }
+      if (st.phase === "pending") firedBlockersRef.current[b.id] = false;
+    });
+  }, [blockerNow, visualFlow.blockers, promoteDoing, inDoing, flashToast, onTodoLog]);
+
+  const commitBlocker = useCallback(() => {
+    if (!blockerDraft || !blockerDraft.due) return;
+    const dueMs = new Date(blockerDraft.due).getTime();
+    if (isNaN(dueMs)) return;
+    const label = (blockerDraft.label || "").trim() || "Blocker";
+    if (blockerDraft.edit) {
+      updateBlocker(blockerDraft.edit, { label, due: dueMs, dur: blockerDraft.dur });
+      firedBlockersRef.current[blockerDraft.edit] = false; // re-arm after a time change
+    } else {
+      addBlocker(label, dueMs, blockerDraft.dur);
+    }
+    setBlockerDraft(null);
+  }, [blockerDraft, addBlocker, updateBlocker]);
+
   // Restore saved viewport when switching planes; fall back to fitView if none stored
   useEffect(() => {
     const saved = visualFlow.planeViewports?.[plane];
@@ -2073,7 +2316,9 @@ function VisualFlowPanelInner({
     const close = (e: MouseEvent) => {
       if (e.button !== 0) return; // left-button only — leave right-click reopens to onContextMenu
       const target = e.target;
-      if (menuRef.current && target instanceof HTMLElement && !menuRef.current.contains(target))
+      // `Element` (not `HTMLElement`) so clicks on the React Flow SVG layer
+      // (edges, background dots, handles) also dismiss the menu.
+      if (menuRef.current && target instanceof Element && !menuRef.current.contains(target))
         setNodeMenu(null);
     };
     // mousedown rather than click so drags (which never produce a `click`) also dismiss the menu.
@@ -2088,7 +2333,7 @@ function VisualFlowPanelInner({
       const target = e.target;
       if (
         paneMenuRef.current &&
-        target instanceof HTMLElement &&
+        target instanceof Element &&
         !paneMenuRef.current.contains(target)
       )
         setPaneMenu(null);
@@ -2113,7 +2358,7 @@ function VisualFlowPanelInner({
       const target = e.target;
       if (
         edgeMenuRef.current &&
-        target instanceof HTMLElement &&
+        target instanceof Element &&
         !edgeMenuRef.current.contains(target)
       )
         setEdgeMenu(null);
@@ -2159,7 +2404,7 @@ function VisualFlowPanelInner({
       const target = e.target;
       if (
         drawerMenuRef.current &&
-        target instanceof HTMLElement &&
+        target instanceof Element &&
         !drawerMenuRef.current.contains(target)
       )
         setDrawerMenu(null);
@@ -2209,6 +2454,7 @@ function VisualFlowPanelInner({
         nodePositions: { ...(prev.nodePositions ?? {}), [newTodo.id]: pos },
       }));
       setPaneMenu(null);
+      freshNodeIdsRef.current.add(newTodo.id);
       setEditNodeId(newTodo.id);
       onTodoLog?.(`Visual Flow: added new task "${newTodo.text}"`);
       return;
@@ -2248,6 +2494,7 @@ function VisualFlowPanelInner({
       }
     }
     setPaneMenu(null);
+    freshNodeIdsRef.current.add(newItem.id);
     setEditNodeId(newItem.id);
     onTodoLog?.(`${getVisualFlowPlaneLogLabel(plane)}: added new item "${newItem.text}"`);
   }, [
@@ -2499,6 +2746,7 @@ function VisualFlowPanelInner({
       setEdges((es) => [...es, newRFEdge]);
 
       setNodeMenu(null);
+      freshNodeIdsRef.current.add(baseTodo.id);
       setEditNodeId(baseTodo.id);
       onTodoLog?.(
         `${getVisualFlowPlaneLogLabel(plane)}: added connected sub-task to "${
@@ -3101,6 +3349,32 @@ function VisualFlowPanelInner({
 
   const drawerVisible = drawerOpen || dockedAlways;
 
+  // Decouple the (potentially heavy) content mount from the slide so the panel
+  // glides in smoothly instead of stuttering while React mounts the task list:
+  //   • on open  → mount content first, then start the slide two frames later
+  //     (so the freshly-mounted DOM is painted before the transform animates).
+  //   • on close → slide out first, unmount only after the transition finishes.
+  // `drawerSlideIn` drives the translate (panel + canvas + handle); `drawerMounted`
+  // gates the content.
+  const [drawerMounted, setDrawerMounted] = useState(false);
+  const [drawerSlideIn, setDrawerSlideIn] = useState(false);
+  useEffect(() => {
+    if (drawerVisible) {
+      setDrawerMounted(true);
+      let raf2 = 0;
+      const raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setDrawerSlideIn(true));
+      });
+      return () => {
+        cancelAnimationFrame(raf1);
+        cancelAnimationFrame(raf2);
+      };
+    }
+    setDrawerSlideIn(false);
+    const t = window.setTimeout(() => setDrawerMounted(false), FOCUS_DRAWER_SLIDE_MS);
+    return () => window.clearTimeout(t);
+  }, [drawerVisible]);
+
   // ---- Focus drawer: cross-plane task helpers ----
   // Edit / delete an item on any plane (not just the active one).
   const editItemInPlane = useCallback(
@@ -3362,13 +3636,13 @@ function VisualFlowPanelInner({
         <div className="flex-1 min-h-0 px-6 pt-6 pb-0 overflow-x-hidden flex flex-col">
           <section
             className="flex flex-col flex-1 min-h-0 min-w-0 shelf-flow-canvas-transition"
-            style={{ marginRight: drawerOpen && !dockedAlways ? FOCUS_DRAWER_CARD_MARGIN : 0 }}
+            style={{ marginRight: drawerSlideIn && !dockedAlways ? FOCUS_DRAWER_CARD_MARGIN : 0 }}
           >
             <div
-              className={`relative flex-1 min-h-[280px] rounded-xl border visual-flow-canvas shelf-flow-canvas-transition${
+              className={`relative overflow-hidden flex-1 min-h-[280px] rounded-xl border visual-flow-canvas shelf-flow-canvas-transition${
                 plane === "grazeland" ? " visual-flow-canvas--graze" : plane === "bin" ? " visual-flow-canvas--bin" : ""
               }${dockedAlways ? " visual-flow-canvas--docked" : ""} ${plane === "main" ? "border-white/10" : planeMeta?.canvasClass ?? "border-white/10"}`}
-              style={{ transform: drawerOpen && !dockedAlways ? `translateX(${FOCUS_DRAWER_CANVAS_TRANSLATE})` : "translateX(0)" }}
+              style={{ transform: drawerSlideIn && !dockedAlways ? `translateX(${FOCUS_DRAWER_CANVAS_TRANSLATE})` : "translateX(0)" }}
             >
               <ReactFlow
                 nodes={nodes}
@@ -3440,6 +3714,7 @@ function VisualFlowPanelInner({
                   </p>
                 </div>
               )}
+              <DoingNow {...doingPipeline.drawerProps} />
             </div>
 
             {/* Sheet tabs — Excel-style, outside/below the canvas */}
@@ -3906,6 +4181,42 @@ function VisualFlowPanelInner({
                   className="shelf-note-popover fixed z-[200] min-w-[140px] rounded-xl border border-emerald-400/20 bg-zinc-900 py-1 shadow-xl"
                   style={{ left, top }}
                 >
+                  {ids.length === 1 && (
+                    doingPipeline.inPipeline(ids[0]) ? (
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm font-medium text-zinc-200 hover:bg-white/10 flex items-center gap-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          doingPipeline.remove(ids[0]);
+                          setNodeMenu(null);
+                        }}
+                        title="Remove this task from the Doing now pipeline"
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Remove from Doing now
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={doingPipeline.isFull}
+                        className="w-full px-3 py-2 text-left text-sm font-medium text-emerald-300 hover:bg-emerald-400/10 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          doingPipeline.add(ids[0]);
+                          setNodeMenu(null);
+                        }}
+                        title={doingPipeline.isFull ? "Doing now is full (max 7)" : "Add this task to the Doing now pipeline"}
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M5 12l5 5L20 6" />
+                        </svg>
+                        Add to Doing now
+                      </button>
+                    )
+                  )}
                   {currentPlaneAdd && (
                     <button
                       type="button"
@@ -4187,6 +4498,20 @@ function VisualFlowPanelInner({
                       className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10"
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (!paneMenu) return;
+                        const d = new Date(Date.now() + 60 * 60000);
+                        d.setSeconds(0, 0);
+                        setBlockerDraft({ x: paneMenu.x, y: paneMenu.y, label: "", due: nfToDatetimeLocal(d.getTime()), dur: 30 });
+                        setPaneMenu(null);
+                      }}
+                    >
+                      ⛔ Add blocker to Up Next
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
                         handleOpenSectorManager();
                       }}
                     >
@@ -4212,6 +4537,11 @@ function VisualFlowPanelInner({
               </div>
             );
             })()}
+
+            {/* Blocker create/edit popover */}
+            {blockerDraft && (
+              <BlockerDraft draft={blockerDraft} setDraft={setBlockerDraft} onCommit={commitBlocker} onCancel={() => setBlockerDraft(null)} />
+            )}
 
             {sectorManagerOpen && (
               <div
@@ -4327,7 +4657,7 @@ function VisualFlowPanelInner({
               <button
                 type="button"
                 className="shelf-flow-focus-handle fixed top-1/2 z-[101] -translate-y-1/2"
-                style={{ right: drawerVisible ? FOCUS_DRAWER_WIDTH : 0, marginTop: fullPage ? "3rem" : undefined }}
+                style={{ right: drawerSlideIn ? FOCUS_DRAWER_WIDTH : 0, marginTop: fullPage ? "3rem" : undefined }}
                 onMouseEnter={handleDrawerTriggerEnter}
                 onMouseLeave={handleDrawerTriggerLeave}
                 onClick={handleDrawerToggleFreeze}
@@ -4335,7 +4665,7 @@ function VisualFlowPanelInner({
                 title="Focused tasks"
               >
                 <svg
-                  className={`h-4 w-4 transition-transform ${drawerVisible ? "rotate-180" : ""}`}
+                  className={`h-4 w-4 transition-transform ${drawerSlideIn ? "rotate-180" : ""}`}
                   fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" aria-hidden="true"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 6l-6 6 6 6" />
@@ -4350,7 +4680,7 @@ function VisualFlowPanelInner({
           <aside
             className={`shelf-flow-focus-drawer fixed right-0 top-0 bottom-0 z-[99] flex flex-col overflow-hidden border border-white/15 ${
               dockedAlways ? "rounded-2xl" : "rounded-l-2xl border-r-0"
-            } ${drawerVisible ? "translate-x-0" : "translate-x-full"}`}
+            } ${drawerSlideIn ? "translate-x-0" : "translate-x-full"}`}
             style={{
               marginTop: fullPage ? "6rem" : undefined,
               marginBottom: dockedAlways ? "5.5rem" : undefined,
@@ -4366,8 +4696,10 @@ function VisualFlowPanelInner({
             }}
           >
             {/* Only mount the (potentially heavy) task list while the drawer is
-                actually visible — keeps memory/DOM idle when it's tucked away. */}
-            {drawerVisible && (
+                actually visible — keeps memory/DOM idle when it's tucked away.
+                `drawerMounted` lags `drawerSlideIn` so content paints before the
+                slide and stays through the slide-out (see the open/close effect). */}
+            {drawerMounted && (
             <>
             <div className="flex flex-col gap-2 min-h-0 flex-1 overflow-y-auto p-2">
               <div className="rounded-xl border border-white/10 bg-white/5 p-2">
@@ -4698,6 +5030,8 @@ function VisualFlowPanelInner({
                   existingSectorNames={allVisualFlowSectorNames}
                   sectorColorMap={visualFlow.sectorColors}
                   onSave={(updates) => {
+                    // Committed — no longer a throwaway blank node.
+                    freshNodeIdsRef.current.delete(editNodeId);
                     handleEditCanvasItemWithLog(editNodeId, updates);
                     if (plane === "main") {
                       const task = canvasItems.find((x) => x.id === editNodeId);
@@ -4711,7 +5045,17 @@ function VisualFlowPanelInner({
                     }
                     setEditNodeId(null);
                   }}
-                  onClose={() => setEditNodeId(null)}
+                  onClose={() => {
+                    // Cancelled/Escaped a freshly-created node that was never saved →
+                    // discard it (don't leave a blank "New task" on the canvas).
+                    if (freshNodeIdsRef.current.has(editNodeId)) {
+                      freshNodeIdsRef.current.delete(editNodeId);
+                      currentPlaneDelete?.(editNodeId);
+                      setEdges((eds) => eds.filter((e) => e.source !== editNodeId && e.target !== editNodeId));
+                      setNodes((ns) => ns.filter((n) => n.id !== editNodeId));
+                    }
+                    setEditNodeId(null);
+                  }}
                 />
               </div>
             );

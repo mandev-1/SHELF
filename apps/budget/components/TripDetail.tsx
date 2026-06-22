@@ -13,6 +13,7 @@ import { Avatar, fmt, initials, AV_HUES, nowIso, uid } from "../lib/budget-forma
 import { convert, fmtSecondary, tripCurrencyOptions } from "../lib/currency";
 import { tripStats, tripMembers, tripMetaLabel } from "../lib/trips";
 import { ExpenseModal } from "./BudgetPanel";
+import { SpendTrend } from "./SpendTrend";
 import { toast } from "../lib/toast";
 import { api } from "../lib/api";
 
@@ -312,6 +313,10 @@ export function TripDetail({
         </div>
       </div>
 
+      {/* Desktop: "Who paid what" + "Settle up" sit side by side; ≤900px they
+          fall back to the stacked phone layout (.tc-board glue in budget.css). */}
+      <div className="tc-board">
+      <div className="tc-board-main">
       {/* On the road · who paid what (handoff 009) */}
       <section className="tc-card otr">
         <div className="tc-head">
@@ -370,6 +375,9 @@ export function TripDetail({
           </div>
         )}
       </section>
+      {/* Desktop-only cumulative spend curve, stacked under "Who paid what". */}
+      <SpendTrend trip={trip} />
+      </div>
 
       {/* Reconcile · settle up (handoff 009) — trip cover behind a white scrim */}
       <section className="tc-card rec" style={recStyle}>
@@ -419,6 +427,7 @@ export function TripDetail({
           </div>
         )}
       </section>
+      </div>
 
       {expenseModal && (
         <ExpenseModal

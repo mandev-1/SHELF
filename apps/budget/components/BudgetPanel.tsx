@@ -27,6 +27,15 @@ const CATEGORIES = ["Groceries", "Dining", "Transport", "Housing", "Fun", "Healt
 
 // A person is either an admin (full access) or a member scoped to one trip.
 type PersonAccess = { isAdmin: boolean; tripId: string };
+
+type Nav = { view: "people" | "trips"; open: string | null };
+// Read the host's navigation state from the URL (?view & ?open) so browser
+// back/forward work. Session params (?b, ?user, ?trip) are left untouched.
+function readNav(): Nav {
+  if (typeof window === "undefined") return { view: "people", open: null };
+  const sp = new URLSearchParams(window.location.search);
+  return { view: sp.get("view") === "trips" ? "trips" : "people", open: sp.get("open") };
+}
 // Avatar hues cycle through ShELF's tokens.
 const AV_HUES = ["var(--hue-blue)", "var(--hue-rose)", "var(--hue-purple)", "var(--hue-orange)", "var(--hue-green)", "var(--hue-zinc)"];
 
@@ -161,15 +170,30 @@ export function BudgetPanel({
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
   const [addExpenseSignal, setAddExpenseSignal] = useState(0); // bumping opens the scoped trip's Add-Expense modal
   const [personModal, setPersonModal] = useState<BudgetMember | "new" | null>(null);
-  const [view, setView] = useState<"people" | "trips">("people");
-  // Which trip is open in the Trips tab — lifted here so the page header can show
-  // its "Add expense" action beside the title.
-  const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
-  // Always start a view at the top, and close any open trip when switching tabs.
+  // URL-backed navigation: People / Trips / an open trip are all reflected in
+  // the URL (?view & ?open) so the browser back/forward arrows move between them.
+  const [nav, setNav] = useState<Nav>(readNav);
   useEffect(() => {
-    if (typeof window !== "undefined") window.scrollTo({ top: 0 });
-    setSelectedTripId(null);
-  }, [view]);
+    const onPop = () => setNav(readNav());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const view = nav.view;
+  const selectedTripId = nav.open;
+  const pushNav = (next: Partial<Nav>) => {
+    const merged: Nav = { ...nav, ...next };
+    setNav(merged);
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    sp.set("view", merged.view);
+    if (merged.open) sp.set("open", merged.open);
+    else sp.delete("open");
+    window.history.pushState(null, "", `${window.location.pathname}?${sp.toString()}`);
+    window.scrollTo({ top: 0 });
+  };
+  // Switching tabs closes any open trip; opening/closing a trip is its own entry.
+  const setView = (v: "people" | "trips") => pushNav({ view: v, open: null });
+  const setSelectedTripId = (id: string | null) => pushNav({ open: id });
   const creatingRef = useRef(false); // guards against double-submit creating two people
 
   const { balances, total, transfers } = useMemo(() => computeBalances(budget), [budget]);
@@ -337,7 +361,7 @@ export function BudgetPanel({
       )}
       {/* Header */}
       <div className="gb-head">
-        <div className="gb-head-l" style={{ flexDirection: "column", alignItems: "flex-start", gap: 0 }}>
+        <div className="gb-head-l" style={{ flexDirection: "column", alignItems: "flex-start", gap: 0, flex: 1 }}>
           <span className="card-eyebrow ink-on-paper" style={{ display: "block", marginBottom: 2 }}>STRATEGIE · SHARED BUDGET</span>
           <h1 className="gb-title ink-on-paper">{view === "trips" ? "Trips & travel" : "People"}</h1>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginTop: 10 }}>
@@ -362,11 +386,13 @@ export function BudgetPanel({
                 You&apos;re {activeMember.name}
               </span>
             )}
+            {view === "trips" && selectedTripId && (
+              <span style={{ marginLeft: "auto" }}>
+                <AddExpenseButton onClick={() => setAddExpenseSignal((s) => s + 1)} />
+              </span>
+            )}
           </div>
         </div>
-        {view === "trips" && selectedTripId && (
-          <AddExpenseButton onClick={() => setAddExpenseSignal((s) => s + 1)} />
-        )}
       </div>
 
       {view === "trips" ? (
@@ -482,6 +508,17 @@ export function ExpenseModal({ expense, members, currency, currencies, defaultCu
   );
   const [receipt, setReceipt] = useState<string | undefined>(expense?.receipt);
 
+  // Keyboard up (mobile)? Collapse the big "Scan a receipt" zone to save space.
+  const [kbUp, setKbUp] = useState(false);
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const check = () => setKbUp(vv.height < window.innerHeight - 120);
+    check();
+    vv.addEventListener("resize", check);
+    return () => vv.removeEventListener("resize", check);
+  }, []);
+
   const allIds = members.map((m) => m.id);
   const initialSplitMode: "equal" | "custom" | "me" = (() => {
     const sa = expense?.splitAmong;
@@ -564,6 +601,11 @@ export function ExpenseModal({ expense, members, currency, currencies, defaultCu
                   Remove
                 </button>
               </div>
+            ) : kbUp ? (
+              <label className="gb-scan-mini">
+                <span aria-hidden>📸</span> Tap to upload a receipt
+                <input type="file" accept="image/*" style={{ display: "none" }} onChange={onReceiptFile} />
+              </label>
             ) : (
               <label className="gb-scan-drop">
                 <div className="gb-scan-ico">📸</div>
@@ -578,7 +620,16 @@ export function ExpenseModal({ expense, members, currency, currencies, defaultCu
 
           <label className="gb-fld" style={{ marginTop: 14 }}>
             <span className="gb-fld-lab">What was it?</span>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Groceries — Lidl" />
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onFocus={(e) => {
+                // Center the field in the viewport (above the keyboard) on mobile.
+                const el = e.currentTarget;
+                setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 120);
+              }}
+              placeholder="e.g. Groceries — Lidl"
+            />
           </label>
 
           <label className="gb-fld">

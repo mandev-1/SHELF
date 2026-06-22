@@ -1966,7 +1966,7 @@ body {
 
 /* Focus drawer: canvas shifts smoothly when drawer opens */
 .shelf-flow-canvas-transition {
-  transition: margin-right 0.3s var(--shelf-ease-silk), transform 0.3s var(--shelf-ease-silk);
+  transition: margin-right 0.45s var(--shelf-ease-silk), transform 0.45s var(--shelf-ease-silk);
 }
 
 /* Focus drawer: slide in/out with silky ease.
@@ -1974,7 +1974,8 @@ body {
    soft top sheen for the "liquid" feel, and a deep ambient shadow. Theme-aware
    via --surface so it reads right on day / sap / dark. */
 .shelf-flow-focus-drawer {
-  transition: transform 0.3s var(--shelf-ease-silk);
+  transition: transform 0.45s var(--shelf-ease-silk);
+  will-change: transform;
   background:
     linear-gradient(155deg, rgba(255,255,255,0.12), rgba(255,255,255,0.03) 38%, rgba(255,255,255,0) 68%),
     color-mix(in srgb, var(--surface) 45%, transparent);
@@ -2022,7 +2023,7 @@ body {
   background: var(--surface-2); color: var(--dim);
   box-shadow: -4px 0 18px rgba(0,0,0,0.18);
   cursor: pointer;
-  transition: right 0.3s var(--shelf-ease-silk), width 0.16s, background-color 0.16s, color 0.16s;
+  transition: right 0.45s var(--shelf-ease-silk), width 0.16s, background-color 0.16s, color 0.16s;
 }
 .shelf-flow-focus-handle:hover { width: 26px; color: var(--accent-bright); background: var(--surface-3); }
 [data-theme="day"] .shelf-flow-focus-handle:hover,
@@ -2266,6 +2267,14 @@ body {
 .visual-flow-canvas .shelf-flow-node.shelf-flow-node--darkfill .shelf-flow-node-date,
 .visual-flow-canvas .shelf-flow-node.shelf-flow-node--darkfill .text-zinc-500\/90 {
   color: rgba(255, 255, 255, 0.62) !important;
+}
+/* Tag pill: the hashed tagColorClasses() palette (e.g. dark zinc bg + dark text)
+   is unreadable on a solid dark fill like king blue — override to a translucent
+   white chip with white text so the tag stays legible on the blueprint surface. */
+.visual-flow-canvas .shelf-flow-node.shelf-flow-node--darkfill .visual-flow-tag {
+  background: rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
 }
 
 /*

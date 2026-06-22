@@ -211,6 +211,20 @@ export type VisualFlowNodeSize = {
   height?: number;
 };
 
+/** Time-block "blocker" (handoff 011): reserves a window of time. Lives in the
+ * Doing-now pipeline (its id sits in `doingNow.pipeline`), not on the canvas. */
+export interface Blocker {
+  id: string;
+  label: string;
+  /** START time, ms epoch. */
+  due: number;
+  /** Duration in minutes (30 / 45 / 60). */
+  dur: number;
+  /** Legacy flow-space coords from the canvas-node prototype; unused now. */
+  x?: number;
+  y?: number;
+}
+
 export interface VisualFlowData {
   nodePositions?: Record<string, { x: number; y: number }>;
   edges?: VisualFlowEdge[];
@@ -238,6 +252,10 @@ export interface VisualFlowData {
   customPlaneNodeSizes?: Record<string, Record<string, VisualFlowNodeSize>>;
   /** Saved viewport (pan + zoom) per plane id */
   planeViewports?: Record<string, { x: number; y: number; zoom: number }>;
+  /** "Doing now" pipeline (handoff 010): ordered task ids (max 7 = 1 active + 6 queued) + drawer open state. */
+  doingNow?: { pipeline: string[]; open: boolean };
+  /** Time-block "blocker" nodes (handoff 011). */
+  blockers?: Blocker[];
 }
 
 /** Border/handle color for a node: managed sector map wins, then per-task `sectorColor`. */

@@ -1,0 +1,110 @@
+/* ============================================================================
+   Blockers — hazard-barrier "time block" nodes for a canvas
+   ----------------------------------------------------------------------------
+   1:1 with the ShELF node canvas. A blocker is a lightweight node with a START
+   time + a DURATION (30 / 45 / 60 min). It sits on the canvas looking like a
+   striped hazard barrier, counts down, and runs through three phases:
+     • pending — before the start time   (amber stripes, "14:43–15:28 · in 4m")
+     • active  — within the window       (red, pulsing, "⛔ Blocking · 18m left")
+     • ended   — past the window          (muted grey, "… · ended" + Clear)
+   When a blocker goes active it "fires" once (host decides what happens —
+   in ShELF it jumps to the top of "Doing now" and raises a toast).
+
+   Tokens inlined in :root so this is dependency-free; if your app already
+   defines them (ShELF theme), delete the :root block to inherit yours.
+   ========================================================================== */
+
+:root {
+  --surface: #ffffff;
+  --surface-2: #eef3fb;
+  --line: rgba(8, 40, 90, 0.12);
+  --line-strong: rgba(8, 40, 90, 0.22);
+  --fg: #0a1c33;
+  --fg-2: #2a435f;
+  --dim: #5e7698;
+  --faint: #93a6c2;
+  --accent: #0070f2;
+  --accent-bright: #2b8bff;
+  --sh-1: 0 1px 2px rgba(8, 40, 90, 0.06);
+  --sh-2: 0 6px 18px -10px rgba(8, 40, 90, 0.4);
+  --sh-3: 0 24px 50px -18px rgba(8, 40, 90, 0.55);
+}
+
+/* ── the blocker node ── */
+.nf-blocker {
+  position: absolute; width: 200px; transform: translate(-50%, -50%);
+  display: flex; align-items: stretch; gap: 0; cursor: grab; user-select: none;
+  background: var(--surface); border: 1.5px solid color-mix(in srgb, #d8a200 60%, var(--line-strong));
+  border-radius: 11px; overflow: hidden; box-shadow: var(--sh-2); z-index: 6;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.nf-blocker.nf-blocker--dragging { cursor: grabbing; z-index: 9; box-shadow: var(--sh-3); }
+.nf-blocker-stripe {
+  width: 12px; flex-shrink: 0;
+  background: repeating-linear-gradient(45deg, #e6b400 0 8px, #1c1c1c 8px 16px);
+}
+.nf-blocker-body { flex: 1; min-width: 0; padding: 9px 12px; }
+.nf-blocker-head { display: flex; align-items: center; gap: 7px; }
+.nf-blocker-icon { width: 15px; height: 15px; flex-shrink: 0; color: #b07d00; }
+.nf-blocker-title { font-size: 13px; font-weight: 700; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nf-blocker-dur { margin-left: auto; flex-shrink: 0; font-size: 10px; font-weight: 700; color: #8a6500; background: color-mix(in srgb, #e6b400 22%, transparent); border-radius: 5px; padding: 1px 6px; font-variant-numeric: tabular-nums; }
+.nf-blocker-time { margin-top: 3px; font-size: 11px; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; }
+
+/* active — the window is happening now */
+.nf-blocker--active {
+  border-color: #ef4444; box-shadow: 0 0 0 3px color-mix(in srgb, #ef4444 22%, transparent), var(--sh-2);
+  animation: nf-blocker-alarm 1.4s ease-in-out infinite;
+}
+.nf-blocker--active .nf-blocker-stripe { background: repeating-linear-gradient(45deg, #ef4444 0 8px, #1c1c1c 8px 16px); }
+.nf-blocker--active .nf-blocker-icon { color: #ef4444; }
+.nf-blocker--active .nf-blocker-dur { color: #fff; background: #ef4444; }
+.nf-blocker--active .nf-blocker-time { color: #d6402e; font-weight: 700; }
+@keyframes nf-blocker-alarm { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, #ef4444 14%, transparent), var(--sh-2); } }
+@media (prefers-reduced-motion: reduce) { .nf-blocker--active { animation: none; } }
+
+/* ended — window has passed, awaiting clear */
+.nf-blocker--ended { border-color: var(--line); opacity: 0.7; }
+.nf-blocker--ended .nf-blocker-stripe { background: repeating-linear-gradient(45deg, var(--faint, #9aa) 0 8px, var(--dim) 8px 16px); }
+.nf-blocker--ended .nf-blocker-icon { color: var(--dim); }
+.nf-blocker--ended .nf-blocker-dur { color: var(--dim); background: var(--surface-2); }
+
+.nf-blocker-dismiss {
+  align-self: center; margin-right: 8px; flex-shrink: 0; border: 1px solid #ef4444; background: color-mix(in srgb, #ef4444 12%, var(--surface));
+  color: #d6402e; cursor: pointer; font-family: inherit; font-size: 11px; font-weight: 600; border-radius: 7px; padding: 5px 9px;
+}
+.nf-blocker-dismiss:hover { background: #ef4444; color: #fff; }
+
+/* ── right-click menu (add / edit / clear) ── */
+.nf-menu-scrim { position: fixed; inset: 0; z-index: 90; }
+.nf-menu { position: fixed; z-index: 91; min-width: 170px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: var(--sh-3); padding: 5px; font-family: ui-sans-serif, system-ui, sans-serif; }
+.nf-menu-item { display: block; width: 100%; text-align: left; border: 0; background: none; cursor: pointer; font-family: inherit; font-size: 13px; color: var(--fg); padding: 8px 11px; border-radius: 7px; }
+.nf-menu-item:hover { background: var(--surface-2); }
+.nf-menu-item.warn { color: #d6402e; }
+.nf-menu-item.warn:hover { background: color-mix(in srgb, #ef4444 10%, transparent); }
+.nf-menu-sep { height: 1px; background: var(--line); margin: 4px 6px; }
+
+/* ── draft popover (set label / start / duration) ── */
+.nf-blocker-draft {
+  position: fixed; z-index: 92; width: 270px; display: flex; flex-direction: column; gap: 12px;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 14px; padding: 16px; box-shadow: var(--sh-3);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.nf-blocker-draft-title { font-size: 14px; font-weight: 700; color: var(--fg); }
+.nf-blocker-draft-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+
+.nf-fld { display: flex; flex-direction: column; gap: 6px; }
+.nf-fld-lab { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.nf-fld-input { font-family: inherit; font-size: 14px; color: var(--fg); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; padding: 10px 13px; outline: none; }
+.nf-fld-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+
+.nf-editor-ghost { border: 1px solid var(--line); background: var(--surface); color: var(--fg-2); cursor: pointer; font-family: inherit; font-size: 12.5px; border-radius: 9px; padding: 8px 13px; }
+.nf-editor-ghost:hover { border-color: var(--accent); color: var(--fg); }
+.nf-editor-save { border: 0; background: var(--accent); color: #fff; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 600; border-radius: 9px; padding: 9px 16px; }
+.nf-editor-save:hover { background: var(--accent-bright, var(--accent)); }
+.nf-editor-save:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* duration flip toggles */
+.nf-blocker-seg { display: flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.nf-blocker-seg-btn { flex: 1; border: 0; background: none; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--dim); border-radius: 7px; padding: 8px 0; font-variant-numeric: tabular-nums; transition: background-color 0.12s, color 0.12s; }
+.nf-blocker-seg-btn:hover { color: var(--fg); }
+.nf-blocker-seg-btn.on { background: var(--surface); color: var(--accent); box-shadow: var(--sh-1); }

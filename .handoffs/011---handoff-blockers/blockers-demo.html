@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Blockers — demo</title>
+<link rel="stylesheet" href="blockers.css" />
+<style>
+  html, body { margin: 0; height: 100%; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #e7edf6; color: #0a1c33; }
+  #root { height: 100vh; }
+  /* the canvas / stage the blockers live in (yours) */
+  .blk-stage { position: relative; overflow: hidden; height: 100%; background:
+    radial-gradient(circle at 18px 18px, rgba(8,40,90,0.06) 1.4px, transparent 1.6px) 0 0 / 26px 26px,
+    linear-gradient(180deg, #fbfdff, #eef3fb); }
+  .blk-head { position: absolute; top: 0; left: 0; right: 0; padding: 22px 26px; pointer-events: none; }
+  .blk-head h1 { margin: 0 0 4px; font-size: 21px; letter-spacing: -0.02em; }
+  .blk-head p { margin: 0; font-size: 13px; color: #5e7698; }
+  /* tiny toast */
+  .blk-toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 95;
+    background: #0a1c33; color: #fff; font-size: 13px; font-weight: 600; padding: 11px 18px; border-radius: 11px; box-shadow: 0 12px 30px -10px rgba(0,0,0,0.5); }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="Blockers.jsx"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useRef, useCallback } = React;
+
+function Demo() {
+  const stageRef = useRef(null);
+  const [toast, setToast] = useState(null);
+  const [menu, setMenu] = useState(null);   // {x,y}  empty-canvas menu
+  const [nodeMenu, setNodeMenu] = useState(null); // {id,x,y}
+  const [draft, setDraft] = useState(null); // create/edit popover
+  const [drag, setDrag] = useState(null);
+
+  const showToast = (t) => { setToast(t); clearTimeout(showToast._t); showToast._t = setTimeout(() => setToast(null), 2600); };
+
+  const blk = useBlockers({
+    storageKey: "demo-blockers",
+    onFire: (b) => showToast("⛔ Blocking now — " + b.label),
+  });
+
+  // stage-relative coords from a mouse event
+  const localXY = (e) => { const r = stageRef.current.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+
+  const openCreate = () => {
+    const d = new Date(Date.now() + 60 * 60000); d.setSeconds(0, 0);
+    setDraft({ x: menu.cx, y: menu.cy, sx: menu.x, sy: menu.y, label: "", due: nfToDatetimeLocal(d.getTime()), dur: 30 });
+    setMenu(null);
+  };
+  const commit = () => {
+    const dueMs = new Date(draft.due).getTime();
+    const label = (draft.label || "").trim() || "Blocker";
+    if (draft.edit) blk.update(draft.edit, { label, due: dueMs, dur: draft.dur });
+    else blk.add(draft.sx, draft.sy, label, dueMs, draft.dur);
+    setDraft(null);
+  };
+
+  // node drag
+  const onNodeDown = (e, b) => {
+    if (e.target.closest("button")) return;
+    e.stopPropagation();
+    const start = localXY(e);
+    setDrag({ id: b.id, dx: start.x - b.x, dy: start.y - b.y });
+  };
+  const onMove = (e) => {
+    if (!drag) return;
+    const p = localXY(e);
+    blk.update(drag.id, { x: p.x - drag.dx, y: p.y - drag.dy });
+  };
+  const onUp = () => setDrag(null);
+
+  return (
+    <div className="blk-stage" ref={stageRef} onPointerMove={onMove} onPointerUp={onUp}
+      onContextMenu={(e) => {
+        // GUARD: don't open the canvas menu when right-clicking a blocker, a menu, or the draft
+        if (e.target.closest(".nf-blocker, .nf-menu, .nf-blocker-draft")) return;
+        e.preventDefault();
+        const p = localXY(e);
+        setNodeMenu(null);
+        setMenu({ x: e.clientX, y: e.clientY, cx: e.clientX, cy: e.clientY, px: p.x, py: p.y });
+      }}>
+      <div className="blk-head">
+        <h1>Blockers</h1>
+        <p>Right-click empty canvas → “⛔ Add blocker here”. Pick a duration (30 / 45 / 60). Drag to move · right-click a blocker to edit/clear.</p>
+      </div>
+
+      {/* fix the create coords to the stage-local point */}
+      {blk.blockers.map((b) => (
+        <BlockerNode key={b.id} blocker={b} now={blk.now} dragging={drag && drag.id === b.id}
+          onPointerDown={(e) => onNodeDown(e, b)}
+          onEdit={(e) => setNodeMenu({ id: b.id, x: e.clientX, y: e.clientY })}
+          onClear={() => { blk.remove(b.id); showToast("Blocker cleared"); }} />
+      ))}
+
+      {/* empty-canvas menu */}
+      {menu && (
+        <React.Fragment>
+          <div className="nf-menu-scrim" onMouseDown={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}></div>
+          <div className="nf-menu" style={{ left: Math.min(menu.x, window.innerWidth - 190), top: Math.min(menu.y, window.innerHeight - 70) }} onMouseDown={(e) => e.stopPropagation()}>
+            <button type="button" className="nf-menu-item" onClick={() => { setDraft({ sx: menu.px, sy: menu.py, x: menu.x, y: menu.y, label: "", due: (() => { const d = new Date(Date.now() + 60 * 60000); d.setSeconds(0, 0); return nfToDatetimeLocal(d.getTime()); })(), dur: 30 }); setMenu(null); }}>⛔ Add blocker here</button>
+          </div>
+        </React.Fragment>
+      )}
+
+      {/* node menu */}
+      {nodeMenu && (() => { const b = blk.blockers.find((x) => x.id === nodeMenu.id); if (!b) return null; return (
+        <React.Fragment>
+          <div className="nf-menu-scrim" onMouseDown={() => setNodeMenu(null)} onContextMenu={(e) => { e.preventDefault(); setNodeMenu(null); }}></div>
+          <div className="nf-menu" style={{ left: Math.min(nodeMenu.x, window.innerWidth - 190), top: Math.min(nodeMenu.y, window.innerHeight - 110) }} onMouseDown={(e) => e.stopPropagation()}>
+            <button type="button" className="nf-menu-item" onClick={() => { setDraft({ edit: b.id, x: nodeMenu.x, y: nodeMenu.y, label: b.label, due: nfToDatetimeLocal(b.due), dur: b.dur || 30 }); setNodeMenu(null); }}>Edit time…</button>
+            <div className="nf-menu-sep"></div>
+            <button type="button" className="nf-menu-item warn" onClick={() => { blk.remove(b.id); setNodeMenu(null); showToast("Blocker cleared"); }}>Clear blocker</button>
+          </div>
+        </React.Fragment>
+      ); })()}
+
+      {/* draft popover */}
+      {draft && <BlockerDraft draft={draft} setDraft={setDraft} onCommit={commit} onCancel={() => setDraft(null)} />}
+
+      {toast && <div className="blk-toast">{toast}</div>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+</script>
+</body>
+</html>

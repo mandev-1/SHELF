@@ -14,15 +14,45 @@ function isConfigError(detail?: string): boolean {
 export function BootError({
   detail,
   onLogin,
+  trip,
+  onGoToTrip,
 }: {
   detail?: string;
   // When provided, an admin login is offered at the bottom so the host can still
   // authorize even while the data layer is failing (the session is client-side).
   onLogin?: (password: string) => boolean;
+  // When the signed-in member still has access to a trip (the trips table loaded
+  // even though the budget didn't), offer a one-tap jump straight to it.
+  trip?: { name: string } | null;
+  onGoToTrip?: () => void;
 }) {
   const [pw, setPw] = useState("");
   const [pwError, setPwError] = useState(false);
   const config = isConfigError(detail);
+  const showTrip = !!(trip && onGoToTrip);
+  const reload = () => (typeof window !== "undefined" ? window.location.reload() : undefined);
+  const primaryBtn: CSSProperties = {
+    border: 0,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    fontSize: 13.5,
+    fontWeight: 600,
+    color: "#fff",
+    background: "var(--accent, #0070f2)",
+    borderRadius: 10,
+    padding: "10px 20px",
+  };
+  const secondaryBtn: CSSProperties = {
+    cursor: "pointer",
+    fontFamily: "inherit",
+    fontSize: 13.5,
+    fontWeight: 600,
+    color: "var(--fg)",
+    background: "var(--surface, #ffffff)",
+    border: "1px solid var(--line-strong, #c2cfe6)",
+    borderRadius: 10,
+    padding: "10px 20px",
+  };
   const headline = config
     ? "This budget hasn't been handed its keys yet 🔑"
     : "Our budget wandered off to the beach 🏖️";
@@ -63,26 +93,24 @@ export function BootError({
         <div style={{ maxWidth: 440, display: "flex", flexDirection: "column", gap: 8 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.01em", margin: 0 }}>{headline}</h1>
         <p style={{ fontSize: 14, lineHeight: 1.55, color: "var(--muted, var(--dim))", margin: 0 }}>{sub}</p>
+        {showTrip && (
+          <p style={{ fontSize: 14, lineHeight: 1.55, color: "var(--muted, var(--dim))", margin: 0 }}>
+            You have access to a trip though — want to go to{" "}
+            <strong style={{ color: "var(--accent, #0070f2)", fontWeight: 700 }}>{trip?.name}</strong> instead?
+          </p>
+        )}
       </div>
 
-      <button
-        type="button"
-        onClick={() => (typeof window !== "undefined" ? window.location.reload() : undefined)}
-        style={{
-          marginTop: 4,
-          border: 0,
-          cursor: "pointer",
-          fontFamily: "inherit",
-          fontSize: 13.5,
-          fontWeight: 600,
-          color: "#fff",
-          background: "var(--accent, #0070f2)",
-          borderRadius: 10,
-          padding: "10px 20px",
-        }}
-      >
-        Try again
-      </button>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", marginTop: 4 }}>
+        <button type="button" onClick={reload} style={showTrip ? secondaryBtn : primaryBtn}>
+          Try again
+        </button>
+        {showTrip && (
+          <button type="button" onClick={onGoToTrip} style={primaryBtn}>
+            Go to my trip
+          </button>
+        )}
+      </div>
 
       {config && (
         <p style={{ fontSize: 12, color: "var(--dim)", maxWidth: 460, lineHeight: 1.5, margin: "4px 0 0" }}>
