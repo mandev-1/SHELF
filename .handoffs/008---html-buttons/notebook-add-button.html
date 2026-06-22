@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Add expense button — Option A demo</title>
+<link rel="stylesheet" href="notebook-background.css" />
+<link rel="stylesheet" href="notebook-add-button.css" />
+<style>
+  /* demo chrome only — not part of the handoff */
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .notebook-page { min-height: 100vh; min-height: 100dvh; box-sizing: border-box; padding: 30px 22px 56px; }
+  .demo-wrap { max-width: 620px; margin: 0 auto; }
+
+  /* the header this button is meant to live in */
+  .hdr-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .hdr-eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #6b8db5; }
+  .hdr-title { font-size: 27px; font-weight: 800; letter-spacing: -0.01em; color: #21344c; margin-top: 3px; }
+  .hdr-tabs { margin-top: 14px; display: inline-flex; gap: 3px; padding: 3px; background: rgba(255,255,255,0.7); border: 1px solid rgba(86,142,200,0.25); border-radius: 11px; width: max-content; }
+  .hdr-tab { font-size: 12.5px; font-weight: 700; padding: 6px 13px; border-radius: 8px; color: #5a799f; }
+  .hdr-tab.on { background: #2f6fd6; color: #fff; }
+
+  .swatch { margin-top: 40px; padding-top: 22px; border-top: 1px dashed rgba(86,142,200,0.35); }
+  .swatch-lab { font-size: 12px; color: #5a799f; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div class="notebook-page">
+  <div class="demo-wrap">
+
+    <!-- IN CONTEXT: top-right of the header -->
+    <div class="hdr-row">
+      <div>
+        <div class="hdr-eyebrow ink-on-paper">Strategie · Shared budget</div>
+        <div class="hdr-title ink-on-paper">People</div>
+      </div>
+
+      <!-- ░░ THE BUTTON ░░ -->
+      <button class="add-expense-btn" type="button">
+        <svg class="ae-plus" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M16 2.5 C24 2.2 29.6 8 29.5 16 C29.4 24 23.8 29.6 16 29.5 C8.2 29.4 2.5 23.7 2.6 16 C2.7 8.4 8 2.8 16 2.5 Z"
+                stroke="#4a6a92" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+          <path d="M16 9.5 L16 22.5 M9.5 16 L22.5 16"
+                stroke="#4a6a92" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <span class="ae-lab">Add expense</span>
+      </button>
+    </div>
+
+    <div class="hdr-tabs">
+      <span class="hdr-tab on">People</span>
+      <span class="hdr-tab">Trips</span>
+    </div>
+
+    <!-- ISOLATED swatch for quick visual reference -->
+    <div class="swatch">
+      <div class="swatch-lab ink-on-paper">The button on its own (hover it — the + rotates):</div>
+      <button class="add-expense-btn" type="button">
+        <svg class="ae-plus" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M16 2.5 C24 2.2 29.6 8 29.5 16 C29.4 24 23.8 29.6 16 29.5 C8.2 29.4 2.5 23.7 2.6 16 C2.7 8.4 8 2.8 16 2.5 Z"
+                stroke="#4a6a92" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+          <path d="M16 9.5 L16 22.5 M9.5 16 L22.5 16"
+                stroke="#4a6a92" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <span class="ae-lab">Add expense</span>
+      </button>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

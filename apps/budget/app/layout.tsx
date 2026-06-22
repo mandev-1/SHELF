@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 // Handoff 007 — ported 1:1 (verbatim). The .notebook-page wrapper is applied in page.tsx.
 import "../components/notebook-background.css";
+// Handoff 008 — ported 1:1 (verbatim). The .add-expense-btn used in the trip header.
+import "../components/notebook-add-button.css";
 
 export const metadata: Metadata = {
   title: "Budget",

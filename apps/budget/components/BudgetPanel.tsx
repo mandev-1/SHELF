@@ -237,10 +237,18 @@ export function BudgetPanel({
   const me = balances[0];
   const activeMember = activeMemberId ? budget.members.find((m) => m.id === activeMemberId) : undefined;
 
+  // Non-admin members are locked to their single trip: if they opened any other
+  // link (the full budget, or a trip they're not on), send them to their trip.
+  const memberTrip =
+    activeMember && activeMember.role !== "admin"
+      ? (budget.trips ?? []).find((t) => (t.memberIds ?? []).includes(activeMember.id))
+      : undefined;
+  const effectiveScopedTripId = memberTrip ? memberTrip.id : scopedTripId;
+
   // Guest mode: a trip-scoped link (?trip=<id>) shows ONLY that trip — no People
   // tab, no other trips, no host actions. (Soft scoping — a UX guardrail.)
-  if (scopedTripId) {
-    const scopedTrip = (budget.trips ?? []).find((t) => t.id === scopedTripId);
+  if (effectiveScopedTripId) {
+    const scopedTrip = (budget.trips ?? []).find((t) => t.id === effectiveScopedTripId);
     if (!scopedTrip) {
       return (
         <ErrorCard
@@ -556,7 +564,7 @@ export function ExpenseModal({ expense, members, currency, currencies, defaultCu
 
           <label className="gb-fld" style={{ marginTop: 14 }}>
             <span className="gb-fld-lab">What was it?</span>
-            <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Groceries — Lidl" />
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Groceries — Lidl" />
           </label>
 
           <label className="gb-fld">

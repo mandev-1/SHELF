@@ -15,6 +15,7 @@ import { tripStats, tripMembers, tripMetaLabel } from "../lib/trips";
 import { ExpenseModal } from "./BudgetPanel";
 import { toast } from "../lib/toast";
 import { api } from "../lib/api";
+import { AddExpenseButton } from "./AddExpenseButton";
 
 interface TripDetailProps {
   trip: BudgetTrip;
@@ -109,6 +110,10 @@ export function TripDetail({
 
   return (
     <div>
+      {/* Add-expense action — top-right of the trip view (handoff 008 button). */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <AddExpenseButton onClick={() => setExpenseModal("new")} />
+      </div>
       {/* Hero */}
       <div className="card gb-trip-hero" style={heroStyle}>
         {trip.cover && (

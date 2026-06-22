@@ -1,0 +1,84 @@
+/* ============================================================================
+   "Add expense" button — Notebook Ruled-Underline (Option A)
+   ----------------------------------------------------------------------------
+   A boxless, modern action button for the rustic ruled-paper UI. A hand-inked
+   circled "+" that rotates 90° on hover, beside a label underlined with a
+   hand-drawn blue rule (matching the page's ruled lines). Designed to sit
+   top-right of a header.
+
+   MARKUP (the + is an inline SVG; see notebook-add-button.html for the exact
+   icon, or copy the <svg> from there):
+
+     <button class="add-expense-btn" type="button">
+       <svg class="ae-plus" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+         <path d="M16 2.5 C24 2.2 29.6 8 29.5 16 C29.4 24 23.8 29.6 16 29.5
+                  C8.2 29.4 2.5 23.7 2.6 16 C2.7 8.4 8 2.8 16 2.5 Z"
+               stroke="#4a6a92" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+         <path d="M16 9.5 L16 22.5 M9.5 16 L22.5 16"
+               stroke="#4a6a92" stroke-width="1.8" stroke-linecap="round"/>
+       </svg>
+       <span class="ae-lab">Add expense</span>
+     </button>
+
+   NOTES
+   - The underline is an inline SVG data-URI (a real bezier path, no SVG
+     filters) so it renders reliably on mobile Safari/Chrome.
+   - Pen-blue palette: ink #2b4566, soft ink #4a6a92, rule #7db0e2.
+   - Hit area is ~40px tall incl. padding — fine for touch.
+   ========================================================================== */
+
+.add-expense-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 0;
+  background: none;
+  padding: 7px 3px 9px;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #2b4566;          /* ink */
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.add-expense-btn .ae-plus {
+  width: 23px;
+  height: 23px;
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+
+.add-expense-btn:hover .ae-plus,
+.add-expense-btn:focus-visible .ae-plus {
+  transform: rotate(90deg);
+}
+
+.add-expense-btn .ae-lab {
+  position: relative;
+}
+
+/* hand-drawn ruled underline */
+.add-expense-btn .ae-lab::after {
+  content: "";
+  position: absolute;
+  left: -3px;
+  right: -8px;
+  bottom: -6px;
+  height: 6px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='6'%3E%3Cpath d='M1 3.5 C26 1.6 52 5 80 3 C98 1.8 112 4.2 119 2.8' stroke='%237db0e2' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat;
+  background-size: 100% 100%;
+}
+
+.add-expense-btn:focus-visible {
+  outline: 2px solid #2f6fd6;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* optional: a touch more presence on press */
+.add-expense-btn:active {
+  transform: translateY(0.5px);
+}
