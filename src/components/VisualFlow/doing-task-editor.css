@@ -30,6 +30,7 @@
 .nf-te-plane { font-size: 12px; font-weight: 600; color: var(--fg-2); white-space: nowrap; }
 .nf-te-kicker { font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); }
 .nf-te-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.nf-te-esc-hint { font-size: 11px; font-weight: 600; color: var(--hue-orange, #e08648); margin-right: 4px; }
 .nf-te-close {
   border: 0; background: none; color: var(--dim); cursor: pointer; font-size: 20px; line-height: 1;
   padding: 4px 8px; border-radius: 8px;
@@ -44,7 +45,7 @@
 
 /* TITLE is the prominent field */
 .nf-te-title { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
-.nf-te-note { min-height: 110px; resize: vertical; line-height: 1.5; }
+.nf-te-note { min-height: 540px; resize: vertical; line-height: 1.5; }
 
 /* checklist / subtasks */
 .nf-te-check { display: flex; flex-direction: column; gap: 7px; }

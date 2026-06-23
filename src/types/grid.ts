@@ -426,6 +426,7 @@ export interface ShelfBackupData {
   goals: ShelfGoalMap;
   showGoals: boolean;
   showTodoDates?: boolean;
+  showFocusDrawer?: boolean;
   pillarPins?: { top: string[]; list?: string[]; overrides?: Record<string, { title?: string; imageUrl?: string }> };
   pillarTodos?: ShelfPillarTodoItem[];
   prompts: ShelfPromptMap;

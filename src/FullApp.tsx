@@ -103,6 +103,7 @@ export default function FullApp() {
     accent,
     pillarTodos,
     showTodoDates,
+    showFocusDrawer,
     visualFlow,
     updateVisualFlow,
     prompts,
@@ -690,6 +691,7 @@ export default function FullApp() {
                     grazelandItems={grazelandItems}
                     binItems={binItems}
                     showTodoDates={showTodoDates}
+                    showFocusDrawer={showFocusDrawer}
                     visualFlow={visualFlow}
                     onUpdateVisualFlow={updateVisualFlow}
                     focusDesynced={focusDesynced}

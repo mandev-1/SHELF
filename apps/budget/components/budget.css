@@ -3182,42 +3182,23 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 .gb-led-paidlab { font-size: 11px; color: var(--dim); }
 .gb-led-amt { font-size: 13.5px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; width: 86px; text-align: right; flex-shrink: 0; }
 
-/* ── ON THE ROAD ledger — desktop layout (≥641px) ── */
+/* ── ON THE ROAD ledger — desktop / tablet (≥641px) single-line rows ──
+   Each row stays on one line without the date wrapping or the label collapsing
+   to "T…": label + date each keep to their own line (ellipsised). The split /
+   paid / amount columns HUG their content (not fixed widths) so the row fits
+   even the narrow side-by-side board column (~407px at the 760px page cap); the
+   amount is pushed to the right edge by the main column's flex-grow. Fixed wide
+   columns were dropped here because they didn't fit beside the Settle-up card. */
 @media (min-width: 641px) {
-  .gb-led-row {
-    flex-wrap: nowrap;        /* never stack on desktop */
-    gap: 16px;
-    align-items: center;
-  }
-
-  /* label + date: take the slack, stay on ONE line, ellipsize if needed */
-  .gb-led-main { flex: 1 1 auto; min-width: 140px; }
+  .gb-led-row { flex-wrap: nowrap; gap: 12px; align-items: center; }
+  .gb-led-main { flex: 1 1 auto; min-width: 90px; }   /* takes the slack; won't collapse past ~90px */
   .gb-led-label,
-  .gb-led-meta {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  /* split avatars + "split N" — fixed column so rows align vertically */
-  .gb-led-split {
-    flex: 0 0 auto;
-    width: 128px;             /* fits a "split 4" group (your data); widen for 5+ */
-    justify-content: flex-start;
-  }
-
-  /* paid avatar + label — fixed column */
-  .gb-led-paid {
-    flex: 0 0 auto;
-    width: 72px;
-  }
-
-  /* amount, right-aligned, fixed column */
-  .gb-led-amt {
-    flex: 0 0 auto;
-    width: 110px;             /* fits "12 344 125 Kč"; raise for bigger numbers */
-    text-align: right;
-  }
+  .gb-led-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* content-sized columns (override the base fixed widths) so the row fits a
+     narrow card; amount keeps a small floor + right-align so numbers line up. */
+  .gb-led-split { flex: 0 0 auto; width: auto; justify-content: flex-start; }
+  .gb-led-paid  { flex: 0 0 auto; width: auto; }
+  .gb-led-amt   { flex: 0 0 auto; width: auto; min-width: 76px; text-align: right; }
 }
 
 /* ── split & members ── */
@@ -3251,6 +3232,28 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 .gb-modal { max-width: 560px; }
 .gb-modal--sm { max-width: 420px; }
 .gb-modal-body { padding: 18px 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* Add-Expense modal — tablet & desktop (≥641px): the field body becomes a real
+   2-column grid. Phones (≤640px) are left EXACTLY as-is — the expense body's
+   inline display:block + per-field marginTop drive its single-column layout.
+   The two !important rules exist only to defeat those phone INLINE styles on
+   wider screens (nothing in a stylesheet can otherwise beat an inline style).
+   Amount + Category pair on one row; title/desc and every wider field span both
+   columns. The person modal is untouched (its fields carry inline grid-column
+   1/-1, which beats these rules). */
+@media (min-width: 641px) {
+  /* The expense modal carries gb-modal--sm (420px) — but that small variant is
+     meant for the confirm/delete dialog. Restore the intended 560px on desktop,
+     targeting only the expense modal (it has the receipt scanner); the person
+     modal, also gb-modal--sm, stays 420px. Higher specificity beats .gb-modal--sm. */
+  .gb-modal--sm:has(.gb-scan-field) { width: min(560px, 100%); }
+  .gb-modal-body { display: grid !important; grid-template-columns: 1fr 1fr; gap: 14px 18px; align-items: start; }
+  .gb-modal-body > .gb-fld,
+  .gb-modal-body > .gb-scan-field { margin-top: 0 !important; }
+  .gb-modal-body > * { grid-column: 1 / -1; }                    /* full width by default */
+  .gb-modal-body > .gb-fld:has(.gb-amt),                         /* Amount … */
+  .gb-modal-body > .gb-fld:has(> select) { grid-column: auto; }  /* … + Category pair up */
+}
 .gb-field { display: flex; flex-direction: column; gap: 6px; }
 .gb-field--label { grid-column: 1 / -1; }
 .gb-field label { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; color: var(--fg-2); text-transform: uppercase; }
@@ -3856,15 +3859,15 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
    vertically centred via the button's own align-items:center. */
 .gb-head > .add-expense-btn { align-self: stretch; margin: 0 4px 0 0; font-size: 18px; gap: 11px; }
 .gb-head > .add-expense-btn .ae-plus { width: 32px; height: 32px; }
-/* App glue: the trip detail stacks vertically — "Who paid what" (.otr) over the
-   desktop-only "Spend over time" curve (.tc-spend), then "Settle up" (.rec).
-   It WAS a two-column board (1.6fr/1fr), but the page caps at 760px on desktop,
-   which squeezed the ledger column to ~426px inner — too narrow for the live
-   single-line .gb-led-row (fixed columns sum to ~486px). Full-width gives the
-   ledger its span-8-equivalent room (~730px inner). ≤900px already hides the
-   spend curve. Wrappers live in TripDetail.tsx; sibling rules cancel
-   trip-cards.css's .tc-card+.tc-card margin so the grid/flex gap owns spacing. */
-.tc-board { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; margin-bottom: 16px; }
+/* App glue: on desktop (≥900px) the trip detail is a two-column board — the left
+   column (.tc-board-main) stacks "Who paid what" (.otr) over the desktop-only
+   "Spend over time" curve (.tc-spend); the right column is "Settle up" (.rec).
+   At ≤900px it collapses to one column and the spend curve is hidden (phone
+   layout). The ledger row hugs its content (see the ≥641px .gb-led-* block) so it
+   fits the ~407px left column at the 760px page cap — no full-width needed.
+   Wrappers live in TripDetail.tsx; sibling rules cancel trip-cards.css's
+   .tc-card+.tc-card margin so the grid/flex gap owns spacing. */
+.tc-board { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; align-items: start; margin-bottom: 16px; }
 .tc-board-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .tc-board-main > .tc-card + .tc-card { margin-top: 0; }
 .tc-spend-total { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; }

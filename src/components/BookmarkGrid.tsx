@@ -901,6 +901,8 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
     showGoals,
     showTodoDates,
     setShowTodoDates,
+    showFocusDrawer,
+    setShowFocusDrawer,
     showBothNavButtons,
     setShowBothNavButtons,
     gridLocked,
@@ -1359,6 +1361,14 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
             >
               <span>Show both Dashboard and Visual Flow buttons</span>
               <span className="text-xs text-emerald-300/60">{showBothNavButtons ? "On" : "Off"}</span>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => setShowFocusDrawer(!showFocusDrawer)}
+            >
+              <span>Show Focused tasks drawer (Visual Flow)</span>
+              <span className="text-xs text-emerald-300/60">{showFocusDrawer ? "On" : "Off"}</span>
             </button>
             <div className="my-1.5 border-t border-white/10" />
             <div className="rounded-xl border border-white/10 bg-white/5 p-2">

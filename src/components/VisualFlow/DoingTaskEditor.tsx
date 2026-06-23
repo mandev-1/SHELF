@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import type { ShelfPillarTodoItem, ShelfTodoChecklistItem } from "../../types/grid";
+import { continueNoteListOnEnter } from "../../utils/noteLists";
 
 function newChecklistId(): string {
   try {
@@ -36,6 +37,8 @@ export function DoingTaskEditor({ task, planeLabel, planeColor, onSave, onJump, 
   const [checklist, setChecklist] = useState<ShelfTodoChecklistItem[]>(
     () => (task.checklist ?? []).map((c) => ({ ...c })),
   );
+  // First Esc arms a "press Esc again" hint; second Esc closes. Any other key/click disarms.
+  const [escapePrompted, setEscapePrompted] = useState(false);
 
   const addSubtask = () => setChecklist((cs) => [...cs, { id: newChecklistId(), text: "", done: false }]);
   const editSubtask = (id: string, patch: Partial<ShelfTodoChecklistItem>) =>
@@ -62,7 +65,22 @@ export function DoingTaskEditor({ task, planeLabel, planeColor, onSave, onJump, 
   return (
     // Pinned to the canvas with `inset: 0` (NOT fixed, NOT portaled) — fills the
     // canvas box exactly, corners clipped by the canvas's overflow:hidden+radius.
-    <div className="nf-te" role="dialog" aria-modal="true">
+    <div className="nf-te" role="dialog" aria-modal="true"
+      onMouseDown={() => { if (escapePrompted) setEscapePrompted(false); }}
+      onKeyDown={(e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+          e.preventDefault();
+          save();
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          if (escapePrompted) onClose();
+          else setEscapePrompted(true);
+          return;
+        }
+        if (escapePrompted) setEscapePrompted(false);
+      }}>
       {/* fixed top bar */}
       <div className="nf-te-head">
         <div className="nf-te-eyebrow">
@@ -71,6 +89,7 @@ export function DoingTaskEditor({ task, planeLabel, planeColor, onSave, onJump, 
           <span className="nf-te-kicker">Edit task</span>
         </div>
         <div className="nf-te-actions">
+          {escapePrompted && <span className="nf-te-esc-hint">Press Esc again to close</span>}
           <button type="button" className="nf-editor-ghost" onClick={onJump}>Jump to node</button>
           <button type="button" className="nf-editor-ghost" onClick={onClose}>Cancel</button>
           <button type="button" className="nf-editor-save" onClick={save}>Save changes</button>
@@ -96,7 +115,8 @@ export function DoingTaskEditor({ task, planeLabel, planeColor, onSave, onJump, 
             <label className="nf-fld">
               <span className="nf-fld-lab">Note</span>
               <textarea className="nf-fld-input nf-te-note" value={note} placeholder="Optional"
-                onChange={(e) => setNote(e.target.value)} />
+                onChange={(e) => setNote(e.target.value)}
+                onKeyDown={(e) => continueNoteListOnEnter(e, setNote)} />
             </label>
             <div className="nf-fld">
               <span className="nf-fld-lab">Checklist</span>
@@ -108,7 +128,7 @@ export function DoingTaskEditor({ task, planeLabel, planeColor, onSave, onJump, 
                     <input className={"nf-fld-input nf-te-check-input" + (c.done ? " is-done" : "")} value={c.text}
                       placeholder="Subtask"
                       onChange={(e) => editSubtask(c.id, { text: e.target.value })}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSubtask(); } }} />
+                      onKeyDown={(e) => { if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) { e.preventDefault(); addSubtask(); } }} />
                     <button type="button" className="nf-te-check-rm" onClick={() => removeSubtask(c.id)} aria-label="Remove subtask">×</button>
                   </div>
                 ))}

@@ -48,6 +48,7 @@ import {
 } from "../../types/grid";
 import { NoteContent, linkifyText } from "../NoteContent";
 import { applyTodoUpdate, stampNewTodo } from "../../utils/todoAudit";
+import { continueNoteListOnEnter } from "../../utils/noteLists";
 import { exportFlowAsMarkdown } from "./exportFlow";
 import { writePlane, getPlaneSizes, type PlaneId } from "./visualFlowWriter";
 
@@ -402,55 +403,7 @@ function NodeEditCard({
   }, [text, note, potentialValue, tag, subtitle, blockStatus, date, sectorName, sectorColor, onSave, requestClose]);
 
   const handleNoteKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
-    const el = e.currentTarget;
-    const { selectionStart, selectionEnd, value } = el;
-    if (selectionStart !== selectionEnd) return;
-    const lineStart = value.lastIndexOf("\n", selectionStart - 1) + 1;
-    const line = value.slice(lineStart, selectionStart);
-
-    // checklist (- [ ] / - [x] / - []), ordered (1. / 1)), unordered (- / *), or
-    // quote (>) markers. Checklist is matched FIRST — otherwise the unordered
-    // regex swallows "[ ] text" as plain content and the box is lost on Enter.
-    const checklist = line.match(/^(\s*)([-*])(\s+)\[([ xX]?)\](\s+)(.*)$/);
-    const ordered = line.match(/^(\s*)(\d+)([.)])(\s+)(.*)$/);
-    const unordered = line.match(/^(\s*)([-*])(\s+)(.*)$/);
-    const quote = line.match(/^(\s*)(>)(\s+)(.*)$/);
-    const match = checklist ?? ordered ?? unordered ?? quote;
-    if (!match) return;
-
-    const indent = match[1];
-    const content = match[match.length - 1];
-
-    e.preventDefault();
-
-    let nextValue: string;
-    let nextCaret: number;
-    if (content.trim() === "") {
-      // empty list item -> exit the list, clearing the marker on this line
-      nextValue = value.slice(0, lineStart) + indent + value.slice(selectionStart);
-      nextCaret = lineStart + indent.length;
-    } else {
-      let marker: string;
-      if (checklist) {
-        // Continue the checklist with a fresh UNCHECKED box, preserving spacing.
-        marker = `${indent}${checklist[2]}${checklist[3]}[ ]${checklist[5]}`;
-      } else if (ordered) {
-        marker = `${indent}${Number(ordered[2]) + 1}${ordered[3]}${ordered[4]}`;
-      } else if (unordered) {
-        marker = `${indent}${unordered[2]}${unordered[3]}`;
-      } else {
-        marker = `${indent}${quote![2]}${quote![3]}`;
-      }
-      const insert = `\n${marker}`;
-      nextValue = value.slice(0, selectionStart) + insert + value.slice(selectionEnd);
-      nextCaret = selectionStart + insert.length;
-    }
-
-    setNote(nextValue);
-    requestAnimationFrame(() => {
-      el.selectionStart = el.selectionEnd = nextCaret;
-    });
+    continueNoteListOnEnter(e, setNote);
   }, []);
 
   useEffect(() => {
@@ -1323,6 +1276,7 @@ function VisualFlowPanelInner({
   grazelandItems = [],
   binItems = [],
   showTodoDates = false,
+  showFocusDrawer = true,
   visualFlow,
   onUpdateVisualFlow,
   focusDesynced = false,
@@ -1346,6 +1300,8 @@ function VisualFlowPanelInner({
   grazelandItems?: ShelfPillarTodoItem[];
   binItems?: ShelfPillarTodoItem[];
   showTodoDates?: boolean;
+  /** Whether the Focused-tasks drawer (+ its handle) is shown. Toggled in settings. */
+  showFocusDrawer?: boolean;
   visualFlow: VisualFlowData;
   /**
    * Single write path for visualFlow. Always functional-updater — reads React's
@@ -3326,11 +3282,11 @@ function VisualFlowPanelInner({
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
     const mq = window.matchMedia("(min-width: 1921px)");
-    const update = () => setDockedAlways(mq.matches);
+    const update = () => setDockedAlways(mq.matches && showFocusDrawer);
     update();
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
-  }, []);
+  }, [showFocusDrawer]);
 
   // After a cross-plane jump, pan to the target node once it has mounted on the
   // newly-active plane. Guarded by the ref so it only fires for a pending jump.
@@ -3346,7 +3302,7 @@ function VisualFlowPanelInner({
     return () => cancelAnimationFrame(raf);
   }, [nodes, plane, getNodes, panToNode]);
 
-  const drawerVisible = drawerOpen || dockedAlways;
+  const drawerVisible = showFocusDrawer && (drawerOpen || dockedAlways);
 
   // Decouple the (potentially heavy) content mount from the slide so the panel
   // glides in smoothly instead of stuttering while React mounts the task list:
@@ -4673,9 +4629,9 @@ function VisualFlowPanelInner({
 
           </section>
 
-          {/* Hover trigger + pull-handle: only on narrower screens. On wide
-              screens the drawer is permanently docked, so neither is needed. */}
-          {!dockedAlways && (
+          {/* Hover trigger + pull-handle: only when the drawer is enabled, and
+              only on narrower screens (wide screens dock it open). */}
+          {showFocusDrawer && !dockedAlways && (
             <>
               <div
                 className="fixed right-0 top-0 bottom-0 w-5 z-[100] cursor-default"

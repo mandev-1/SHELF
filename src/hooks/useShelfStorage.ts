@@ -133,6 +133,7 @@ const SEPARATORS_KEY = "shelf-separators";
 const GOALS_KEY = "shelf-goals";
 const SHOW_GOALS_KEY = "show-goals";
 const SHOW_TODO_DATES_KEY = "show-todo-dates";
+const SHOW_FOCUS_DRAWER_KEY = "shelf-show-focus-drawer";
 const BOOKMARK_VIEW_KEY = "bookmark-view";
 const BOOKMARK_OVERRIDES_KEY = "bookmark-overrides";
 const PILLAR_KEY = "pillar-pins";
@@ -422,6 +423,7 @@ export function useShelfStorage() {
   const [goals, setGoals] = useState<ShelfGoalMap>({});
   const [showGoals, setShowGoals] = useState(false);
   const [showTodoDates, setShowTodoDates] = useState(false);
+  const [showFocusDrawer, setShowFocusDrawer] = useState(true);
   const [bookmarkViews, setBookmarkViews] = useState<ShelfBookmarkViewMap>({});
   const [bookmarkOverrides, setBookmarkOverrides] = useState<ShelfBookmarkOverrides>({});
   const [pillarPins, setPillarPins] = useState<{
@@ -483,6 +485,7 @@ export function useShelfStorage() {
         GOALS_KEY,
         SHOW_GOALS_KEY,
         SHOW_TODO_DATES_KEY,
+        SHOW_FOCUS_DRAWER_KEY,
         BOOKMARK_VIEW_KEY,
         BOOKMARK_OVERRIDES_KEY,
         PILLAR_KEY,
@@ -551,6 +554,7 @@ export function useShelfStorage() {
       setGoals(normalizeGoals(result[GOALS_KEY]));
       setShowGoals(result[SHOW_GOALS_KEY] === true);
       setShowTodoDates(result[SHOW_TODO_DATES_KEY] === true);
+      setShowFocusDrawer(result[SHOW_FOCUS_DRAWER_KEY] !== false);
       setBookmarkViews(
         result[BOOKMARK_VIEW_KEY] && typeof result[BOOKMARK_VIEW_KEY] === "object" && !Array.isArray(result[BOOKMARK_VIEW_KEY])
           ? (result[BOOKMARK_VIEW_KEY] as ShelfBookmarkViewMap)
@@ -1318,6 +1322,11 @@ export function useShelfStorage() {
     getStorage()?.set({ [SHOW_TODO_DATES_KEY]: next });
   }, []);
 
+  const setShowFocusDrawerState = useCallback((next: boolean) => {
+    setShowFocusDrawer(next);
+    getStorage()?.set({ [SHOW_FOCUS_DRAWER_KEY]: next });
+  }, []);
+
   const savePrompts = useCallback((next: ShelfPromptMap) => {
     setPrompts(next);
     getStorage()?.set({ [PROMPTS_KEY]: next });
@@ -1546,6 +1555,7 @@ export function useShelfStorage() {
       goals,
       showGoals,
       showTodoDates,
+      showFocusDrawer,
       pillarPins,
       pillarTodos,
       prompts,
@@ -1572,7 +1582,7 @@ export function useShelfStorage() {
       vfGoals,
       budget: budgetState,
     };
-  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState, inventoryItems, vfGoals, budgetState]);
+  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showFocusDrawer, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState, inventoryItems, vfGoals, budgetState]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -1585,6 +1595,7 @@ export function useShelfStorage() {
     if (typeof backup.gridLocked === "boolean") setGridLocked(backup.gridLocked);
     if (typeof backup.showGoals === "boolean") setShowGoals(backup.showGoals);
     if (typeof backup.showTodoDates === "boolean") setShowTodoDates(backup.showTodoDates);
+    if (typeof backup.showFocusDrawer === "boolean") setShowFocusDrawer(backup.showFocusDrawer);
     if (backup.pillarPins && typeof backup.pillarPins === "object") {
       const raw = backup.pillarPins as any;
       setPillarPins({
@@ -1636,6 +1647,7 @@ export function useShelfStorage() {
       [GOALS_KEY]: backup.goals ?? goals,
       [SHOW_GOALS_KEY]: typeof backup.showGoals === "boolean" ? backup.showGoals : showGoals,
       [SHOW_TODO_DATES_KEY]: typeof backup.showTodoDates === "boolean" ? backup.showTodoDates : showTodoDates,
+      [SHOW_FOCUS_DRAWER_KEY]: typeof backup.showFocusDrawer === "boolean" ? backup.showFocusDrawer : showFocusDrawer,
       [PILLAR_KEY]: backup.pillarPins
         ? {
             top: Array.isArray((backup.pillarPins as any).top) ? (backup.pillarPins as any).top.slice(0, 6) : [],
@@ -1668,7 +1680,7 @@ export function useShelfStorage() {
       [VF_GOALS_KEY]: Array.isArray(backup.vfGoals) ? normalizeVfGoals(backup.vfGoals) : vfGoals,
       [BUDGET_KEY]: backup.budget ? normalizeBudget(backup.budget) : budgetState,
     });
-  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setHopperFace, setGrazelandItems, setSaleItems, strategieState, setStrategie, inventoryItems, vfGoals, budgetState, setBudget]);
+  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showFocusDrawer, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setHopperFace, setGrazelandItems, setSaleItems, strategieState, setStrategie, inventoryItems, vfGoals, budgetState, setBudget]);
 
   return {
     layout,
@@ -1679,6 +1691,8 @@ export function useShelfStorage() {
     showGoals,
     showTodoDates,
     setShowTodoDates: setShowTodoDatesState,
+    showFocusDrawer,
+    setShowFocusDrawer: setShowFocusDrawerState,
     bookmarkViews,
     bookmarkOverrides,
     setBookmarkOverride,
