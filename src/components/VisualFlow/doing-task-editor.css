@@ -45,7 +45,7 @@
 
 /* TITLE is the prominent field */
 .nf-te-title { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
-.nf-te-note { height: 376px; min-height: 2rem; resize: vertical; line-height: 1.5; }
+.nf-te-note { height: 298px; min-height: 2rem; resize: vertical; line-height: 1.5; }
 
 /* Link field: icon prefix + inline "Open ↗" affordance */
 .nf-fld-link { position: relative; display: flex; align-items: center; }

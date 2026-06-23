@@ -82,7 +82,9 @@ export function BlockerNode({ blocker, now, dragging, flashing, onEdit, onClear,
   const st = nfBlockerStatus(blocker.due, blocker.dur, now);
   return (
     <div
-      className={"nf-blocker nf-blocker--" + st.phase + (dragging ? " nf-blocker--dragging" : "") + (flashing ? " nf-blocker--flash" : "")}
+      // `nopan nodrag` — keep React Flow's pane from panning/capturing the pointer
+      // so our custom drag (onPointerDown → updateBlocker) actually moves the node.
+      className={"nf-blocker nopan nodrag nf-blocker--" + st.phase + (dragging ? " nf-blocker--dragging" : "") + (flashing ? " nf-blocker--flash" : "")}
       style={{ left: blocker.x, top: blocker.y }}
       onPointerDown={onPointerDown}
       onContextMenu={(e) => { e.preventDefault(); onEdit && onEdit(e); }}>
