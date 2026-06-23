@@ -45,7 +45,14 @@
 
 /* TITLE is the prominent field */
 .nf-te-title { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
-.nf-te-note { min-height: 540px; resize: vertical; line-height: 1.5; }
+.nf-te-note { height: 376px; min-height: 2rem; resize: vertical; line-height: 1.5; }
+
+/* Link field: icon prefix + inline "Open ↗" affordance */
+.nf-fld-link { position: relative; display: flex; align-items: center; }
+.nf-fld-link-icon { position: absolute; left: 12px; width: 15px; height: 15px; color: var(--dim); pointer-events: none; }
+.nf-fld-link .nf-fld-input { flex: 1; padding-left: 36px; padding-right: 70px; }
+.nf-fld-link-open { position: absolute; right: 7px; font-size: 11.5px; font-weight: 600; color: var(--accent); text-decoration: none; padding: 3px 7px; border-radius: 6px; }
+.nf-fld-link-open:hover { color: var(--accent-bright, var(--accent)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 
 /* checklist / subtasks */
 .nf-te-check { display: flex; flex-direction: column; gap: 7px; }

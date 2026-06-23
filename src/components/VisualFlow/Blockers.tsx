@@ -133,12 +133,14 @@ export interface BlockerDraftProps {
 }
 
 export function BlockerDraft({ draft, setDraft, onCommit, onCancel }: BlockerDraftProps) {
+  // Positioned entirely in CSS as a top-anchored, centered, height-capped modal
+  // (NOT click-anchored). The create flow opens from the bottom Doing-now drawer,
+  // so a popover placed at the click point slid under the viewport's bottom edge;
+  // anchoring high + max-height/scroll guarantees the footer is always reachable.
   return (
     <Fragment>
       <div className="nf-menu-scrim" onMouseDown={onCancel} onContextMenu={(e) => { e.preventDefault(); onCancel(); }}></div>
-      <div className="nf-blocker-draft"
-        style={{ left: Math.max(8, Math.min(draft.x, window.innerWidth - 280)), top: Math.max(8, Math.min(draft.y, window.innerHeight - 260)) }}
-        onMouseDown={(e) => e.stopPropagation()}>
+      <div className="nf-blocker-draft" onMouseDown={(e) => e.stopPropagation()}>
         <div className="nf-blocker-draft-title">⛔ {draft.edit ? "Edit blocker" : "New blocker"}</div>
         <label className="nf-fld">
           <span className="nf-fld-lab">Label</span>

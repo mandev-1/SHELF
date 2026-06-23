@@ -15,6 +15,7 @@ import {
   SelectionMode,
   Background,
   BackgroundVariant,
+  ViewportPortal,
   type Node,
   type Edge,
   type Connection,
@@ -25,7 +26,7 @@ import "@xyflow/react/dist/style.css";
 import "./doing-now.css";
 import { DoingNow, useDoingPipeline, type DoingTask, type DoingPipelineState } from "./DoingNow";
 import "./blockers.css";
-import { BlockerDraft, nfBlockerStatus, nfToDatetimeLocal, type BlockerDraftState } from "./Blockers";
+import { BlockerNode, BlockerDraft, nfBlockerStatus, nfToDatetimeLocal, type BlockerDraftState } from "./Blockers";
 import "./doing-task-editor.css";
 import { DoingTaskEditor } from "./DoingTaskEditor";
 import { Input } from "@heroui/react";
@@ -1772,26 +1773,30 @@ function VisualFlowPanelInner({
     [flushCanvasToVisualFlow, getViewport, nodes, edges, plane, onUpdateVisualFlow]
   );
 
-  // ── Blockers (handoff 011): time-block entries that live in the Doing-now
-  // pipeline (NOT canvas nodes). visualFlow.blockers holds the metadata; the id
-  // also sits in visualFlow.doingNow.pipeline so it shows in Up Next and jumps to
-  // the active slot when its start time hits. A 15s clock drives the phases.
+  // ── Blockers (handoff 011): time-block nodes that live ON the main canvas AND
+  // feed the Doing-now pipeline. visualFlow.blockers holds {id,label,due,dur,x,y};
+  // the id also sits in visualFlow.doingNow.pipeline so it shows in Up Next and
+  // jumps to the active slot when it fires. A 15s clock drives the phases.
   const [blockerNow, setBlockerNow] = useState(() => Date.now());
   const [blockerDraft, setBlockerDraft] = useState<BlockerDraftState | null>(null);
+  const [blockerMenu, setBlockerMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [blockerDrag, setBlockerDrag] = useState<{ id: string; x: number; y: number } | null>(null);
+  // Right-click menu on the Doing-now drawer (currently just "Add blocker").
+  const [doingMenu, setDoingMenu] = useState<{ x: number; y: number } | null>(null);
   const firedBlockersRef = useRef<Record<string, boolean>>({});
   // Full-screen "Edit task" editor opened from a Doing-now task item (by plane + id).
   const [taskEditor, setTaskEditor] = useState<{ id: string; plane: string } | null>(null);
 
-  // Create a blocker AND enqueue it into the Doing-now pipeline (opens the drawer).
+  // Create a blocker at flow position (fx,fy) AND enqueue it into Doing-now (opens the drawer).
   const addBlocker = useCallback(
-    (label: string, dueMs: number, dur: number) => {
+    (fx: number, fy: number, label: string, dueMs: number, dur: number) => {
       const id = `blk-${Date.now().toString(36)}`;
       onUpdateVisualFlow((prev) => {
         const pipe = prev.doingNow?.pipeline ?? [];
         const nextPipe = pipe.includes(id) || pipe.length >= 7 ? pipe : [...pipe, id];
         return {
           ...prev,
-          blockers: [...(prev.blockers ?? []), { id, label: label || "Blocker", due: dueMs, dur: dur || 30 }],
+          blockers: [...(prev.blockers ?? []), { id, label: label || "Blocker", due: dueMs, dur: dur || 30, x: fx, y: fy }],
           doingNow: { pipeline: nextPipe, open: true },
         };
       });
@@ -1803,6 +1808,43 @@ function VisualFlowPanelInner({
       onUpdateVisualFlow((prev) => ({ ...prev, blockers: (prev.blockers ?? []).map((b) => (b.id === id ? { ...b, ...patch } : b)) }));
     },
     [onUpdateVisualFlow]
+  );
+  // Clear a blocker from BOTH the canvas and the Doing-now pipeline.
+  const removeBlocker = useCallback(
+    (id: string) => {
+      onUpdateVisualFlow((prev) => ({
+        ...prev,
+        blockers: (prev.blockers ?? []).filter((b) => b.id !== id),
+        doingNow: { pipeline: (prev.doingNow?.pipeline ?? []).filter((x) => x !== id), open: prev.doingNow?.open ?? false },
+      }));
+    },
+    [onUpdateVisualFlow]
+  );
+  // Drag a canvas blocker: screen→flow each move; commit once on release.
+  const onBlockerPointerDown = useCallback(
+    (e: React.PointerEvent, b: Blocker) => {
+      if ((e.target as Element).closest("button")) return; // let the Clear button work
+      e.stopPropagation();
+      const start = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const dx = start.x - (b.x ?? 0);
+      const dy = start.y - (b.y ?? 0);
+      let last = { x: b.x ?? 0, y: b.y ?? 0 };
+      setBlockerDrag({ id: b.id, x: last.x, y: last.y });
+      const move = (ev: PointerEvent) => {
+        const f = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
+        last = { x: f.x - dx, y: f.y - dy };
+        setBlockerDrag({ id: b.id, x: last.x, y: last.y });
+      };
+      const up = () => {
+        document.removeEventListener("pointermove", move);
+        document.removeEventListener("pointerup", up);
+        updateBlocker(b.id, { x: last.x, y: last.y });
+        setBlockerDrag(null);
+      };
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", up);
+    },
+    [screenToFlowPosition, updateBlocker]
   );
 
   // Reuse the toolbar's export-toast slot to surface the "blocking now" alert.
@@ -1978,7 +2020,7 @@ function VisualFlowPanelInner({
       updateBlocker(blockerDraft.edit, { label, due: dueMs, dur: blockerDraft.dur });
       firedBlockersRef.current[blockerDraft.edit] = false; // re-arm after a time change
     } else {
-      addBlocker(label, dueMs, blockerDraft.dur);
+      addBlocker(blockerDraft.fx ?? 0, blockerDraft.fy ?? 0, label, dueMs, blockerDraft.dur);
     }
     setBlockerDraft(null);
   }, [blockerDraft, addBlocker, updateBlocker]);
@@ -2370,6 +2412,9 @@ function VisualFlowPanelInner({
 
   const onPaneContextMenu = useCallback(
     (e: React.MouseEvent | MouseEvent) => {
+      // Right-clicking a blocker (or a menu/draft) opens that element's own menu —
+      // don't also open the canvas "add" menu (handoff 011 guard).
+      if (e.target instanceof Element && e.target.closest(".nf-blocker, .nf-menu, .nf-blocker-draft")) return;
       e.preventDefault();
       setEdgeMenu(null);
       const selectedIds = getNodes()
@@ -3655,6 +3700,24 @@ function VisualFlowPanelInner({
                   size={1}
                   className="shelf-vf-dots"
                 />
+                {plane === "main" && (
+                  <ViewportPortal>
+                    {(visualFlow.blockers ?? []).map((b) => {
+                      const pos = blockerDrag && blockerDrag.id === b.id ? blockerDrag : { x: b.x ?? 0, y: b.y ?? 0 };
+                      return (
+                        <BlockerNode
+                          key={b.id}
+                          blocker={{ ...b, x: pos.x, y: pos.y }}
+                          now={blockerNow}
+                          dragging={blockerDrag?.id === b.id}
+                          onPointerDown={(e) => onBlockerPointerDown(e, b)}
+                          onEdit={(e) => setBlockerMenu({ id: b.id, x: e.clientX, y: e.clientY })}
+                          onClear={() => removeBlocker(b.id)}
+                        />
+                      );
+                    })}
+                  </ViewportPortal>
+                )}
               </ReactFlow>
               {canvasItems.length === 0 && (
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-4">
@@ -3669,7 +3732,10 @@ function VisualFlowPanelInner({
                   </p>
                 </div>
               )}
-              <DoingNow {...doingPipeline.drawerProps} />
+              <DoingNow
+                {...doingPipeline.drawerProps}
+                onContextMenu={(e) => { e.preventDefault(); setDoingMenu({ x: e.clientX, y: e.clientY }); }}
+              />
               {/* "Edit task" editor — overlays only the canvas (opened from a Doing-now task) */}
               {taskEditor && (() => {
                 const pk = taskEditor.plane;
@@ -4484,20 +4550,6 @@ function VisualFlowPanelInner({
                       className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (!paneMenu) return;
-                        const d = new Date(Date.now() + 60 * 60000);
-                        d.setSeconds(0, 0);
-                        setBlockerDraft({ x: paneMenu.x, y: paneMenu.y, label: "", due: nfToDatetimeLocal(d.getTime()), dur: 30 });
-                        setPaneMenu(null);
-                      }}
-                    >
-                      ⛔ Add blocker to Up Next
-                    </button>
-                    <button
-                      type="button"
-                      className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10"
-                      onClick={(e) => {
-                        e.stopPropagation();
                         handleOpenSectorManager();
                       }}
                     >
@@ -4522,6 +4574,64 @@ function VisualFlowPanelInner({
                 )}
               </div>
             );
+            })()}
+
+            {/* Doing-now drawer right-click menu (add a blocker) */}
+            {doingMenu && (
+              <>
+                <div className="nf-menu-scrim" onMouseDown={() => setDoingMenu(null)} onContextMenu={(e) => { e.preventDefault(); setDoingMenu(null); }} />
+                <div
+                  className="nf-menu"
+                  style={{ left: Math.min(doingMenu.x, window.innerWidth - 190), top: Math.min(doingMenu.y, window.innerHeight - 70) }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="nf-menu-item"
+                    onClick={() => {
+                      // Drop the new blocker at the centre of the visible canvas.
+                      const flow = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                      const d = new Date(Date.now() + 60 * 60000);
+                      d.setSeconds(0, 0);
+                      setBlockerDraft({ x: doingMenu.x, y: doingMenu.y, fx: flow.x, fy: flow.y, label: "", due: nfToDatetimeLocal(d.getTime()), dur: 30 });
+                      setDoingMenu(null);
+                    }}
+                  >
+                    ⛔ Add blocker
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Canvas blocker right-click menu (edit time / clear) */}
+            {blockerMenu && (() => {
+              const b = (visualFlow.blockers ?? []).find((x) => x.id === blockerMenu.id);
+              if (!b) return null;
+              return (
+                <>
+                  <div className="nf-menu-scrim" onMouseDown={() => setBlockerMenu(null)} onContextMenu={(e) => { e.preventDefault(); setBlockerMenu(null); }} />
+                  <div
+                    className="nf-menu"
+                    style={{ left: Math.min(blockerMenu.x, window.innerWidth - 190), top: Math.min(blockerMenu.y, window.innerHeight - 110) }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      className="nf-menu-item"
+                      onClick={() => {
+                        setBlockerDraft({ x: blockerMenu.x, y: blockerMenu.y, fx: b.x ?? 0, fy: b.y ?? 0, label: b.label, due: nfToDatetimeLocal(b.due), dur: b.dur, edit: b.id });
+                        setBlockerMenu(null);
+                      }}
+                    >
+                      Edit time…
+                    </button>
+                    <div className="nf-menu-sep" />
+                    <button type="button" className="nf-menu-item warn" onClick={() => { removeBlocker(b.id); setBlockerMenu(null); }}>
+                      Clear blocker
+                    </button>
+                  </div>
+                </>
+              );
             })()}
 
             {/* Blocker create/edit popover */}

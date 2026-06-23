@@ -92,21 +92,35 @@
 .nf-doing-card-rm:hover { color: #ef4444; background: color-mix(in srgb, #ef4444 10%, transparent); }
 .nf-doing-pipe-empty { display: flex; align-items: center; justify-content: center; width: 100%; border: 1.5px dashed var(--line); border-radius: 12px; font-size: 12px; color: var(--dim); }
 
-/* blocker items in the queue (handoff 011 vocabulary inside the doing-now cards) */
+/* blocker items in the queue (handoff 011 vocabulary inside the doing-now cards) —
+   styled to match the canvas .nf-blocker node: a hazard-striped left edge (drawn
+   as a ::before so no markup change), which also replaces the redundant phase dot. */
 .nf-doing-card-sub { font-size: 10.5px; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; line-height: 1.3; }
-.nf-doing-card--blocker { border-color: color-mix(in srgb, #e6b400 55%, var(--line)); }
+.nf-doing-card--blocker { border-color: color-mix(in srgb, #e6b400 55%, var(--line)); overflow: hidden; padding-left: 22px; }
+/* up-next blockers read MUTED (lower-opacity stripe) — they're queued, not urgent */
+.nf-doing-card--blocker::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 12px; background: repeating-linear-gradient(45deg, #e6b400 0 8px, #1c1c1c 8px 16px); opacity: 0.45; }
+.nf-doing-card--blocker .nf-doing-card-dot { display: none; }
 .nf-doing-card--blocker.nf-doing-card--active { border-color: #ef4444; box-shadow: 0 0 0 2px color-mix(in srgb, #ef4444 22%, transparent), var(--sh-1); }
+/* an active blocker still sitting in the queue gets the full-strength red stripe */
+.nf-doing-card--blocker.nf-doing-card--active::before { background: repeating-linear-gradient(45deg, #ef4444 0 8px, #1c1c1c 8px 16px); opacity: 1; }
 .nf-doing-card--blocker.nf-doing-card--active .nf-doing-card-sub { color: #d6402e; font-weight: 700; }
 .nf-doing-card--blocker.nf-doing-card--ended { opacity: 0.65; }
+.nf-doing-card--blocker.nf-doing-card--ended::before { background: repeating-linear-gradient(45deg, var(--faint, #9aa) 0 8px, var(--dim) 8px 16px); }
 
+/* active "Doing now" blocker — same hazard-striped left edge as the canvas node */
+.nf-doing-active--blocker { position: relative; overflow: hidden; padding-left: 24px; }
+.nf-doing-active--blocker::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 12px; background: repeating-linear-gradient(45deg, #e6b400 0 8px, #1c1c1c 8px 16px); }
+.nf-doing-active--blocker .nf-doing-active-dot { display: none; }
 .nf-doing-active--blocker.nf-doing-active--pending { border-color: color-mix(in srgb, #e6b400 55%, transparent); background: color-mix(in srgb, #e6b400 7%, var(--surface)); }
 .nf-doing-active--blocker.nf-doing-active--active {
   border-color: #ef4444; background: color-mix(in srgb, #ef4444 8%, var(--surface));
   box-shadow: 0 0 0 3px color-mix(in srgb, #ef4444 20%, transparent), var(--sh-2);
   animation: nf-blocker-alarm 1.4s ease-in-out infinite;
 }
+.nf-doing-active--blocker.nf-doing-active--active::before { background: repeating-linear-gradient(45deg, #ef4444 0 8px, #1c1c1c 8px 16px); }
 .nf-doing-active--blocker.nf-doing-active--active .nf-doing-active-note { color: #d6402e; font-weight: 700; }
 .nf-doing-active--blocker.nf-doing-active--ended { border-color: var(--line); opacity: 0.7; }
+.nf-doing-active--blocker.nf-doing-active--ended::before { background: repeating-linear-gradient(45deg, var(--faint, #9aa) 0 8px, var(--dim) 8px 16px); }
 
 @media (prefers-reduced-motion: reduce) {
   .nf-doing, .nf-doing-handle, .nf-doing-arrows svg, .nf-doing-active--blocker { transition: none; animation: none; }

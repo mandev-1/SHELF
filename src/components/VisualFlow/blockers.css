@@ -66,9 +66,17 @@
 .nf-menu-item.warn:hover { background: color-mix(in srgb, #ef4444 10%, transparent); }
 .nf-menu-sep { height: 1px; background: var(--line); margin: 4px 6px; }
 
-/* ── draft popover (set label / start / duration) ── */
+/* ── draft popover (set label / start / duration) ──
+   Top-anchored + horizontally centered modal (NOT click-anchored): the create
+   flow opens from the bottom Doing-now drawer, so positioning at the click point
+   pushed the footer off the bottom of the viewport. Anchoring near the top keeps
+   it clear of any bottom chrome; max-height + scroll covers short viewports. */
 .nf-blocker-draft {
-  position: fixed; z-index: 92; width: 270px; display: flex; flex-direction: column; gap: 12px;
+  position: fixed; z-index: 92;
+  left: 50%; top: clamp(16px, 6vh, 80px); transform: translateX(-50%);
+  width: 270px; max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 104px); overflow-y: auto;
+  display: flex; flex-direction: column; gap: 12px;
   background: var(--surface); border: 1px solid var(--line-strong); border-radius: 14px; padding: 16px; box-shadow: var(--sh-3);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }

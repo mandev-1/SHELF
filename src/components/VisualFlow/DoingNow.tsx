@@ -14,6 +14,7 @@
 // ============================================================================
 
 import { Fragment, useCallback, useMemo } from "react";
+import type { MouseEventHandler } from "react";
 
 export const NF_DOING_MAX = 7; // 1 active + 6 queued
 
@@ -125,13 +126,15 @@ export interface DoingNowProps {
   onPromote: (id: string) => void;
   onRemove: (id: string) => void;
   onEdit: (item: DoingTask) => void;
+  /** Right-click anywhere on the drawer → host opens a menu (e.g. "Add blocker"). */
+  onContextMenu?: MouseEventHandler<HTMLDivElement>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The drawer (presentational). Task markup is verbatim from handoff 010; blocker
 // items render with a hazard tint + countdown (handoff 011 vocabulary).
 // ─────────────────────────────────────────────────────────────────────────────
-export function DoingNow({ active, queue, open, onToggle, onComplete, onPromote, onRemove, onEdit }: DoingNowProps) {
+export function DoingNow({ active, queue, open, onToggle, onComplete, onPromote, onRemove, onEdit, onContextMenu }: DoingNowProps) {
   const count = (active ? 1 : 0) + queue.length;
   return (
     <Fragment>
@@ -145,7 +148,7 @@ export function DoingNow({ active, queue, open, onToggle, onComplete, onPromote,
       </button>
 
       {/* the panel */}
-      <div className={"nf-doing" + (open ? " open" : "")} aria-hidden={!open}>
+      <div className={"nf-doing" + (open ? " open" : "")} aria-hidden={!open} onContextMenu={onContextMenu}>
         <div className="nf-doing-inner">
           {/* active item */}
           <div className="nf-doing-now">

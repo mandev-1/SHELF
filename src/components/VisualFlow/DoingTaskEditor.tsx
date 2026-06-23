@@ -30,6 +30,7 @@ export function DoingTaskEditor({ task, planeLabel, planeColor, onSave, onJump, 
   const [title, setTitle] = useState(task.text ?? "");
   const [subtitle, setSubtitle] = useState(task.subtitle ?? "");
   const [note, setNote] = useState(task.note ?? "");
+  const [link, setLink] = useState(task.url ?? "");
   const [tag, setTag] = useState(task.tag ?? "");
   const [date, setDate] = useState(task.date ?? "");
   const [fixedMeeting, setFixedMeeting] = useState(!!task.fixedMeeting);
@@ -53,6 +54,7 @@ export function DoingTaskEditor({ task, planeLabel, planeColor, onSave, onJump, 
       text: title.trim() || task.text,
       subtitle: subtitle.trim() || undefined,
       note: note.trim() ? note : undefined,
+      url: link.trim() || undefined,
       tag: tag.trim() || undefined,
       date: date.trim() || undefined,
       checklist: cleanedChecklist.length ? cleanedChecklist : undefined,
@@ -117,6 +119,14 @@ export function DoingTaskEditor({ task, planeLabel, planeColor, onSave, onJump, 
               <textarea className="nf-fld-input nf-te-note" value={note} placeholder="Optional"
                 onChange={(e) => setNote(e.target.value)}
                 onKeyDown={(e) => continueNoteListOnEnter(e, setNote)} />
+            </label>
+            <label className="nf-fld">
+              <span className="nf-fld-lab">Link</span>
+              <div className="nf-fld-link">
+                <svg className="nf-fld-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
+                <input className="nf-fld-input" type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://… · paste a URL" />
+                {link.trim() && <a className="nf-fld-link-open" href={link.trim()} target="_blank" rel="noopener noreferrer" title="Open link">Open ↗</a>}
+              </div>
             </label>
             <div className="nf-fld">
               <span className="nf-fld-lab">Checklist</span>
