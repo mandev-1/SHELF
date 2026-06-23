@@ -117,6 +117,7 @@ export default function FullApp() {
     pillarTodoPins,
     setPillarTodoPins,
     focusDesynced,
+    showCanvasBlockers,
     grazelandItems,
     setGrazelandItems,
     binItems,
@@ -695,6 +696,7 @@ export default function FullApp() {
                     visualFlow={visualFlow}
                     onUpdateVisualFlow={updateVisualFlow}
                     focusDesynced={focusDesynced}
+                    showCanvasBlockers={showCanvasBlockers}
                     setPillarTodoPins={setPillarTodoPins}
                     onEditTodo={handleVisualFlowEditTodo}
                     onDeleteTodo={handleVisualFlowDeleteTodo}

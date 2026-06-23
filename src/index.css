@@ -3688,13 +3688,13 @@ body {
   width: 240px; min-width: 0;
   padding: 0 8px;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
   transition: border-color 0.14s, background-color 0.14s;
 }
 .vf-search:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  background: rgba(0, 0, 0, 0.4);
+  border-color: var(--accent);
+  background: var(--surface-3, var(--surface-2));
 }
 .vf-search-ico { flex-shrink: 0; color: var(--dim); }
 .vf-search:focus-within .vf-search-ico { color: var(--accent-bright); }
@@ -3703,10 +3703,10 @@ body {
 .vf-search-in {
   flex: 1; min-width: 0;
   background: transparent; border: 0; outline: none;
-  font-family: inherit; font-size: 12.5px; color: #f4f4f5;
+  font-family: inherit; font-size: 12.5px; color: var(--fg);
   padding: 7px 0;
 }
-.vf-search-in::placeholder { color: rgb(113, 113, 122); }
+.vf-search-in::placeholder { color: var(--dim); }
 .vf-search-x {
   flex-shrink: 0;
   display: grid; place-items: center;
@@ -3729,6 +3729,14 @@ body {
 @media (max-width: 760px) {
   .vf-search { width: 160px; }
 }
+
+/* Visual Flow toolbar row — one line: title · Copy-for-AI · (auto) search · ⛺ Camps.
+   margin-left:auto on the search shoves it AND everything after it (Camps) to the
+   far right, so the two groups split without justify-content:space-between. Sits
+   above .visual-flow-canvas (padding matches the canvas's px-6 / 24px gutter). */
+.nf-bar { display: flex; align-items: center; gap: 10px; padding: 16px 24px 0; }
+.nf-bar-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; color: var(--fg); margin: 0 4px 0 0; }
+.nf-bar > .vf-search { margin-left: auto; }
 
 /* =========================================================
    VISUAL FLOW — Excel-style sheet tabs

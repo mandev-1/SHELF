@@ -162,6 +162,7 @@ const SHOW_BOTH_NAV_BUTTONS_KEY = "shelf-show-both-nav-buttons";
 const PILLAR_TODO_PINS_KEY = "shelf-pillar-todo-pins";
 const FOCUS_DESYNCED_KEY = "shelf-focus-desynced";
 export const LOW_PERFORMANCE_MODE_KEY = "shelf-low-performance-mode";
+const SHOW_CANVAS_BLOCKERS_KEY = "shelf-show-canvas-blockers";
 const SHOW_STRATEGIE_TAB_KEY = "shelf-show-strategie-tab";
 const SHOW_HOPPER_TAB_KEY    = "shelf-show-hopper-tab";
 const SHOW_INVENTORY_TAB_KEY = "shelf-show-inventory-tab";
@@ -456,6 +457,7 @@ export function useShelfStorage() {
   const [pillarTodoPins, setPillarTodoPinsState] = useState<string[]>([]);
   const [focusDesynced, setFocusDesyncedState] = useState(false);
   const [lowPerformanceMode, setLowPerformanceModeState] = useState(false);
+  const [showCanvasBlockers, setShowCanvasBlockersState] = useState(true);
   const [showStrategieTab, setShowStrategieTabState] = useState(true);
   const [showHopperTab,    setShowHopperTabState]    = useState(true);
   const [showInventoryTab, setShowInventoryTabState] = useState(true);
@@ -508,6 +510,7 @@ export function useShelfStorage() {
         PILLAR_TODO_PINS_KEY,
         FOCUS_DESYNCED_KEY,
         LOW_PERFORMANCE_MODE_KEY,
+        SHOW_CANVAS_BLOCKERS_KEY,
         SHOW_STRATEGIE_TAB_KEY,
         SHOW_HOPPER_TAB_KEY,
         SHOW_INVENTORY_TAB_KEY,
@@ -640,6 +643,7 @@ export function useShelfStorage() {
       );
       setFocusDesyncedState(result[FOCUS_DESYNCED_KEY] === true);
       setLowPerformanceModeState(result[LOW_PERFORMANCE_MODE_KEY] === true);
+      setShowCanvasBlockersState(result[SHOW_CANVAS_BLOCKERS_KEY] !== false);
       setShowStrategieTabState(result[SHOW_STRATEGIE_TAB_KEY] !== false);
       setShowHopperTabState   (result[SHOW_HOPPER_TAB_KEY]    !== false);
       setShowInventoryTabState(result[SHOW_INVENTORY_TAB_KEY] !== false);
@@ -764,6 +768,10 @@ export function useShelfStorage() {
       if (changes[SHELF_NAME_KEY]) {
         const v = changes[SHELF_NAME_KEY].newValue;
         if (typeof v === "string") setShelfNameState(v);
+      }
+      if (changes[SHOW_CANVAS_BLOCKERS_KEY]) {
+        const v = changes[SHOW_CANVAS_BLOCKERS_KEY].newValue;
+        if (typeof v === "boolean") setShowCanvasBlockersState(v);
       }
     };
     chrome.storage.onChanged.addListener(listener);
@@ -1419,6 +1427,11 @@ export function useShelfStorage() {
     getStorage()?.set({ [LOW_PERFORMANCE_MODE_KEY]: next });
   }, []);
 
+  const setShowCanvasBlockers = useCallback((next: boolean) => {
+    setShowCanvasBlockersState(next);
+    getStorage()?.set({ [SHOW_CANVAS_BLOCKERS_KEY]: next });
+  }, []);
+
   const setShowStrategieTab = useCallback((next: boolean) => {
     setShowStrategieTabState(next);
     getStorage()?.set({ [SHOW_STRATEGIE_TAB_KEY]: next });
@@ -1574,6 +1587,7 @@ export function useShelfStorage() {
       pillarTodoPins,
       focusDesynced,
       lowPerformanceMode,
+      showCanvasBlockers,
       buylist,
       hopperFace,
       strategie: strategieState,
@@ -1582,7 +1596,7 @@ export function useShelfStorage() {
       vfGoals,
       budget: budgetState,
     };
-  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showFocusDrawer, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState, inventoryItems, vfGoals, budgetState]);
+  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showFocusDrawer, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState, inventoryItems, vfGoals, budgetState, showCanvasBlockers]);
 
   const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
     if (backup.layout) setLayout(backup.layout);
@@ -1631,6 +1645,7 @@ export function useShelfStorage() {
     }
     if (typeof backup.focusDesynced === "boolean") setFocusDesyncedState(backup.focusDesynced);
     if (typeof backup.lowPerformanceMode === "boolean") setLowPerformanceModeState(backup.lowPerformanceMode);
+    if (typeof backup.showCanvasBlockers === "boolean") setShowCanvasBlockersState(backup.showCanvasBlockers);
     if (Array.isArray(backup.buylist)) setBuylist(backup.buylist as BuylistItem[]);
     if (backup.hopperFace === "buy" || backup.hopperFace === "sell") setHopperFace(backup.hopperFace);
     if (backup.strategie) setStrategie(normalizeStrategie(backup.strategie));
@@ -1672,6 +1687,7 @@ export function useShelfStorage() {
       [PILLAR_TODO_PINS_KEY]: Array.isArray(backup.pillarTodoPins) ? backup.pillarTodoPins.slice(0, 6) : pillarTodoPins,
       [FOCUS_DESYNCED_KEY]: typeof backup.focusDesynced === "boolean" ? backup.focusDesynced : focusDesynced,
       [LOW_PERFORMANCE_MODE_KEY]: typeof backup.lowPerformanceMode === "boolean" ? backup.lowPerformanceMode : lowPerformanceMode,
+      [SHOW_CANVAS_BLOCKERS_KEY]: typeof backup.showCanvasBlockers === "boolean" ? backup.showCanvasBlockers : showCanvasBlockers,
       [BUYLIST_KEY]: Array.isArray(backup.buylist) ? backup.buylist : buylist,
       [HOPPER_FACE_KEY]: backup.hopperFace === "buy" || backup.hopperFace === "sell" ? backup.hopperFace : hopperFace,
       [STRATEGIE_KEY]: backup.strategie ? normalizeStrategie(backup.strategie) : strategieState,
@@ -1680,7 +1696,7 @@ export function useShelfStorage() {
       [VF_GOALS_KEY]: Array.isArray(backup.vfGoals) ? normalizeVfGoals(backup.vfGoals) : vfGoals,
       [BUDGET_KEY]: backup.budget ? normalizeBudget(backup.budget) : budgetState,
     });
-  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showFocusDrawer, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setHopperFace, setGrazelandItems, setSaleItems, strategieState, setStrategie, inventoryItems, vfGoals, budgetState, setBudget]);
+  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showFocusDrawer, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setHopperFace, setGrazelandItems, setSaleItems, strategieState, setStrategie, inventoryItems, vfGoals, budgetState, setBudget, showCanvasBlockers]);
 
   return {
     layout,
@@ -1705,6 +1721,8 @@ export function useShelfStorage() {
     setFocusDesynced,
     lowPerformanceMode,
     setLowPerformanceMode,
+    showCanvasBlockers,
+    setShowCanvasBlockers,
     showStrategieTab,
     setShowStrategieTab,
     showHopperTab,

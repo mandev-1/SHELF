@@ -1281,6 +1281,7 @@ function VisualFlowPanelInner({
   visualFlow,
   onUpdateVisualFlow,
   focusDesynced = false,
+  showCanvasBlockers = true,
   setPillarTodoPins,
   onEditTodo,
   onDeleteTodo,
@@ -1310,6 +1311,8 @@ function VisualFlowPanelInner({
    */
   onUpdateVisualFlow: (updater: (prev: VisualFlowData) => VisualFlowData) => void;
   focusDesynced?: boolean;
+  /** Settings toggle — when false, blockers render only in the Doing-now drawer, not as canvas nodes. */
+  showCanvasBlockers?: boolean;
   setPillarTodoPins?: (next: string[] | ((prev: string[]) => string[])) => void;
   onEditTodo?: (id: string, updates: Partial<ShelfPillarTodoItem>) => void;
   onDeleteTodo?: (id: string) => void;
@@ -3503,39 +3506,27 @@ function VisualFlowPanelInner({
       className={`shelf-error-dashboard ${containerClass}`}
       style={{ paddingRight: dockedAlways ? "21.75rem" : undefined }}
     >
-      <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-black/20 px-4 py-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <h1 className="text-base font-semibold tracking-tight text-zinc-100">
-            Visual Flow of Action
-          </h1>
-          <button
-            type="button"
-            onClick={handleExportForAI}
-            title="Copy a structured markdown of the current plane's tasks + relationships to the clipboard, ready to paste into an AI for consolidation"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] bg-[var(--surface)] px-2.5 py-1.5 text-[11.5px] font-medium text-[var(--fg-2)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)] transition-colors"
-          >
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="9" y="9" width="13" height="13" rx="2" />
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-            </svg>
-            Copy for AI
-            {exportToast && (
-              <span className="ml-1 text-[10.5px] text-[var(--accent-bright)]">· {exportToast}</span>
-            )}
-          </button>
-          {onOpenCamps && (
-            <button
-              type="button"
-              onClick={onOpenCamps}
-              title="Flip up to the campsite layer — your top goals down the road"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] bg-[var(--surface)] px-2.5 py-1.5 text-[11.5px] font-medium text-[var(--fg-2)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)] transition-colors"
-            >
-              ⛺ Camps
-            </button>
+      {/* Toolbar row: title · Copy-for-AI · (margin-left:auto) search · ⛺ Camps.
+          Plane switching lives in the bottom sheet tabs (.shelf-vf-sheets), so the
+          top plane switcher was removed to keep this row to the four reference items. */}
+      <div className="nf-bar shrink-0">
+        <h1 className="nf-bar-title">Visual Flow of Action</h1>
+        <button
+          type="button"
+          className="ghost-btn"
+          onClick={handleExportForAI}
+          title="Copy a structured markdown of the current plane's tasks + relationships to the clipboard, ready to paste into an AI for consolidation"
+        >
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="9" y="9" width="13" height="13" rx="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+          Copy for AI
+          {exportToast && (
+            <span className="ml-1 text-[10.5px] text-[var(--accent-bright)]">· {exportToast}</span>
           )}
-        </div>
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="vf-search">
+        </button>
+        <div className="vf-search">
             <svg className="vf-search-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="11" cy="11" r="7" />
               <path d="m20 20-3.5-3.5" />
@@ -3598,38 +3589,16 @@ function VisualFlowPanelInner({
               </div>
             )}
           </div>
-          <div
-            className="flex rounded-lg border border-white/10 bg-black/30 p-0.5 text-xs font-medium"
-            role="tablist"
-            aria-label="Canvas layer"
-          >
+        {onOpenCamps && (
           <button
             type="button"
-            role="tab"
-            aria-selected={plane === "main"}
-            className={`rounded-md px-3 py-1.5 transition-colors ${
-              plane === "main" ? "bg-white/15 text-zinc-100" : "text-zinc-400 hover:text-zinc-200"
-            }`}
-            onClick={() => switchPlane("main")}
+            className="ghost-btn nf-camps"
+            onClick={onOpenCamps}
+            title="Flip up to the campsite layer — your top goals down the road"
           >
-            Main canvas
+            ⛺ Camps
           </button>
-          {SPECIAL_VISUAL_FLOW_PLANES.map((specialPlane) => (
-            <button
-              key={specialPlane}
-              type="button"
-              role="tab"
-              aria-selected={plane === specialPlane}
-              className={`rounded-md px-3 py-1.5 transition-colors ${
-                plane === specialPlane ? SPECIAL_VISUAL_FLOW_PLANE_META[specialPlane].tabClass : "text-zinc-400 hover:text-zinc-200"
-              }`}
-              onClick={() => switchPlane(specialPlane)}
-            >
-              {SPECIAL_VISUAL_FLOW_PLANE_META[specialPlane].tabLabel}
-            </button>
-          ))}
-          </div>
-        </div>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
@@ -3700,7 +3669,7 @@ function VisualFlowPanelInner({
                   size={1}
                   className="shelf-vf-dots"
                 />
-                {plane === "main" && (
+                {plane === "main" && showCanvasBlockers && (
                   <ViewportPortal>
                     {(visualFlow.blockers ?? []).map((b) => {
                       const pos = blockerDrag && blockerDrag.id === b.id ? blockerDrag : { x: b.x ?? 0, y: b.y ?? 0 };
@@ -4227,65 +4196,20 @@ function VisualFlowPanelInner({
               const menuH = 400;
               const top = Math.max(8, Math.min(nodeMenu.y, window.innerHeight - menuH));
               const layoutSelectValue = currentHandle === "hidden" ? "" : currentHandle;
+              // shared checkbox glyph for the Mark-completed / Focused / In-Doing-now cluster
+              const checkboxGlyph = (on: boolean) => (
+                <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? "border-emerald-400 bg-emerald-500/30" : "border-zinc-500 bg-transparent"}`}>
+                  {on && (
+                    <svg className="h-2.5 w-2.5 text-emerald-400" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 6l3 3 5-6" /></svg>
+                  )}
+                </span>
+              );
               return (
                 <div
                   ref={menuRef}
                   className="shelf-note-popover fixed z-[200] min-w-[140px] rounded-xl border border-emerald-400/20 bg-zinc-900 py-1 shadow-xl"
                   style={{ left, top }}
                 >
-                  {ids.length === 1 && (
-                    doingPipeline.inPipeline(ids[0]) ? (
-                      <button
-                        type="button"
-                        className="w-full px-3 py-2 text-left text-sm font-medium text-zinc-200 hover:bg-white/10 flex items-center gap-2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          doingPipeline.remove(ids[0]);
-                          setNodeMenu(null);
-                        }}
-                        title="Remove this task from the Doing now pipeline"
-                      >
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
-                        Remove from Doing now
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={doingPipeline.isFull}
-                        className="w-full px-3 py-2 text-left text-sm font-medium text-emerald-300 hover:bg-emerald-400/10 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          doingPipeline.add(ids[0]);
-                          setNodeMenu(null);
-                        }}
-                        title={doingPipeline.isFull ? "Doing now is full (max 7)" : "Add this task to the Doing now pipeline"}
-                      >
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M5 12l5 5L20 6" />
-                        </svg>
-                        Add to Doing now
-                      </button>
-                    )
-                  )}
-                  {currentPlaneAdd && (
-                    <button
-                      type="button"
-                      className="w-full px-3 py-2 text-left text-sm font-medium text-emerald-300 hover:bg-emerald-400/10 flex items-center gap-2"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAddConnectedSubtask(ids[0]);
-                      }}
-                      title="Create a new node already connected to this one"
-                    >
-                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                      Add connected sub-task
-                    </button>
-                  )}
                   {canEdit && (
                     <button
                       type="button"
@@ -4321,44 +4245,77 @@ function VisualFlowPanelInner({
                             </option>
                           ))}
                         </select>
-                        {!todo.done && (
-                          <button
-                            type="button"
-                            className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-sm font-medium text-emerald-400 hover:bg-white/10"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMarkCompleted(ids[0]);
-                            }}
-                          >
-                            Mark completed ✓
-                          </button>
-                        )}
                       </div>
                     </>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10 flex items-center gap-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (todo.done) {
+                          currentPlaneEdit?.(ids[0], { done: false });
+                          setNodeMenu(null);
+                        } else {
+                          handleMarkCompleted(ids[0]);
+                        }
+                      }}
+                      title={todo.done ? "Mark as not completed" : "Complete this task"}
+                    >
+                      {checkboxGlyph(!!todo.done)}
+                      Mark completed
+                    </button>
                   )}
                   {canEdit && (
                     <button
                       type="button"
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2"
+                      className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10 flex items-center gap-2"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleToggleFocus(ids[0]);
                       }}
                     >
-                      <span
-                        className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                          todo.focused ? "border-emerald-400 bg-emerald-500/30" : "border-zinc-500 bg-transparent"
-                        }`}
-                      >
-                        {todo.focused && (
-                          <svg className="h-2.5 w-2.5 text-emerald-400" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M2 6l3 3 5-6" />
-                          </svg>
-                        )}
-                      </span>
+                      {checkboxGlyph(!!todo.focused)}
                       Focused
                     </button>
                   )}
+                  <button
+                    type="button"
+                    disabled={!doingPipeline.inPipeline(ids[0]) && doingPipeline.isFull}
+                    className="w-full px-3 py-2 text-left text-sm text-zinc-200 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (doingPipeline.inPipeline(ids[0])) doingPipeline.remove(ids[0]);
+                      else doingPipeline.add(ids[0]);
+                      setNodeMenu(null);
+                    }}
+                    title={doingPipeline.inPipeline(ids[0]) ? "Remove from the Doing now pipeline" : doingPipeline.isFull ? "Doing now is full (max 7)" : "Add to the Doing now pipeline"}
+                  >
+                    {checkboxGlyph(doingPipeline.inPipeline(ids[0]))}
+                    In &quot;Doing now&quot;
+                  </button>
+                  {currentPlaneAdd && (
+                    <>
+                      <div className="my-1 border-t border-white/10" />
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm font-medium text-emerald-300 hover:bg-emerald-400/10 flex items-center gap-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddConnectedSubtask(ids[0]);
+                        }}
+                        title="Create a new node already connected to this one"
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Add connected sub-task
+                      </button>
+                    </>
+                  )}
+                  {relocateBlock}
                   {canEdit && (
                     <>
                       <div className="my-1 border-t border-white/10" />
@@ -4431,7 +4388,6 @@ function VisualFlowPanelInner({
                       </div>
                     </>
                   )}
-                  {relocateBlock}
                   {canDelete && (
                     <>
                       <div className="my-1 border-t border-white/10" />

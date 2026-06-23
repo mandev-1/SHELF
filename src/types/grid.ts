@@ -447,6 +447,7 @@ export interface ShelfBackupData {
   pillarTodoPins?: string[];
   focusDesynced?: boolean;
   lowPerformanceMode?: boolean;
+  showCanvasBlockers?: boolean;
   /** Builist (TEMP) — buylist hopper stack */
   buylist?: BuylistItem[];
   /** Which face of the Hopper flip-card (chute vs. selling ledger) is showing. */

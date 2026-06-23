@@ -943,6 +943,8 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
     setFocusDesynced,
     lowPerformanceMode,
     setLowPerformanceMode,
+    showCanvasBlockers,
+    setShowCanvasBlockers,
     showStrategieTab,
     setShowStrategieTab,
     showHopperTab,
@@ -1296,6 +1298,16 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
               <span className="pr-2">Low performance start (search + pins only on new tab)</span>
               <span className={`text-xs shrink-0 ${lowPerformanceMode ? "text-emerald-300" : "text-zinc-500"}`}>
                 {lowPerformanceMode ? "On" : "Off"}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
+              onClick={() => setShowCanvasBlockers(!showCanvasBlockers)}
+            >
+              <span className="pr-2">Show blocker nodes on Visual Flow canvas (off = only in Doing now)</span>
+              <span className={`text-xs shrink-0 ${showCanvasBlockers ? "text-emerald-300" : "text-zinc-500"}`}>
+                {showCanvasBlockers ? "On" : "Off"}
               </span>
             </button>
             <button
