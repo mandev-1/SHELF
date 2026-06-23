@@ -1577,11 +1577,28 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
         onChange={async (e) => {
           const file = e.target.files?.[0];
           if (!file) return;
-          const text = await file.text();
-          const parsed = JSON.parse(text) as Parameters<typeof importBackup>[0];
-          importBackup(parsed);
-          setShowSettings(false);
-          e.currentTarget.value = "";
+          // Reset the input via the ref BEFORE awaiting — after an await
+          // e.currentTarget is null because React reuses the synthetic event.
+          if (fileInputRef.current) fileInputRef.current.value = "";
+          let parsed: Parameters<typeof importBackup>[0];
+          try {
+            const text = await file.text();
+            parsed = JSON.parse(text) as Parameters<typeof importBackup>[0];
+          } catch {
+            alert("Could not import backup: the file isn't valid JSON.");
+            return;
+          }
+          await importBackup(parsed);
+          // Reload so every useShelfStorage() instance (FullApp's powers the
+          // Visual Flow / Pillar / Strategie UI) re-hydrates from storage —
+          // import runs on this component's instance and most keys aren't
+          // cross-instance synced. Guarded to the persistent extension context;
+          // in plain dev there's no storage, so a reload would wipe the import.
+          if (typeof chrome !== "undefined" && chrome.storage?.local) {
+            window.location.reload();
+          } else {
+            setShowSettings(false);
+          }
         }}
       />
       <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2">

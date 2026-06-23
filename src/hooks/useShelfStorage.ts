@@ -514,6 +514,8 @@ export function useShelfStorage() {
         SHOW_STRATEGIE_TAB_KEY,
         SHOW_HOPPER_TAB_KEY,
         SHOW_INVENTORY_TAB_KEY,
+        SHOW_BUDGET_TAB_KEY,
+        BUDGET_KEY,
         BUYLIST_KEY,
         HOPPER_FACE_KEY,
         SALE_ITEMS_KEY,
@@ -730,6 +732,8 @@ export function useShelfStorage() {
                   .filter((b) => b.id),
               }
             : {}),
+          ...(Array.isArray(raw.focusExpandedIds) ? { focusExpandedIds: (raw.focusExpandedIds as unknown[]).filter((x): x is string => typeof x === "string") } : {}),
+          ...(Array.isArray(raw.focusCollapsedGroups) ? { focusCollapsedGroups: (raw.focusCollapsedGroups as unknown[]).filter((x): x is string => typeof x === "string") } : {}),
         });
       }
       setReady(true);
@@ -1595,10 +1599,17 @@ export function useShelfStorage() {
       inventory: inventoryItems,
       vfGoals,
       budget: budgetState,
+      showStrategieTab,
+      showHopperTab,
+      showInventoryTab,
+      showBudgetTab,
+      accentByTheme,
+      obsidianLog,
+      taskLog,
     };
-  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showFocusDrawer, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState, inventoryItems, vfGoals, budgetState, showCanvasBlockers]);
+  }, [bookmarkOverrides, bookmarkViews, bookmarkSize, binItems, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, separators, shelfName, showGoals, showTodoDates, showFocusDrawer, showBothNavButtons, theme, visualFlow, grazelandItems, saleItems, strategieState, inventoryItems, vfGoals, budgetState, showCanvasBlockers, showStrategieTab, showHopperTab, showInventoryTab, showBudgetTab, accentByTheme, obsidianLog, taskLog]);
 
-  const importBackup = useCallback((backup: Partial<ShelfBackupData>) => {
+  const importBackup = useCallback((backup: Partial<ShelfBackupData>): Promise<void> => {
     if (backup.layout) setLayout(backup.layout);
     if (backup.colors) setColors(backup.colors);
     if (backup.theme === "day" || backup.theme === "sap" || backup.theme === "auto") setThemeState(backup.theme);
@@ -1631,6 +1642,31 @@ export function useShelfStorage() {
       setBookmarkViews(next);
     }
     if (backup.bookmarkSize === "senior") setBookmarkSizeState("senior");
+    else if (backup.bookmarkSize === "normal") setBookmarkSizeState("normal");
+    if (backup.separators) setSeparators(backup.separators);
+    if (backup.promptRows === 1 || backup.promptRows === 2) setPromptRows(backup.promptRows);
+    if (typeof backup.showStrategieTab === "boolean") setShowStrategieTabState(backup.showStrategieTab);
+    if (typeof backup.showHopperTab === "boolean") setShowHopperTabState(backup.showHopperTab);
+    if (typeof backup.showInventoryTab === "boolean") setShowInventoryTabState(backup.showInventoryTab);
+    if (typeof backup.showBudgetTab === "boolean") setShowBudgetTabState(backup.showBudgetTab);
+    if (backup.accentByTheme && typeof backup.accentByTheme === "object" && !Array.isArray(backup.accentByTheme)) {
+      const next: Record<string, string> = { ...DEFAULT_ACCENT_BY_THEME };
+      for (const [k, v] of Object.entries(backup.accentByTheme as Record<string, unknown>)) {
+        if (typeof v === "string" && v.startsWith("#")) next[k] = v;
+      }
+      setAccentByThemeState(next);
+    }
+    if (backup.obsidianLog && typeof backup.obsidianLog === "object" && !Array.isArray(backup.obsidianLog)) {
+      const o = backup.obsidianLog as unknown as Record<string, unknown>;
+      setObsidianLogState({
+        enabled: Boolean(o.enabled),
+        baseUrl: typeof o.baseUrl === "string" && o.baseUrl.trim() ? o.baseUrl.trim() : "http://127.0.0.1:27124",
+        apiKey: typeof o.apiKey === "string" ? o.apiKey : "",
+        notePath: typeof o.notePath === "string" && o.notePath.trim() ? o.notePath.trim() : "ShELF/todo-log.md",
+        useDailyNote: Boolean(o.useDailyNote),
+      });
+    }
+    if (typeof backup.taskLog === "string") setTaskLog(backup.taskLog);
     if (backup.visualFlow && typeof backup.visualFlow === "object") setVisualFlowState(backup.visualFlow);
     if (Array.isArray(backup.grazelandItems)) setGrazelandItems(backup.grazelandItems as ShelfPillarTodoItem[]);
     if (Array.isArray(backup.binItems)) setBinItems(backup.binItems as ShelfPillarTodoItem[]);
@@ -1654,7 +1690,8 @@ export function useShelfStorage() {
     if (Array.isArray(backup.vfGoals)) setVfGoalsState(normalizeVfGoals(backup.vfGoals));
     if (backup.budget) setBudget(normalizeBudget(backup.budget));
 
-    getStorage()?.set({
+    const st = getStorage();
+    const writePayload = {
       [LAYOUT_KEY]: backup.layout ?? layout,
       [COLORS_KEY]: backup.colors ?? colors,
       [LABELS_KEY]: backup.labels ?? labels,
@@ -1695,8 +1732,23 @@ export function useShelfStorage() {
       [INVENTORY_KEY]: Array.isArray(backup.inventory) ? normalizeInventory(backup.inventory) : inventoryItems,
       [VF_GOALS_KEY]: Array.isArray(backup.vfGoals) ? normalizeVfGoals(backup.vfGoals) : vfGoals,
       [BUDGET_KEY]: backup.budget ? normalizeBudget(backup.budget) : budgetState,
+      [SHOW_STRATEGIE_TAB_KEY]: typeof backup.showStrategieTab === "boolean" ? backup.showStrategieTab : showStrategieTab,
+      [SHOW_HOPPER_TAB_KEY]: typeof backup.showHopperTab === "boolean" ? backup.showHopperTab : showHopperTab,
+      [SHOW_INVENTORY_TAB_KEY]: typeof backup.showInventoryTab === "boolean" ? backup.showInventoryTab : showInventoryTab,
+      [SHOW_BUDGET_TAB_KEY]: typeof backup.showBudgetTab === "boolean" ? backup.showBudgetTab : showBudgetTab,
+      [ACCENT_BY_THEME_KEY]: backup.accentByTheme && typeof backup.accentByTheme === "object" && !Array.isArray(backup.accentByTheme) ? backup.accentByTheme : accentByTheme,
+      [OBSIDIAN_LOG_KEY]: backup.obsidianLog && typeof backup.obsidianLog === "object" && !Array.isArray(backup.obsidianLog) ? backup.obsidianLog : obsidianLog,
+      [TASK_LOG_KEY]: typeof backup.taskLog === "string" ? backup.taskLog : taskLog,
+    };
+
+    return new Promise<void>((resolve) => {
+      if (!st) {
+        resolve();
+        return;
+      }
+      st.set(writePayload, () => resolve());
     });
-  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showFocusDrawer, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setHopperFace, setGrazelandItems, setSaleItems, strategieState, setStrategie, inventoryItems, vfGoals, budgetState, setBudget, showCanvasBlockers]);
+  }, [bookmarkOverrides, binItems, bookmarkSize, buylist, hopperFace, colors, focusDesynced, goals, gridLocked, hiddenFolderIds, labels, layout, llmConsoleUrl, lowPerformanceMode, pillarPins, pillarTodos, pillarTodoPins, prompts, promptRows, saleItems, separators, shelfName, showGoals, showTodoDates, showFocusDrawer, showBothNavButtons, theme, visualFlow, grazelandItems, setBinItems, setBuylist, setHopperFace, setGrazelandItems, setSaleItems, strategieState, setStrategie, inventoryItems, vfGoals, budgetState, setBudget, showCanvasBlockers, showStrategieTab, showHopperTab, showInventoryTab, showBudgetTab, accentByTheme, obsidianLog, taskLog]);
 
   return {
     layout,

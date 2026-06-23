@@ -460,6 +460,20 @@ export interface ShelfBackupData {
   vfGoals?: VfGoal[];
   /** Holiday / shared budget (people, expenses, trips). */
   budget?: BudgetState;
+  /** Strategie tab visibility toggle. */
+  showStrategieTab?: boolean;
+  /** Hopper tab visibility toggle. */
+  showHopperTab?: boolean;
+  /** Inventory tab visibility toggle. */
+  showInventoryTab?: boolean;
+  /** Budget tab visibility toggle. */
+  showBudgetTab?: boolean;
+  /** Per-theme accent color map. */
+  accentByTheme?: Record<string, string>;
+  /** Obsidian task-log integration config. */
+  obsidianLog?: ObsidianLogConfig;
+  /** Completion / task log text. */
+  taskLog?: string;
 }
 
 export type CatKey =
