@@ -139,6 +139,13 @@ export function isSectorColorKey(x: unknown): x is SectorColorKey {
   return typeof x === "string" && SECTOR_COLOR_SET.has(x);
 }
 
+/** A subtask within a task's checklist (Doing-now Edit-Task editor). */
+export interface ShelfTodoChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 export interface ShelfPillarTodoItem {
   id: string;
   text: string;
@@ -147,6 +154,10 @@ export interface ShelfPillarTodoItem {
   note?: string;
   subtitle?: string;
   tag?: string;
+  /** Structured subtasks shown in the Doing-now Edit-Task editor. */
+  checklist?: ShelfTodoChecklistItem[];
+  /** When true, the deadline is a fixed meeting time (show the start time, not a countdown). */
+  fixedMeeting?: boolean;
   /** Task blocking status: blocked by another, ready to work on, or abeyed. Only in edit form, not shown in Pillar. */
   blockStatus?: ShelfTodoBlockStatus;
   /** Main-plane handle preset. Special planes use grazelandHandleVisibility for per-point toggles. */

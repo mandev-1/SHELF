@@ -26,6 +26,8 @@ import "./doing-now.css";
 import { DoingNow, useDoingPipeline, type DoingTask, type DoingPipelineState } from "./DoingNow";
 import "./blockers.css";
 import { BlockerDraft, nfBlockerStatus, nfToDatetimeLocal, type BlockerDraftState } from "./Blockers";
+import "./doing-task-editor.css";
+import { DoingTaskEditor } from "./DoingTaskEditor";
 import { Input } from "@heroui/react";
 import {
   SECTOR_COLOR_OPTIONS,
@@ -1821,6 +1823,8 @@ function VisualFlowPanelInner({
   const [blockerNow, setBlockerNow] = useState(() => Date.now());
   const [blockerDraft, setBlockerDraft] = useState<BlockerDraftState | null>(null);
   const firedBlockersRef = useRef<Record<string, boolean>>({});
+  // Full-screen "Edit task" editor opened from a Doing-now task item (by plane + id).
+  const [taskEditor, setTaskEditor] = useState<{ id: string; plane: string } | null>(null);
 
   // Create a blocker AND enqueue it into the Doing-now pipeline (opens the drawer).
   const addBlocker = useCallback(
@@ -1969,7 +1973,7 @@ function VisualFlowPanelInner({
     [visualFlow.blockers, todos, grazelandItems, binItems, visualFlow.customPlaneItems, visualFlow.customPlanes, onDeleteTodo, onDeleteGrazelandItem, onDeleteBinItem, onUpdateVisualFlow, onTaskCompleted, onTodoLog]
   );
 
-  // "Edit" — task opens its node editor (switching plane if needed); blocker opens
+  // "Edit" — a task opens the full-screen Doing-now task editor; a blocker opens
   // the blocker editor popover.
   const editDoingItem = useCallback(
     (item: DoingTask) => {
@@ -1979,14 +1983,9 @@ function VisualFlowPanelInner({
         setBlockerDraft({ x: Math.round(window.innerWidth / 2 - 135), y: 140, label: b.label, due: nfToDatetimeLocal(b.due), dur: b.dur, edit: b.id });
         return;
       }
-      if (item.plane && item.plane !== plane) {
-        switchPlane(item.plane);
-        window.setTimeout(() => setEditNodeId(item.id), 220);
-      } else {
-        setEditNodeId(item.id);
-      }
+      setTaskEditor({ id: item.id, plane: item.plane ?? "main" });
     },
-    [visualFlow.blockers, plane, switchPlane]
+    [visualFlow.blockers]
   );
 
   const doingPipeline = useDoingPipeline({
@@ -3715,6 +3714,37 @@ function VisualFlowPanelInner({
                 </div>
               )}
               <DoingNow {...doingPipeline.drawerProps} />
+              {/* "Edit task" editor — overlays only the canvas (opened from a Doing-now task) */}
+              {taskEditor && (() => {
+                const pk = taskEditor.plane;
+                const list =
+                  pk === "main" ? todos
+                  : pk === "grazeland" ? grazelandItems
+                  : pk === "bin" ? binItems
+                  : (visualFlow.customPlaneItems?.[pk] ?? []);
+                const t = list.find((x) => x.id === taskEditor.id);
+                if (!t) return null;
+                const meta = doingPlaneMeta(pk, visualFlow.customPlanes ?? []);
+                return (
+                  <DoingTaskEditor
+                    task={t}
+                    planeLabel={meta.label}
+                    planeColor={meta.color}
+                    onSave={(updates) => editItemInPlane(pk as VisualFlowPlane, taskEditor.id, updates)}
+                    onJump={() => {
+                      const id = taskEditor.id;
+                      setTaskEditor(null);
+                      if (pk !== plane) {
+                        switchPlane(pk);
+                        window.setTimeout(() => panToNode(id), 220);
+                      } else {
+                        panToNode(id);
+                      }
+                    }}
+                    onClose={() => setTaskEditor(null)}
+                  />
+                );
+              })()}
             </div>
 
             {/* Sheet tabs — Excel-style, outside/below the canvas */}

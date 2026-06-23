@@ -3182,6 +3182,44 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 .gb-led-paidlab { font-size: 11px; color: var(--dim); }
 .gb-led-amt { font-size: 13.5px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; width: 86px; text-align: right; flex-shrink: 0; }
 
+/* ── ON THE ROAD ledger — desktop layout (≥641px) ── */
+@media (min-width: 641px) {
+  .gb-led-row {
+    flex-wrap: nowrap;        /* never stack on desktop */
+    gap: 16px;
+    align-items: center;
+  }
+
+  /* label + date: take the slack, stay on ONE line, ellipsize if needed */
+  .gb-led-main { flex: 1 1 auto; min-width: 140px; }
+  .gb-led-label,
+  .gb-led-meta {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* split avatars + "split N" — fixed column so rows align vertically */
+  .gb-led-split {
+    flex: 0 0 auto;
+    width: 128px;             /* fits a "split 4" group (your data); widen for 5+ */
+    justify-content: flex-start;
+  }
+
+  /* paid avatar + label — fixed column */
+  .gb-led-paid {
+    flex: 0 0 auto;
+    width: 72px;
+  }
+
+  /* amount, right-aligned, fixed column */
+  .gb-led-amt {
+    flex: 0 0 auto;
+    width: 110px;             /* fits "12 344 125 Kč"; raise for bigger numbers */
+    text-align: right;
+  }
+}
+
 /* ── split & members ── */
 .gb-split-body { padding: 12px 18px 18px; }
 .gb-basis-seg { width: 100%; display: flex; }
@@ -3818,14 +3856,15 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
    vertically centred via the button's own align-items:center. */
 .gb-head > .add-expense-btn { align-self: stretch; margin: 0 4px 0 0; font-size: 18px; gap: 11px; }
 .gb-head > .add-expense-btn .ae-plus { width: 32px; height: 32px; }
-/* App glue: on desktop the trip detail is a two-column board — the left column
-   (.tc-board-main) stacks "Who paid what" (.otr) over the desktop-only "Spend
-   over time" curve (.tc-spend); the right column is "Settle up" (.rec). Ratio
-   mirrors the app's .gb-board-body. At ≤900px the grid collapses to one column
-   and the spend curve is hidden, so the phone layout is unchanged. Wrappers live
-   in TripDetail.tsx. Higher-specificity sibling rules cancel trip-cards.css's
-   .tc-card+.tc-card margin so the grid/flex gap owns spacing (no double gap). */
-.tc-board { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; align-items: start; margin-bottom: 16px; }
+/* App glue: the trip detail stacks vertically — "Who paid what" (.otr) over the
+   desktop-only "Spend over time" curve (.tc-spend), then "Settle up" (.rec).
+   It WAS a two-column board (1.6fr/1fr), but the page caps at 760px on desktop,
+   which squeezed the ledger column to ~426px inner — too narrow for the live
+   single-line .gb-led-row (fixed columns sum to ~486px). Full-width gives the
+   ledger its span-8-equivalent room (~730px inner). ≤900px already hides the
+   spend curve. Wrappers live in TripDetail.tsx; sibling rules cancel
+   trip-cards.css's .tc-card+.tc-card margin so the grid/flex gap owns spacing. */
+.tc-board { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; margin-bottom: 16px; }
 .tc-board-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .tc-board-main > .tc-card + .tc-card { margin-top: 0; }
 .tc-spend-total { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; }

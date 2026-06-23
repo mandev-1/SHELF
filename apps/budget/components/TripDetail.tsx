@@ -317,58 +317,65 @@ export function TripDetail({
           fall back to the stacked phone layout (.tc-board glue in budget.css). */}
       <div className="tc-board">
       <div className="tc-board-main">
-      {/* On the road · who paid what (handoff 009) */}
-      <section className="tc-card otr">
-        <div className="tc-head">
+      {/* On the road · who paid what — live ".gb-ledger" (strategie-group.css).
+          Exact dims live in budget.css; the larger handoff-009 mock was image scale. */}
+      <section className="card gb-ledger">
+        <div className="card-head">
           <div>
-            <div className="tc-eyebrow">On the road</div>
-            <div className="tc-title">Who paid what</div>
+            <div className="card-eyebrow">On the road</div>
+            <h3 className="card-title">Who paid what</h3>
           </div>
           <button
-            className="tc-addbtn"
+            className="ghost-btn"
             type="button"
             onClick={() => setExpenseModal("new")}
             disabled={tMembers.length === 0}
           >
-            <span className="tc-plus">+</span>
-            <span>Add expense</span>
+            + Add expense
           </button>
         </div>
 
         {expenses.length === 0 ? (
           <div className="gb-empty">No expenses logged yet — add the first one.</div>
         ) : (
-          <div className="tc-ledger">
+          <div className="gb-ledger-body">
             {expenses.map((e) => {
               const payer = memberById(e.paidBy);
               const ids = e.splitAmong?.length ? e.splitAmong : tMembers.map((m) => m.id);
               const participants = ids.map(memberById).filter(Boolean) as BudgetMember[];
               return (
-                <button key={e.id} className="tc-exp" type="button" onClick={() => setExpenseModal(e)}>
-                  <span className="tc-exp-dot" style={{ background: catHue(e.category) }} />
-                  <span className="tc-exp-amt">{fmt(e.amount, e.currency)}</span>
-                  <span className="tc-exp-main">
-                    <span className="tc-exp-label">{e.title || "Expense"}</span>
-                    <span className="tc-exp-meta">
+                <button key={e.id} className="gb-led-row" type="button" onClick={() => setExpenseModal(e)}>
+                  <span className="gb-led-dot" style={{ background: catHue(e.category) }} />
+                  <span className="gb-led-main">
+                    <span className="gb-led-label">{e.title || "Expense"}</span>
+                    <span className="gb-led-meta">
                       {e.category || "Other"} · {dateLabel(e.date)}
                     </span>
                   </span>
-                  <span className="tc-exp-split">
+                  <span className="gb-led-split">
                     {participants.map((m) => (
-                      <span key={m.id} className="tc-av" style={{ backgroundColor: hueOf(m) }}>
+                      <span
+                        key={m.id}
+                        className="gb-av gb-led-part"
+                        style={{ width: 26, height: 26, fontSize: 11, background: hueOf(m) }}
+                      >
                         {m.name.charAt(0).toUpperCase()}
                       </span>
                     ))}
-                    <span className="tc-exp-splitlab">split {participants.length}</span>
+                    <span className="gb-led-splitlab">split {participants.length}</span>
                   </span>
-                  <span className="tc-exp-paid">
+                  <span className="gb-led-paid">
                     {payer && (
-                      <span className="tc-av" style={{ backgroundColor: hueOf(payer) }}>
+                      <span
+                        className="gb-av"
+                        style={{ width: 26, height: 26, fontSize: 11, background: hueOf(payer) }}
+                      >
                         {payer.name.charAt(0).toUpperCase()}
                       </span>
                     )}
-                    <span className="tc-exp-paidlab">paid</span>
+                    <span className="gb-led-paidlab">paid</span>
                   </span>
+                  <span className="gb-led-amt">{fmt(e.amount, e.currency)}</span>
                 </button>
               );
             })}

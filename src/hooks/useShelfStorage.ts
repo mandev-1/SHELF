@@ -400,6 +400,14 @@ function normalizeShelfTodoItems(input: unknown): ShelfPillarTodoItem[] {
       grazelandHandleVisibility: normalizeGrazelandHandleVisibility(x.grazelandHandleVisibility),
       focused: Boolean(x.focused),
       burning: x.burning ? true : undefined,
+      checklist: (() => {
+        if (!Array.isArray(x.checklist)) return undefined;
+        const items = x.checklist
+          .filter((c: any) => c && typeof c === "object" && typeof c.id === "string" && typeof c.text === "string")
+          .map((c: any) => ({ id: c.id, text: String(c.text), done: Boolean(c.done) }));
+        return items.length ? items : undefined;
+      })(),
+      fixedMeeting: x.fixedMeeting ? true : undefined,
       sectorName: typeof x.sectorName === "string" && x.sectorName.trim() ? x.sectorName.trim() : undefined,
       sectorColor: isSectorColorKey(x.sectorColor) ? x.sectorColor : undefined,
       ...readAuditFields(x),
