@@ -14,7 +14,7 @@
 // ============================================================================
 
 import { Fragment, useCallback, useMemo } from "react";
-import type { MouseEventHandler } from "react";
+import type { MouseEventHandler, ReactNode } from "react";
 
 export const NF_DOING_MAX = 7; // 1 active + 6 queued
 
@@ -204,40 +204,70 @@ export function DoingNow({ active, queue, open, onToggle, onComplete, onPromote,
             <div className="nf-doing-pipe-row">
               {queue.length === 0 ? (
                 <div className="nf-doing-pipe-empty">Queue is empty — pull tasks in from the canvas.</div>
-              ) : (
-                queue.map((t, i) => (
-                  t.kind === "blocker" ? (
-                    <div key={t.id} className={"nf-doing-card nf-doing-card--blocker nf-doing-card--" + (t.phase ?? "pending")}>
-                      <span className="nf-doing-card-idx">{i + 1}</span>
-                      <span className="nf-doing-card-dot" style={{ background: blockerDotColor(t.phase) }} aria-hidden="true"></span>
-                      <button type="button" className="nf-doing-card-title" onClick={() => onEdit(t)} title="Edit blocker">
-                        {t.title}
-                      </button>
-                      {t.statusText && <div className="nf-doing-card-sub">{t.statusText}</div>}
-                      <div className="nf-doing-card-actions">
-                        <button type="button" className="nf-doing-card-promote" onClick={() => onPromote(t.id)} title="Pull into Doing now" aria-label="Pull into Doing now">
+              ) : (() => {
+                // When 2+ blockers are queued, collapse them into ONE compact
+                // vertical stack of mini-rows (instead of a full card each), so a
+                // run of time-blocks doesn't eat the whole "Up next" row. A lone
+                // blocker keeps its normal card. Indices stay the queue position.
+                const stackBlockers = queue.filter((t) => t.kind === "blocker").length >= 2;
+                const cards: ReactNode[] = [];
+                const minis: ReactNode[] = [];
+                queue.forEach((t, i) => {
+                  if (t.kind === "blocker" && stackBlockers) {
+                    minis.push(
+                      <div key={t.id} className={"nf-doing-blocker-mini nf-doing-card--" + (t.phase ?? "pending")}>
+                        <button type="button" className="nf-doing-blocker-mini-title" onClick={() => onEdit(t)} title={(t.statusText ? t.title + " · " + t.statusText : t.title) + " — edit blocker"}>
+                          {t.title}
+                        </button>
+                        <span className="nf-doing-blocker-mini-idx">{i + 1}</span>
+                        <button type="button" className="nf-doing-blocker-mini-btn" onClick={() => onPromote(t.id)} title="Pull into Doing now" aria-label="Pull into Doing now">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M15 6l-6 6 6 6" /></svg>
                         </button>
-                        <button type="button" className="nf-doing-card-rm" onClick={() => onRemove(t.id)} title="Remove from queue" aria-label="Remove">×</button>
+                        <button type="button" className="nf-doing-blocker-mini-rm" onClick={() => onRemove(t.id)} title="Remove from queue" aria-label="Remove">×</button>
                       </div>
-                    </div>
-                  ) : (
-                    <div key={t.id} className={"nf-doing-card" + (t.done ? " done" : "")}>
-                      <span className="nf-doing-card-idx">{i + 1}</span>
-                      <span className="nf-doing-card-dot" style={{ background: t.planeColor }} aria-hidden="true"></span>
-                      <button type="button" className="nf-doing-card-title" onClick={() => onEdit(t)} title={(t.subtitle ? t.title + " · " + t.subtitle : t.title) + " — edit task"}>
-                        {t.subtitle ? t.title + " · " + t.subtitle : t.title}
-                      </button>
-                      <div className="nf-doing-card-actions">
-                        <button type="button" className="nf-doing-card-promote" onClick={() => onPromote(t.id)} title="Pull into Doing now" aria-label="Pull into Doing now">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M15 6l-6 6 6 6" /></svg>
+                    );
+                  } else if (t.kind === "blocker") {
+                    cards.push(
+                      <div key={t.id} className={"nf-doing-card nf-doing-card--blocker nf-doing-card--" + (t.phase ?? "pending")}>
+                        <span className="nf-doing-card-idx">{i + 1}</span>
+                        <span className="nf-doing-card-dot" style={{ background: blockerDotColor(t.phase) }} aria-hidden="true"></span>
+                        <button type="button" className="nf-doing-card-title" onClick={() => onEdit(t)} title="Edit blocker">
+                          {t.title}
                         </button>
-                        <button type="button" className="nf-doing-card-rm" onClick={() => onRemove(t.id)} title="Remove from queue" aria-label="Remove">×</button>
+                        {t.statusText && <div className="nf-doing-card-sub">{t.statusText}</div>}
+                        <div className="nf-doing-card-actions">
+                          <button type="button" className="nf-doing-card-promote" onClick={() => onPromote(t.id)} title="Pull into Doing now" aria-label="Pull into Doing now">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M15 6l-6 6 6 6" /></svg>
+                          </button>
+                          <button type="button" className="nf-doing-card-rm" onClick={() => onRemove(t.id)} title="Remove from queue" aria-label="Remove">×</button>
+                        </div>
                       </div>
-                    </div>
-                  )
-                ))
-              )}
+                    );
+                  } else {
+                    cards.push(
+                      <div key={t.id} className={"nf-doing-card" + (t.done ? " done" : "")}>
+                        <span className="nf-doing-card-idx">{i + 1}</span>
+                        <span className="nf-doing-card-dot" style={{ background: t.planeColor }} aria-hidden="true"></span>
+                        <button type="button" className="nf-doing-card-title" onClick={() => onEdit(t)} title={(t.subtitle ? t.title + " · " + t.subtitle : t.title) + " — edit task"}>
+                          {t.subtitle ? t.title + " · " + t.subtitle : t.title}
+                        </button>
+                        <div className="nf-doing-card-actions">
+                          <button type="button" className="nf-doing-card-promote" onClick={() => onPromote(t.id)} title="Pull into Doing now" aria-label="Pull into Doing now">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M15 6l-6 6 6 6" /></svg>
+                          </button>
+                          <button type="button" className="nf-doing-card-rm" onClick={() => onRemove(t.id)} title="Remove from queue" aria-label="Remove">×</button>
+                        </div>
+                      </div>
+                    );
+                  }
+                });
+                return (
+                  <>
+                    {cards}
+                    {minis.length > 0 && <div className="nf-doing-blocker-stack">{minis}</div>}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>

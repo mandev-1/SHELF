@@ -1,0 +1,30 @@
+/* ============================================================================
+   ConnectionPicker — visual 8-point connection toggle (node right-click menu).
+   Square + two points per side; points straddle the edges. Theme-driven.
+   ========================================================================== */
+.cp-picker { display: flex; justify-content: center; padding: 16px 6px 8px; }
+.cp-picker-stage { position: relative; width: 116px; height: 116px; }
+
+.cp-picker-square {
+  position: absolute; inset: 0;
+  border: 1.5px solid var(--line-strong); border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.cp-picker-point {
+  position: absolute; width: 22px; height: 22px; padding: 0;
+  border-radius: 50%; border: 1.5px solid var(--line-strong);
+  background: var(--surface); color: #fff; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transform: translate(-50%, -50%);
+  transition: background-color .14s ease, border-color .14s ease, transform .12s ease, box-shadow .14s ease;
+}
+.cp-picker-point:hover { border-color: var(--accent); transform: translate(-50%, -50%) scale(1.14); }
+.cp-picker-point:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+.cp-picker-point svg { width: 12px; height: 12px; }
+.cp-picker-point.on { background: var(--accent); border-color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-picker-point { transition: none; }
+  .cp-picker-point:hover { transform: translate(-50%, -50%); }
+}

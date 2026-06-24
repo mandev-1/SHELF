@@ -29,6 +29,8 @@ import "./blockers.css";
 import { BlockerNode, BlockerDraft, nfBlockerStatus, nfToDatetimeLocal, type BlockerDraftState } from "./Blockers";
 import "./doing-task-editor.css";
 import { DoingTaskEditor } from "./DoingTaskEditor";
+import "./connection-picker.css";
+import { ConnectionPicker } from "./ConnectionPicker";
 import { Input } from "@heroui/react";
 import {
   SECTOR_COLOR_OPTIONS,
@@ -4324,27 +4326,10 @@ function VisualFlowPanelInner({
                           Connection points
                         </label>
                         {isGrazelandPlane ? (
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {GRAZELAND_HANDLE_DEFINITIONS.map(({ key, label }) => (
-                              <label
-                                key={key}
-                                className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-zinc-200 hover:bg-white/10"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={currentGrazelandHandleVisibility?.[key] ?? true}
-                                  onChange={(e) => {
-                                    e.stopPropagation();
-                                    toggleGrazelandHandleVisibility(key, e.currentTarget.checked);
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="h-3.5 w-3.5 rounded border-white/20 bg-white/5 text-emerald-400 focus:ring-0"
-                                />
-                                <span>{label}</span>
-                              </label>
-                            ))}
-                          </div>
+                          <ConnectionPicker
+                            active={currentGrazelandHandleVisibility}
+                            onToggle={(slot, next) => toggleGrazelandHandleVisibility(slot, next)}
+                          />
                         ) : (
                           <>
                             <button

@@ -107,6 +107,32 @@
 .nf-doing-card--blocker.nf-doing-card--ended { opacity: 0.65; }
 .nf-doing-card--blocker.nf-doing-card--ended::before { background: repeating-linear-gradient(45deg, var(--faint, #9aa) 0 8px, var(--dim) 8px 16px); }
 
+/* 2+ queued blockers collapse into a compact vertical stack of mini-rows */
+.nf-doing-blocker-stack { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; align-self: flex-start; }
+.nf-doing-blocker-mini {
+  position: relative; display: flex; align-items: center; gap: 7px;
+  width: 176px; padding: 9px 8px 9px 18px; overflow: hidden;
+  border: 1px solid color-mix(in srgb, #e6b400 55%, var(--line));
+  border-radius: 10px; background: var(--surface); box-shadow: var(--sh-1);
+}
+.nf-doing-blocker-mini::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 10px; background: repeating-linear-gradient(45deg, #e6b400 0 7px, #1c1c1c 7px 14px); opacity: 0.45; }
+.nf-doing-blocker-mini.nf-doing-card--active { border-color: #ef4444; }
+.nf-doing-blocker-mini.nf-doing-card--active::before { background: repeating-linear-gradient(45deg, #ef4444 0 7px, #1c1c1c 7px 14px); opacity: 1; }
+.nf-doing-blocker-mini.nf-doing-card--ended { opacity: 0.65; }
+.nf-doing-blocker-mini-title {
+  flex: 1; min-width: 0; text-align: left; background: none; border: 0; cursor: pointer;
+  font-family: inherit; font-size: 12px; font-weight: 600; color: var(--fg); padding: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.nf-doing-blocker-mini-title:hover { color: var(--accent-bright, var(--accent)); }
+.nf-doing-blocker-mini-idx { flex-shrink: 0; font-size: 9px; font-weight: 700; color: var(--faint, var(--dim)); font-variant-numeric: tabular-nums; }
+.nf-doing-blocker-mini-btn, .nf-doing-blocker-mini-rm { flex-shrink: 0; border: 0; background: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 2px; border-radius: 5px; line-height: 1; }
+.nf-doing-blocker-mini-btn { color: var(--accent); }
+.nf-doing-blocker-mini-btn svg { width: 12px; height: 12px; }
+.nf-doing-blocker-mini-btn:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.nf-doing-blocker-mini-rm { color: var(--dim); font-size: 14px; }
+.nf-doing-blocker-mini-rm:hover { color: #ef4444; background: color-mix(in srgb, #ef4444 10%, transparent); }
+
 /* active "Doing now" blocker — same hazard-striped left edge as the canvas node */
 .nf-doing-active--blocker { position: relative; overflow: hidden; padding-left: 24px; }
 .nf-doing-active--blocker::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 12px; background: repeating-linear-gradient(45deg, #e6b400 0 8px, #1c1c1c 8px 16px); }
