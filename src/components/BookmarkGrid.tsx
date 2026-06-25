@@ -1,4 +1,4 @@
-import { Button, Input, Link, Popover, Spinner, Surface } from "@heroui/react";
+import { Button, Link, Popover, Spinner, Surface } from "@heroui/react";
 import { GridStack } from "gridstack";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -14,6 +14,7 @@ import type { BookmarkTreeNode } from "../types/bookmarks";
 import type { ShelfFolderSeparator, ShelfGoal, ShelfLayoutItem } from "../types/grid";
 import { ACCENT_COLORS } from "../types/grid";
 import { monogramDataUri } from "../utils/monogram";
+import { SettingsPanel } from "./SettingsPanel";
 
 const COLUMNS = 12;
 const DEFAULT_W = 4;
@@ -963,9 +964,6 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
   const [addingBookmark, setAddingBookmark] = useState(false);
   const [moving, setMoving] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showObsidianConfig, setShowObsidianConfig] = useState(false);
-  const [showHiddenFolders, setShowHiddenFolders] = useState(false);
-  const [obsidianTestStatus, setObsidianTestStatus] = useState<"idle" | "ok" | "fail">("idle");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const allFolders = useMemo(() => collectFolders(tree), [tree]);
   const folders = useMemo(
@@ -1132,443 +1130,57 @@ export function BookmarkGrid({ bodyHidden = false }: { bodyHidden?: boolean } = 
         </div>
       </div>
       )}
-      {showSettings && (
-        <div
-          className="fixed inset-0 z-[210]"
-          onClick={() => setShowSettings(false)}
-        >
-          <div
-            className={`absolute bottom-20 right-4 flex max-h-[calc(100vh-6rem)] flex-col rounded-2xl border border-emerald-400/15 bg-black/92 p-2 shadow-[0_0_40px_rgba(16,185,129,0.16),0_0_90px_rgba(59,130,246,0.08)] ${showObsidianConfig || showHiddenFolders ? "w-72" : "w-64"}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
-              <div className="mb-1.5 text-xs font-medium text-emerald-200">Theme</div>
-              <div className="flex flex-wrap gap-1.5">
-                {(["auto", "dark", "day", "sap"] as const).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setTheme(t)}
-                    className={`rounded-lg px-2 py-1.5 text-[11px] font-medium capitalize transition ${
-                      theme === t
-                        ? "bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40"
-                        : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
-                    }`}
-                  >
-                    {t === "day" ? "Day" : t === "sap" ? "SAP" : t === "auto" ? "Auto" : "Dark"}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
-              <div className="mb-1.5 text-xs font-medium text-emerald-200">Accent</div>
-              <div className="grid grid-cols-6 gap-1.5">
-                {["#16b981", "#5b9cff", "#c98bff", "#e0905a", "#d97706", "#0070f2"].map((hex) => (
-                  <button
-                    key={hex}
-                    type="button"
-                    onClick={() => setAccent(hex)}
-                    className={`h-7 rounded-md transition ${
-                      accent === hex
-                        ? "ring-2 ring-white/80 ring-offset-1 ring-offset-black/60"
-                        : "ring-1 ring-white/10 hover:ring-white/30"
-                    }`}
-                    style={{ backgroundColor: hex }}
-                    title={hex}
-                    aria-label={`Accent ${hex}`}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
-              <div className="mb-1.5 text-xs font-medium text-emerald-200">Greeting</div>
-              <input
-                type="text"
-                value={shelfName}
-                onChange={(e) => setShelfName(e.target.value)}
-                placeholder="Your shelf name"
-                className="w-full rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-[12px] text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-emerald-400/40"
-              />
-              <div className="mt-1 text-[10px] text-zinc-500">Tip: include the word "smile" to tint it in your accent.</div>
-            </div>
-            <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
-              <div className="mb-1.5 text-xs font-medium text-emerald-200">Bookmark size</div>
-              <div className="flex gap-1.5">
-                {(["normal", "senior"] as const).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setBookmarkSize(s)}
-                    className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-medium capitalize transition ${
-                      bookmarkSize === s
-                        ? "bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40"
-                        : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
-              <div className="mb-1.5 text-xs font-medium text-emerald-200">Default currency</div>
-              <div className="flex flex-wrap gap-1.5">
-                {(["USD", "EUR", "CZK"] as const).map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => strategieSetCurrency(c)}
-                    className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-medium transition ${
-                      strategieState.currency === c
-                        ? "bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40"
-                        : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
-                    }`}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-2 mb-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500">Compare against</div>
-              <div className="flex flex-wrap gap-1.5">
-                {([null, "USD", "EUR", "CZK"] as const).map((c) => {
-                  const label = c == null ? "None" : c;
-                  const active = strategieState.secondaryCurrency === c;
-                  const disabled = c != null && c === strategieState.currency;
-                  return (
-                    <button
-                      key={label}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => strategieSetSecondaryCurrency(c)}
-                      className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-medium transition ${
-                        active
-                          ? "bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/40"
-                          : disabled
-                          ? "bg-white/5 text-zinc-600 cursor-not-allowed"
-                          : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-1 text-[10px] text-zinc-500">
-                When set, a small ↔ toggle appears in Strategie to show values in both currencies.
-              </div>
-            </div>
-            <div className="mb-2 rounded-xl border border-white/10 bg-white/5 p-2">
-              <div className="mb-1.5 text-xs font-medium text-emerald-200">Visible tabs</div>
-              <div className="mb-1 text-[10px] text-zinc-500">Shelf and Visual Flow are always on.</div>
-              {([
-                { id: "strategie", label: "Strategie", on: showStrategieTab, set: setShowStrategieTab },
-                { id: "hopper",    label: "Hopper",    on: showHopperTab,    set: setShowHopperTab    },
-                { id: "inventory", label: "Inventory", on: showInventoryTab, set: setShowInventoryTab },
-                { id: "budget",    label: "Budget",    on: showBudgetTab,    set: setShowBudgetTab    },
-              ] as const).map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => t.set(!t.on)}
-                  className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[12px] text-zinc-200 hover:bg-white/5"
-                >
-                  <span>{t.label}</span>
-                  <span className={`text-xs ${t.on ? "text-emerald-300" : "text-zinc-500"}`}>
-                    {t.on ? "Shown" : "Hidden"}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
-              onClick={() => setFocusDesynced(!focusDesynced)}
-            >
-              <span>De-Sync focus of todos in Pillar and Drawer</span>
-              <span className={`text-xs ${focusDesynced ? "text-emerald-300" : "text-zinc-500"}`}>
-                {focusDesynced ? "On" : "Off"}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
-              onClick={() => setLowPerformanceMode(!lowPerformanceMode)}
-            >
-              <span className="pr-2">Low performance start (search + pins only on new tab)</span>
-              <span className={`text-xs shrink-0 ${lowPerformanceMode ? "text-emerald-300" : "text-zinc-500"}`}>
-                {lowPerformanceMode ? "On" : "Off"}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
-              onClick={() => setShowCanvasBlockers(!showCanvasBlockers)}
-            >
-              <span className="pr-2">Show blocker nodes on Visual Flow canvas (off = only in Doing now)</span>
-              <span className={`text-xs shrink-0 ${showCanvasBlockers ? "text-emerald-300" : "text-zinc-500"}`}>
-                {showCanvasBlockers ? "On" : "Off"}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
-              onClick={() => {
-                const blob = new Blob([JSON.stringify(exportBackup(), null, 2)], {
-                  type: "application/json",
-                });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `shelf-backup-${new Date().toISOString().slice(0, 10)}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-                setShowSettings(false);
-              }}
-            >
-              <span>Export backup</span>
-              <span className="text-xs text-emerald-300/60">JSON</span>
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <span>Import backup</span>
-              <span className="text-xs text-emerald-300/60">Upload</span>
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
-              onClick={() => {
-                if (typeof chrome !== "undefined" && chrome.tabs?.create) {
-                  chrome.tabs.create({ url: "chrome://bookmarks/" });
-                }
-                setShowSettings(false);
-              }}
-            >
-              <span>Go to Chrome bookmarks</span>
-              <span className="text-xs text-emerald-300/60">chrome://bookmarks</span>
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
-              onClick={() => setShowGoals(!showGoals)}
-            >
-              <span>Show Goal</span>
-              <span className="text-xs text-emerald-300/60">{showGoals ? "On" : "Off"}</span>
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
-              onClick={() => setShowTodoDates(!showTodoDates)}
-            >
-              <span>Show dates on todos</span>
-              <span className="text-xs text-emerald-300/60">{showTodoDates ? "On" : "Off"}</span>
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
-              onClick={() => setShowBothNavButtons(!showBothNavButtons)}
-            >
-              <span>Show both Dashboard and Visual Flow buttons</span>
-              <span className="text-xs text-emerald-300/60">{showBothNavButtons ? "On" : "Off"}</span>
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
-              onClick={() => setShowFocusDrawer(!showFocusDrawer)}
-            >
-              <span>Show Focused tasks drawer (Visual Flow)</span>
-              <span className="text-xs text-emerald-300/60">{showFocusDrawer ? "On" : "Off"}</span>
-            </button>
-            <div className="my-1.5 border-t border-white/10" />
-            <div className="rounded-xl border border-white/10 bg-white/5 p-2">
-              <div className="mb-1.5 text-xs font-medium text-emerald-200">Task log (local)</div>
-              <p className="mb-2 text-[10px] text-zinc-500">Pillar todo activity is written here. Download as .md or clear.</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="rounded-lg bg-emerald-500/20 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
-                  disabled={!taskLog.trim()}
-                  onClick={() => {
-                    const blob = new Blob([taskLog], { type: "text/markdown" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `task-log-${new Date().toISOString().slice(0, 10)}.md`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                >
-                  Download .md
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg bg-white/10 px-2 py-1 text-xs text-zinc-300 hover:bg-white/15 disabled:opacity-50"
-                  disabled={!taskLog.trim()}
-                  onClick={() => {
-                    if (taskLog.trim() && window.confirm("Clear the task log?")) clearTaskLog();
-                  }}
-                >
-                  Clear log
-                </button>
-              </div>
-              {taskLog.trim() && (
-                <p className="mt-1.5 text-[10px] text-zinc-500">
-                  {taskLog.split("\n").filter(Boolean).length} lines
-                </p>
-              )}
-            </div>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
-              onClick={() => setShowHiddenFolders((v) => !v)}
-            >
-              <span>Hidden folders</span>
-              <span className="text-xs text-emerald-300/60">
-                {hiddenFolderNodes.length > 0 ? hiddenFolderNodes.length : "None"}
-              </span>
-            </button>
-            {showHiddenFolders && (
-              <div className="mt-2 space-y-1 rounded-xl border border-white/10 bg-white/5 p-2">
-                {hiddenFolderNodes.length === 0 ? (
-                  <p className="text-xs text-zinc-500">No hidden folders. Right‑click a folder → Hide from shelf.</p>
-                ) : (
-                  hiddenFolderNodes.map((node) => (
-                    <div
-                      key={node.id}
-                      className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-300"
-                    >
-                      <span className="min-w-0 truncate">{getTitle(node)}</span>
-                      <button
-                        type="button"
-                        className="shrink-0 rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-200 hover:bg-emerald-500/30"
-                        onClick={() => {
-                          setHiddenFolders((prev) => prev.filter((id) => id !== node.id));
-                        }}
-                      >
-                        Unhide
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-            <div className="rounded-xl border border-white/10 bg-white/5 p-2">
-              <div className="mb-1.5 text-xs font-medium text-emerald-200">LLM Console URL</div>
-              <p className="mb-2 text-[10px] text-zinc-500">Opens in the current tab with Prompt Library overlay. Works with any URL (ChatGPT, Claude, Ollama, LM Studio, etc.).</p>
-              <Input
-                variant="secondary"
-                value={llmConsoleUrl}
-                onChange={(e) => setLlmConsoleUrl(e.target.value)}
-                placeholder="https://example.org"
-                className="text-xs"
-              />
-            </div>
-            <button
-              type="button"
-              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-emerald-200 hover:bg-emerald-400/10 hover:text-emerald-100"
-              onClick={() => setShowObsidianConfig((v) => !v)}
-            >
-              <span>Obsidian log</span>
-              <span className="text-xs text-emerald-300/60">{obsidianLog.enabled ? "On" : "Off"}</span>
-            </button>
-            {showObsidianConfig && (
-              <div className="mt-2 space-y-2 rounded-xl border border-white/10 bg-white/5 p-2">
-                <a
-                  href={typeof chrome !== "undefined" && chrome.runtime?.getURL ? chrome.runtime.getURL("obsidian-setup.html") : "/obsidian-setup.html"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300"
-                >
-                  <span aria-hidden>?</span>
-                  <span>Setup guide: connect Obsidian</span>
-                </a>
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
-                  <input
-                    type="checkbox"
-                    checked={obsidianLog.enabled}
-                    onChange={(e) => setObsidianLogConfig({ enabled: e.target.checked })}
-                    className="rounded border-white/20"
-                  />
-                  Enable todo log to Obsidian
-                </label>
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
-                  <input
-                    type="checkbox"
-                    checked={obsidianLog.useDailyNote ?? false}
-                    onChange={(e) => setObsidianLogConfig({ useDailyNote: e.target.checked })}
-                    className="rounded border-white/20"
-                  />
-                  Use daily note (one log per day)
-                </label>
-                <div>
-                  <div className="mb-0.5 text-[10px] text-zinc-500">
-                    {obsidianLog.useDailyNote ? "Folder path (e.g. Daily or ShELF/daily)" : "Note path"}
-                  </div>
-                  <Input
-                    variant="secondary"
-                    value={obsidianLog.baseUrl}
-                    onChange={(e) => setObsidianLogConfig({ baseUrl: e.target.value })}
-                    placeholder="http://127.0.0.1:27124"
-                    className="text-xs"
-                  />
-                </div>
-                <div>
-                  <div className="mb-0.5 text-[10px] text-zinc-500">API Key</div>
-                  <Input
-                    variant="secondary"
-                    type="password"
-                    value={obsidianLog.apiKey}
-                    onChange={(e) => setObsidianLogConfig({ apiKey: e.target.value })}
-                    placeholder="From Obsidian Local REST API settings"
-                    className="text-xs"
-                  />
-                </div>
-                <div>
-                  <div className="mb-0.5 text-[10px] text-zinc-500">Note path</div>
-                  <Input
-                    variant="secondary"
-                    value={obsidianLog.notePath}
-                    onChange={(e) => setObsidianLogConfig({ notePath: e.target.value })}
-                    placeholder={obsidianLog.useDailyNote ? "Daily" : "ShELF/todo-log.md"}
-                    className="text-xs"
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    className="rounded-lg bg-emerald-500/20 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/30"
-                    onClick={async () => {
-                      setObsidianTestStatus("idle");
-                      try {
-                        await logToObsidian("\n--- ShELF test log " + new Date().toISOString() + " ---");
-                        setObsidianTestStatus("ok");
-                      } catch {
-                        setObsidianTestStatus("fail");
-                      }
-                    }}
-                  >
-                    Test connection
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-lg bg-emerald-500/20 px-2 py-1 text-xs text-emerald-200 hover:bg-emerald-500/30"
-                    onClick={() => openTaskLogInObsidian()}
-                    title="Open the task log note (or today’s daily note) in Obsidian. Use Reveal in folder there to open the directory."
-                  >
-                    Open task log in Obsidian
-                  </button>
-                  {obsidianTestStatus === "ok" && <span className="text-xs text-emerald-400">OK</span>}
-                  {obsidianTestStatus === "fail" && <span className="text-xs text-red-400">Failed</span>}
-                </div>
-              </div>
-            )}
-            </div>
-          </div>
-        </div>
-      )}
+      <SettingsPanel
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        theme={theme}
+        setTheme={setTheme}
+        accent={accent}
+        setAccent={setAccent}
+        shelfName={shelfName}
+        setShelfName={setShelfName}
+        bookmarkSize={bookmarkSize}
+        setBookmarkSize={setBookmarkSize}
+        showGoals={showGoals}
+        setShowGoals={setShowGoals}
+        showTodoDates={showTodoDates}
+        setShowTodoDates={setShowTodoDates}
+        showCanvasBlockers={showCanvasBlockers}
+        setShowCanvasBlockers={setShowCanvasBlockers}
+        showFocusDrawer={showFocusDrawer}
+        setShowFocusDrawer={setShowFocusDrawer}
+        showBothNavButtons={showBothNavButtons}
+        setShowBothNavButtons={setShowBothNavButtons}
+        strategieState={strategieState}
+        strategieSetCurrency={strategieSetCurrency}
+        strategieSetSecondaryCurrency={strategieSetSecondaryCurrency}
+        exportBackup={exportBackup}
+        importBackup={importBackup}
+        taskLog={taskLog}
+        clearTaskLog={clearTaskLog}
+        llmConsoleUrl={llmConsoleUrl}
+        setLlmConsoleUrl={setLlmConsoleUrl}
+        focusDesynced={focusDesynced}
+        setFocusDesynced={setFocusDesynced}
+        lowPerformanceMode={lowPerformanceMode}
+        setLowPerformanceMode={setLowPerformanceMode}
+        hiddenFolderNodes={hiddenFolderNodes}
+        setHiddenFolders={setHiddenFolders}
+        obsidianLog={obsidianLog}
+        setObsidianLogConfig={setObsidianLogConfig}
+        logToObsidian={logToObsidian}
+        openTaskLogInObsidian={openTaskLogInObsidian}
+        showStrategieTab={showStrategieTab}
+        setShowStrategieTab={setShowStrategieTab}
+        showHopperTab={showHopperTab}
+        setShowHopperTab={setShowHopperTab}
+        showInventoryTab={showInventoryTab}
+        setShowInventoryTab={setShowInventoryTab}
+        showBudgetTab={showBudgetTab}
+        setShowBudgetTab={setShowBudgetTab}
+        onImportFile={() => fileInputRef.current?.click()}
+        getFolderTitle={getTitle}
+      />
       <input
         ref={fileInputRef}
         type="file"

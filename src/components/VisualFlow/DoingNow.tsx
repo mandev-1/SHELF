@@ -37,6 +37,8 @@ export interface DoingTask {
   // blocker fields (precomputed by the host against the current time)
   phase?: DoingBlockerPhase;
   statusText?: string;
+  /** Just the blocker's start time (e.g. "14:45") — shown muted in the compact stack. */
+  startText?: string;
 }
 
 /** Persisted pipeline slice (lives at `visualFlow.doingNow`). */
@@ -218,6 +220,7 @@ export function DoingNow({ active, queue, open, onToggle, onComplete, onPromote,
                       <div key={t.id} className={"nf-doing-blocker-mini nf-doing-card--" + (t.phase ?? "pending")}>
                         <button type="button" className="nf-doing-blocker-mini-title" onClick={() => onEdit(t)} title={(t.statusText ? t.title + " · " + t.statusText : t.title) + " — edit blocker"}>
                           {t.title}
+                          {t.startText && <span className="nf-doing-blocker-mini-time"> ({t.startText})</span>}
                         </button>
                         <span className="nf-doing-blocker-mini-idx">{i + 1}</span>
                         <button type="button" className="nf-doing-blocker-mini-btn" onClick={() => onPromote(t.id)} title="Pull into Doing now" aria-label="Pull into Doing now">

@@ -21,7 +21,7 @@ export const NF_BLOCKER_DURS = [30, 45, 60]; // flip-toggle options (minutes)
 export function nfDurLabel(min: number): string {
   return min >= 60 ? (min % 60 === 0 ? min / 60 + "h" : Math.floor(min / 60) + "h" + (min % 60) + "m") : min + "m";
 }
-function nfClock(ms: number): string {
+export function nfClock(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 function nfDueVal(due: number | string | null | undefined): number {

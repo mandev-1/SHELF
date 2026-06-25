@@ -125,6 +125,7 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .nf-doing-blocker-mini-title:hover { color: var(--accent-bright, var(--accent)); }
+.nf-doing-blocker-mini-time { font-weight: 400; color: var(--dim); font-variant-numeric: tabular-nums; }
 .nf-doing-blocker-mini-idx { flex-shrink: 0; font-size: 9px; font-weight: 700; color: var(--faint, var(--dim)); font-variant-numeric: tabular-nums; }
 .nf-doing-blocker-mini-btn, .nf-doing-blocker-mini-rm { flex-shrink: 0; border: 0; background: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 2px; border-radius: 5px; line-height: 1; }
 .nf-doing-blocker-mini-btn { color: var(--accent); }

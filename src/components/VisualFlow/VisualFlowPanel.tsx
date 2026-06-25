@@ -26,7 +26,7 @@ import "@xyflow/react/dist/style.css";
 import "./doing-now.css";
 import { DoingNow, useDoingPipeline, type DoingTask, type DoingPipelineState } from "./DoingNow";
 import "./blockers.css";
-import { BlockerNode, BlockerDraft, nfBlockerStatus, nfToDatetimeLocal, type BlockerDraftState } from "./Blockers";
+import { BlockerNode, BlockerDraft, nfBlockerStatus, nfToDatetimeLocal, nfClock, type BlockerDraftState } from "./Blockers";
 import "./doing-task-editor.css";
 import { DoingTaskEditor } from "./DoingTaskEditor";
 import "./connection-picker.css";
@@ -1897,7 +1897,7 @@ function VisualFlowPanelInner({
       const blk = (visualFlow.blockers ?? []).find((b) => b.id === id);
       if (blk) {
         const st = nfBlockerStatus(blk.due, blk.dur, blockerNow);
-        return { kind: "blocker", id: blk.id, title: blk.label, phase: st.phase, statusText: st.text };
+        return { kind: "blocker", id: blk.id, title: blk.label, phase: st.phase, statusText: st.text, startText: nfClock(blk.due) };
       }
       const customPlanes = visualFlow.customPlanes ?? [];
       const search: [string, ShelfPillarTodoItem[]][] = [
@@ -4532,8 +4532,9 @@ function VisualFlowPanelInner({
                     onClick={() => {
                       // Drop the new blocker at the centre of the visible canvas.
                       const flow = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-                      const d = new Date(Date.now() + 60 * 60000);
-                      d.setSeconds(0, 0);
+                      // Default the start to the NEAREST full hour (e.g. 11:39 → 12:00).
+                      const d = new Date();
+                      d.setMinutes(d.getMinutes() >= 30 ? 60 : 0, 0, 0);
                       setBlockerDraft({ x: doingMenu.x, y: doingMenu.y, fx: flow.x, fy: flow.y, label: "", due: nfToDatetimeLocal(d.getTime()), dur: 30 });
                       setDoingMenu(null);
                     }}
