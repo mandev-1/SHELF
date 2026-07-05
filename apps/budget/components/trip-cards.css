@@ -108,6 +108,22 @@
 /* who-pays-whom rows (shown when NOT squared up), hairline-separated */
 .tc-tx-list { margin-top: 18px; display: flex; flex-direction: column; }
 .tc-tx { display: flex; align-items: center; gap: 10px; padding: 14px 2px; border-top: 1px solid var(--line); font-size: 16px; }
+/* transfer rows are buttons (click → settle-up math dialog) */
+button.tc-tx { width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; font: inherit; font-size: 16px; text-align: left; cursor: pointer; border-radius: 8px; transition: background-color 0.12s; }
+button.tc-tx:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); }
 .tc-tx-name { font-weight: 700; color: var(--fg-2); }
 .tc-tx-arrow { color: var(--dim); }
 .tc-tx-amt { margin-left: auto; font-weight: 800; color: var(--fg); font-variant-numeric: tabular-nums; }
+
+/* Reconciliation statements — logged settle-up payments, listed under the
+   transfers. Payer/payee names get a dotted underline + hover title. */
+.tc-stmt-list { margin-top: 18px; display: flex; flex-direction: column; }
+.tc-stmt-head { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); padding-bottom: 8px; }
+.tc-stmt { display: flex; align-items: center; gap: 10px; padding: 11px 2px; border-top: 1px solid var(--line); background: none; border-left: 0; border-right: 0; border-bottom: 0; font: inherit; text-align: left; cursor: pointer; }
+.tc-stmt:hover .tc-stmt-name { color: var(--fg); }
+.tc-stmt-main { display: flex; flex-direction: column; gap: 2px; font-size: 14px; font-weight: 700; color: var(--fg-2); min-width: 0; }
+.tc-stmt-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-stmt-name { text-decoration: underline dotted; text-decoration-color: color-mix(in srgb, var(--fg-2) 55%, transparent); text-underline-offset: 3px; cursor: help; }
+.tc-stmt-name--payee { font-style: italic; color: #6aa9dc; text-decoration-color: color-mix(in srgb, #6aa9dc 60%, transparent); }
+.tc-stmt-meta { font-size: 11px; font-weight: 500; color: var(--dim); }
+.tc-stmt-amt { margin-left: auto; font-weight: 800; color: var(--gb-pos); font-variant-numeric: tabular-nums; flex-shrink: 0; }

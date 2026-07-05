@@ -3881,6 +3881,32 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
 .tc-extract:hover:not(:disabled) { background: var(--surface-2); border-color: var(--line-strong); }
 .tc-extract:disabled { opacity: 0.6; cursor: default; }
 .tc-extract-arrow { font-size: 17px; line-height: 1; }
+/* Extract format chooser — two stacked option cards inside the small modal. */
+.gb-extract-opts { display: grid; gap: 10px; margin-top: 16px; }
+.gb-extract-opt { display: flex; flex-direction: column; gap: 3px; text-align: left; font: inherit; padding: 13px 15px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: border-color 0.12s, background-color 0.12s; }
+.gb-extract-opt:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: var(--surface-2); }
+.gb-extract-opt-main { font-size: 13.5px; font-weight: 700; color: var(--fg); display: flex; align-items: center; gap: 7px; }
+.gb-extract-opt-sub { font-size: 11.5px; color: var(--dim); line-height: 1.45; }
+
+/* Settle-up math dialog — line-by-line breakdown behind a transfer amount.
+   (--gb-pos/--gb-neg live on .tc-card, hence the fallbacks here.) */
+.txd-sec { margin-top: 14px; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--surface); }
+.txd-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13px; font-weight: 800; color: var(--fg); margin-bottom: 4px; }
+.txd-head .pos, .txd-total .pos { color: var(--gb-pos, #2fb46b); }
+.txd-head .neg, .txd-total .neg { color: var(--gb-neg, #e5484d); }
+.txd-line { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; border-top: 1px dashed var(--line); font-size: 12px; }
+.txd-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; font-weight: 600; color: var(--fg); overflow: hidden; }
+.txd-meta { font-size: 10.5px; font-weight: 500; color: var(--dim); }
+.txd-cols { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.txd-paid { color: var(--gb-pos, #2fb46b); }
+.txd-share { color: var(--gb-neg, #e5484d); }
+.txd-net { width: 76px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
+.txd-net.pos { color: var(--gb-pos, #2fb46b); }
+.txd-net.neg { color: var(--gb-neg, #e5484d); }
+.txd-total { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 8px; font-size: 12px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.txd-note { font-size: 12px; color: var(--muted); line-height: 1.55; margin: 2px 0 8px; }
+.txd-match-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg-2, var(--fg)); padding: 6px 9px; border-radius: 8px; }
+.txd-match-row.on { background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 700; color: var(--fg); }
 .tc-board { display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px; align-items: start; margin-bottom: 16px; }
 .tc-board-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 .tc-board-main > .tc-card + .tc-card { margin-top: 0; }

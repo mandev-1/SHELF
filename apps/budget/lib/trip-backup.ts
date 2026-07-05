@@ -192,14 +192,61 @@ export function serializeTripBackup(envelope: TripBackupEnvelope): string {
 }
 
 /** Slug-and-date filename, e.g. `shelf-trip-krakow-weekender-2026-06-28.json`. */
-export function tripBackupFilename(trip: BudgetTrip, at: Date = new Date()): string {
+export function tripBackupFilename(trip: BudgetTrip, at: Date = new Date(), ext = "json"): string {
   const slug =
     trip.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 60) || "trip";
-  return `shelf-trip-${slug}-${at.toISOString().slice(0, 10)}.json`;
+  return `shelf-trip-${slug}-${at.toISOString().slice(0, 10)}.${ext}`;
+}
+
+// --- Excel (CSV) extract ----------------------------------------------------
+
+/** One spreadsheet row per expense — for humans, not for restore (that's JSON). */
+export function tripExpensesCsv(trip: BudgetTrip, allMembers: BudgetMember[]): string {
+  const nameOf = (id: string) => allMembers.find((m) => m.id === id)?.name ?? id;
+  const cell = (v: unknown) => {
+    const s = v == null ? "" : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const rows: string[][] = [
+    ["Date", "Title", "Type", "Category", "Amount", "Currency", "Paid by", "Split among", "Note"],
+  ];
+  const expenses = [...(trip.expenses ?? [])].sort((a, b) =>
+    (a.date ?? "").localeCompare(b.date ?? ""),
+  );
+  for (const e of expenses) {
+    rows.push([
+      e.date ?? "",
+      e.title,
+      e.settlement ? "Settlement" : "Expense",
+      e.settlement ? "" : e.category ?? "",
+      String(e.amount),
+      e.currency,
+      nameOf(e.paidBy),
+      (e.splitAmong ?? []).map(nameOf).join(", "),
+      e.note ?? "",
+    ]);
+  }
+  // BOM so Excel opens the file as UTF-8 (names with diacritics survive).
+  return "\uFEFF" + rows.map((r) => r.map(cell).join(",")).join("\r\n");
+}
+
+/** Trigger a browser download of a CSV extract. No-op server-side. */
+export function downloadTripCsv(csv: string, filename: string): void {
+  if (typeof document === "undefined") return;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 /** Trigger a browser download of the serialized envelope. No-op server-side. */

@@ -9,7 +9,17 @@ import type {
   BudgetSplitBasis,
   BudgetExpense,
 } from "../lib/budget-types";
-import { Avatar, fmt, initials, AV_HUES, nowIso, today, uid } from "../lib/budget-format";
+import {
+  Avatar,
+  expenseShares,
+  fmt,
+  initials,
+  AV_HUES,
+  nowIso,
+  today,
+  uid,
+  type Transfer,
+} from "../lib/budget-format";
 import { convert, fmtSecondary, tripCurrencyOptions } from "../lib/currency";
 import { tripStats, tripMembers, tripMetaLabel } from "../lib/trips";
 import { ExpenseModal } from "./BudgetPanel";
@@ -19,7 +29,9 @@ import { api } from "../lib/api";
 import {
   buildTripBackup,
   downloadTripBackup,
+  downloadTripCsv,
   tripBackupFilename,
+  tripExpensesCsv,
   type TripBackupLog,
 } from "../lib/trip-backup";
 
@@ -74,14 +86,23 @@ export function TripDetail({
 }: TripDetailProps) {
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
   const [settleModal, setSettleModal] = useState<BudgetExpense | "new" | null>(null);
+  const [txDetail, setTxDetail] = useState<Transfer | null>(null);
   const [invite, setInvite] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [extractDlg, setExtractDlg] = useState(false);
 
-  // Same per-trip JSON backup as TripsView's right-click menu, as a visible button.
-  const extract = async () => {
+  // Extract = download the trip. JSON is the full restorable backup (same as
+  // TripsView's right-click menu); Excel is a human-readable CSV of the ledger.
+  const extract = async (kind: "json" | "excel") => {
     if (extracting) return;
+    setExtractDlg(false);
     setExtracting(true);
     try {
+      if (kind === "excel") {
+        downloadTripCsv(tripExpensesCsv(trip, members), tripBackupFilename(trip, new Date(), "csv"));
+        toast(`Extracted “${trip.name}” for Excel`);
+        return;
+      }
       let logs: TripBackupLog[] | undefined;
       try {
         logs = await api.get<TripBackupLog[]>(`/logs?tripId=${encodeURIComponent(trip.id)}`);
@@ -139,8 +160,14 @@ export function TripDetail({
       day % 10 === 1 && day !== 11 ? "st" : day % 10 === 2 && day !== 12 ? "nd" : day % 10 === 3 && day !== 13 ? "rd" : "th";
     return `${day}${suffix} – ${d.toLocaleDateString("en", { weekday: "long" })}`;
   };
+  // Reconciliation statements live in the Settle-up card, not the spend ledger.
+  const settlements = expenses
+    .filter((e) => e.settlement)
+    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
   const expenseDays = (() => {
-    const sorted = [...expenses].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+    const sorted = [...expenses]
+      .filter((e) => !e.settlement)
+      .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
     const days: { date?: string; items: BudgetExpense[] }[] = [];
     for (const e of sorted) {
       const last = days[days.length - 1];
@@ -396,7 +423,7 @@ export function TripDetail({
           <button
             type="button"
             className="card tc-extract"
-            onClick={() => void extract()}
+            onClick={() => setExtractDlg(true)}
             disabled={extracting}
             title="Download this trip as a JSON backup"
           >
@@ -441,7 +468,7 @@ export function TripDetail({
           </div>
         </div>
 
-        {expenses.length === 0 ? (
+        {expenseDays.length === 0 ? (
           <div className="gb-empty">No expenses logged yet — add the first one.</div>
         ) : (
           <div className="gb-ledger-body">
@@ -545,17 +572,206 @@ export function TripDetail({
         ) : (
           <div className="tc-tx-list">
             {stats.transfers.map((t, i) => (
-              <div key={i} className="tc-tx">
+              <button
+                key={i}
+                type="button"
+                className="tc-tx"
+                onClick={() => setTxDetail(t)}
+                title="See how this amount was worked out"
+              >
                 <span className="tc-tx-name">{t.from.name}</span>
                 <span className="tc-tx-arrow">→</span>
                 <span className="tc-tx-name">{t.to.name}</span>
                 <span className="tc-tx-amt">{fmt(t.amount, main)}</span>
-              </div>
+              </button>
             ))}
+          </div>
+        )}
+
+        {settlements.length > 0 && (
+          <div className="tc-stmt-list">
+            <div className="tc-stmt-head">Reconciliation statements</div>
+            {settlements.map((e) => {
+              const payer = memberById(e.paidBy);
+              const payee = memberById(e.splitAmong?.[0] ?? "");
+              return (
+                <button
+                  key={e.id}
+                  type="button"
+                  className="tc-stmt"
+                  onClick={() => canManage && setSettleModal(e)}
+                  style={canManage ? undefined : { cursor: "default" }}
+                >
+                  <span className="tc-stmt-main">
+                    <span className="tc-stmt-line">
+                      <span className="tc-stmt-name" title={`Payer: ${payer?.name ?? "?"}`}>
+                        {payer?.name ?? "?"}
+                      </span>{" "}
+                      paid{" "}
+                      <span
+                        className="tc-stmt-name tc-stmt-name--payee"
+                        title={`Received the money: ${payee?.name ?? "?"}`}
+                      >
+                        {payee?.name ?? "?"}
+                      </span>
+                    </span>
+                    <span className="tc-stmt-meta">Settlement · {dateLabel(e.date)}</span>
+                  </span>
+                  <span className="tc-stmt-amt">{fmt(e.amount, e.currency)}</span>
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
       </div>
+
+      {txDetail && (() => {
+        // Line-by-line settle-up math, all in the trip's main currency — the same
+        // conversion + share function (expenseShares) the engine itself uses.
+        const mainExp = expenses.map((e) => ({
+          ...e,
+          amount: convert(e.amount, e.currency, main),
+          currency: main,
+        }));
+        const ledgerOf = (mid: string) =>
+          mainExp
+            .map((e) => {
+              const share = expenseShares(tMembers, e, splitBasis).get(mid) ?? 0;
+              const paidAmt = e.paidBy === mid ? e.amount : 0;
+              return { e, paid: paidAmt, share, net: paidAmt - share };
+            })
+            .filter((l) => l.paid > 0.005 || l.share > 0.005);
+        const sgn = (v: number) => `${v < 0 ? "−" : "+"}${fmt(Math.abs(v), main)}`;
+        const netOf = (mid: string) => stats.balances.find((b) => b.member.id === mid)?.net ?? 0;
+        return (
+          <div className="gb-modal-backdrop" onClick={() => setTxDetail(null)}>
+            <div className="gb-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="gb-modal-head">
+                <span className="card-eyebrow">Settle-up math</span>
+                <button type="button" className="gb-modal-x" onClick={() => setTxDetail(null)} aria-label="Close">
+                  ✕
+                </button>
+              </div>
+              <div className="gb-modal-body" style={{ display: "block" }}>
+                <h2 className="gb-modal-title">
+                  {txDetail.from.name} → {txDetail.to.name} · {fmt(txDetail.amount, main)}
+                </h2>
+                <p className="gb-modal-desc">
+                  Everything below is in {main}. For each expense: what the person paid in, minus
+                  their share of it, gives the line's effect on their balance.
+                </p>
+                {[txDetail.from, txDetail.to].map((m) => {
+                  const lines = ledgerOf(m.id);
+                  const paidSum = lines.reduce((s, l) => s + l.paid, 0);
+                  const shareSum = lines.reduce((s, l) => s + l.share, 0);
+                  const net = paidSum - shareSum;
+                  return (
+                    <div key={m.id} className="txd-sec">
+                      <div className="txd-head">
+                        <span>{m.name}</span>
+                        <span className={net >= 0 ? "pos" : "neg"}>net {sgn(net)}</span>
+                      </div>
+                      {lines.map((l) => (
+                        <div key={l.e.id} className="txd-line">
+                          <span className="txd-title">
+                            {l.e.title || (l.e.settlement ? "Settlement" : "Expense")}
+                            <span className="txd-meta">
+                              {l.e.settlement ? "Settlement" : l.e.category || "Other"} ·{" "}
+                              {dateLabel(l.e.date)}
+                            </span>
+                          </span>
+                          <span className="txd-cols">
+                            {l.paid > 0.005 && <span className="txd-paid">paid {fmt(l.paid, main)}</span>}
+                            {l.share > 0.005 && (
+                              <span className="txd-share">
+                                {l.e.settlement ? `received ${fmt(l.share, main)}` : `share −${fmt(l.share, main)}`}
+                              </span>
+                            )}
+                          </span>
+                          <span className={`txd-net ${l.net >= 0 ? "pos" : "neg"}`}>{sgn(l.net)}</span>
+                        </div>
+                      ))}
+                      <div className="txd-total">
+                        paid {fmt(paidSum, main)} − share {fmt(shareSum, main)} ={" "}
+                        <b className={net >= 0 ? "pos" : "neg"}>{sgn(net)}</b>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="txd-sec">
+                  <div className="txd-head">
+                    <span>The match</span>
+                  </div>
+                  <p className="txd-note">
+                    To square up in the fewest payments, the biggest debt is paired with the biggest
+                    credit until nothing is left: {txDetail.from.name} owes{" "}
+                    {fmt(Math.abs(netOf(txDetail.from.id)), main)}, {txDetail.to.name} is owed{" "}
+                    {fmt(netOf(txDetail.to.id), main)} — so {fmt(txDetail.amount, main)} goes from{" "}
+                    {txDetail.from.name} to {txDetail.to.name}.
+                  </p>
+                  {stats.transfers.map((t, i) => (
+                    <div
+                      key={i}
+                      className={`txd-match-row${
+                        t.from.id === txDetail.from.id && t.to.id === txDetail.to.id ? " on" : ""
+                      }`}
+                    >
+                      <span>
+                        {t.from.name} → {t.to.name}
+                      </span>
+                      <span style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums" }}>
+                        {fmt(t.amount, main)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="gb-modal-foot">
+                <span style={{ flex: 1 }} />
+                <button type="button" className="gb-modal-cancel" onClick={() => setTxDetail(null)}>
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {extractDlg && (
+        <div className="gb-modal-backdrop" onClick={() => setExtractDlg(false)}>
+          <div className="gb-modal gb-modal--sm" onClick={(e) => e.stopPropagation()}>
+            <div className="gb-modal-head">
+              <span className="card-eyebrow">Extract</span>
+              <button type="button" className="gb-modal-x" onClick={() => setExtractDlg(false)} aria-label="Close">
+                ✕
+              </button>
+            </div>
+            <div className="gb-modal-body" style={{ display: "block" }}>
+              <h2 className="gb-modal-title">Extract “{trip.name}”</h2>
+              <p className="gb-modal-desc">Choose a format for the download.</p>
+              <div className="gb-extract-opts">
+                <button type="button" className="gb-extract-opt" onClick={() => void extract("json")}>
+                  <span className="gb-extract-opt-main">
+                    <span aria-hidden>🗄</span> JSON backup
+                  </span>
+                  <span className="gb-extract-opt-sub">
+                    Full snapshot — trip, people and audit log. Restorable later.
+                  </span>
+                </button>
+                <button type="button" className="gb-extract-opt" onClick={() => void extract("excel")}>
+                  <span className="gb-extract-opt-main">
+                    <span aria-hidden>📊</span> Excel
+                  </span>
+                  <span className="gb-extract-opt-sub">
+                    Expense table (CSV) — opens straight in Excel, Numbers or Sheets.
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {expenseModal && (
         <ExpenseModal

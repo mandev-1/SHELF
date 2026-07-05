@@ -82,13 +82,42 @@ export interface Transfer {
   amount: number;
 }
 
+/** Per-member owed shares for ONE expense — the exact math computeBalances
+ *  uses (custom amounts > per-expense basis > group basis), exported so UI can
+ *  show a line-by-line breakdown that's guaranteed to match the engine. */
+export function expenseShares(
+  members: BudgetMember[],
+  e: BudgetExpense,
+  splitBasis: BudgetSplitBasis,
+): Map<string, number> {
+  const out = new Map<string, number>();
+  if (e.amount <= 0) return out;
+  const byId = new Map(members.map((m) => [m.id, m]));
+  const among = (e.splitAmong.length ? e.splitAmong : members.map((m) => m.id)).filter((id) =>
+    byId.has(id),
+  );
+  if (among.length === 0) return out;
+  const basis = e.basis ?? splitBasis;
+  const cw = e.customWeights;
+  let weights =
+    cw && among.some((id) => typeof cw[id] === "number" && cw[id]! > 0)
+      ? among.map((id) => ({ id, w: Math.max(0, cw[id] ?? 0) }))
+      : among.map((id) => ({ id, w: memberWeight(byId.get(id)!, basis) }));
+  let totalW = weights.reduce((s, x) => s + x.w, 0);
+  if (totalW <= 0) {
+    weights = among.map((id) => ({ id, w: 1 }));
+    totalW = among.length;
+  }
+  for (const { id, w } of weights) out.set(id, (e.amount * w) / totalW);
+  return out;
+}
+
 /** Per-member balances + greedy settle-up transfers for a member/expense set. */
 export function computeBalances(
   members: BudgetMember[],
   expenses: BudgetExpense[],
   splitBasis: BudgetSplitBasis,
 ): { balances: Balance[]; total: number; transfers: Transfer[] } {
-  const byId = new Map(members.map((m) => [m.id, m]));
   const paid = new Map<string, number>();
   const owed = new Map<string, number>();
   members.forEach((m) => {
@@ -102,26 +131,8 @@ export function computeBalances(
     // Settlements shift balances (payer up, recipient down) but aren't spending.
     if (!e.settlement) total += e.amount;
     paid.set(e.paidBy, (paid.get(e.paidBy) ?? 0) + e.amount);
-    const among = (e.splitAmong.length ? e.splitAmong : members.map((m) => m.id)).filter((id) =>
-      byId.has(id),
-    );
-    if (among.length === 0) continue;
-    const basis = e.basis ?? splitBasis;
-    // Exact custom amounts (customWeights = per-member amount) trump the basis;
-    // they're normalized like weights, so shares stay right even if the entered
-    // amounts don't quite sum to the expense total.
-    const cw = e.customWeights;
-    let weights =
-      cw && among.some((id) => typeof cw[id] === "number" && cw[id]! > 0)
-        ? among.map((id) => ({ id, w: Math.max(0, cw[id] ?? 0) }))
-        : among.map((id) => ({ id, w: memberWeight(byId.get(id)!, basis) }));
-    let totalW = weights.reduce((s, x) => s + x.w, 0);
-    if (totalW <= 0) {
-      weights = among.map((id) => ({ id, w: 1 }));
-      totalW = among.length;
-    }
-    for (const { id, w } of weights) {
-      owed.set(id, (owed.get(id) ?? 0) + (e.amount * w) / totalW);
+    for (const [id, share] of expenseShares(members, e, splitBasis)) {
+      owed.set(id, (owed.get(id) ?? 0) + share);
     }
   }
 
