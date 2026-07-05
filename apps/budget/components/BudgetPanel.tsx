@@ -86,12 +86,18 @@ function computeBalances(state: BudgetState): { balances: Balance[]; total: numb
 
   for (const e of state.expenses) {
     if (e.amount <= 0) continue;
-    total += e.amount;
+    // Settlements shift balances (payer up, recipient down) but aren't spending.
+    if (!e.settlement) total += e.amount;
     paid.set(e.paidBy, (paid.get(e.paidBy) ?? 0) + e.amount);
     const among = (e.splitAmong.length ? e.splitAmong : state.members.map((m) => m.id)).filter((id) => byId.has(id));
     if (among.length === 0) continue;
     const basis = e.basis ?? state.splitBasis;
-    let weights = among.map((id) => ({ id, w: memberWeight(byId.get(id)!, basis) }));
+    // Exact custom amounts (customWeights = per-member amount) trump the basis.
+    const cw = e.customWeights;
+    let weights =
+      cw && among.some((id) => typeof cw[id] === "number" && cw[id]! > 0)
+        ? among.map((id) => ({ id, w: Math.max(0, cw[id] ?? 0) }))
+        : among.map((id) => ({ id, w: memberWeight(byId.get(id)!, basis) }));
     let totalW = weights.reduce((s, x) => s + x.w, 0);
     if (totalW <= 0) { weights = among.map((id) => ({ id, w: 1 })); totalW = among.length; }
     for (const { id, w } of weights) {
@@ -521,6 +527,7 @@ export function ExpenseModal({ expense, members, currency, currencies, defaultCu
 
   const allIds = members.map((m) => m.id);
   const initialSplitMode: "equal" | "custom" | "me" = (() => {
+    if (expense?.customWeights && Object.keys(expense.customWeights).length) return "custom";
     const sa = expense?.splitAmong;
     if (!sa || sa.length === 0 || sa.length === members.length) return "equal";
     if (sa.length === 1) return "me";
@@ -528,6 +535,13 @@ export function ExpenseModal({ expense, members, currency, currencies, defaultCu
   })();
   const [splitMode, setSplitMode] = useState<"equal" | "custom" | "me">(initialSplitMode);
   const splitIds = splitMode === "equal" ? allIds : splitMode === "me" ? [paidBy] : among;
+
+  // Custom split: per-member exact amounts. Members without a typed value split
+  // whatever remains of the total equally, Splitwise-style.
+  const [customAmts, setCustomAmts] = useState<Record<string, string>>(() => {
+    const w = expense?.customWeights;
+    return w ? Object.fromEntries(Object.entries(w).map(([k, v]) => [k, String(v)])) : {};
+  });
 
   // Day chips: the trip's days when in a trip, else the last 5 days (anchored so
   // the selected date is always one of the chips).
@@ -543,6 +557,20 @@ export function ExpenseModal({ expense, members, currency, currencies, defaultCu
 
   const amt = Number(amount) || 0;
   const perHead = splitIds.length ? amt / splitIds.length : 0;
+  const manualSum = splitIds.reduce(
+    (s, id) => s + (customAmts[id] !== undefined ? Number(customAmts[id]) || 0 : 0),
+    0,
+  );
+  const autoIds = splitIds.filter((id) => customAmts[id] === undefined);
+  const autoShare = autoIds.length ? Math.max(0, amt - manualSum) / autoIds.length : 0;
+  const shareOf = (id: string) =>
+    splitMode !== "custom"
+      ? perHead
+      : customAmts[id] !== undefined
+        ? Number(customAmts[id]) || 0
+        : autoShare;
+  const assigned = splitIds.reduce((s, id) => s + shareOf(id), 0);
+  const splitMismatch = splitMode === "custom" && Math.abs(assigned - amt) > 0.5;
 
   // TODO (later version): receipts are stored inline as base64 data URLs on the
   // expense — fine for small images but it bloats the jsonb blob and risks the
@@ -556,7 +584,7 @@ export function ExpenseModal({ expense, members, currency, currencies, defaultCu
     reader.readAsDataURL(file);
   };
 
-  const valid = title.trim() && amt > 0 && paidBy && splitIds.length > 0;
+  const valid = title.trim() && amt > 0 && paidBy && splitIds.length > 0 && !splitMismatch;
   const submit = () => {
     if (!valid) return;
     const base: BudgetExpense = expense ?? { id: uid(), title: "", amount: 0, currency: cur, date, paidBy, splitAmong: splitIds, createdAt: nowIso(), updatedAt: nowIso() };
@@ -569,6 +597,10 @@ export function ExpenseModal({ expense, members, currency, currencies, defaultCu
       date,
       paidBy,
       splitAmong: splitIds,
+      customWeights:
+        splitMode === "custom"
+          ? Object.fromEntries(splitIds.map((id) => [id, Math.round(shareOf(id) * 100) / 100]))
+          : undefined,
       receipt: receipt || undefined,
       updatedAt: nowIso(),
     });
@@ -576,7 +608,7 @@ export function ExpenseModal({ expense, members, currency, currencies, defaultCu
 
   return (
     <div className="gb-modal-backdrop" onClick={onClose}>
-      <div className="gb-modal gb-modal--sm" onClick={(e) => e.stopPropagation()}>
+      <div className="gb-modal gb-modal--sm gb-modal--expense" onClick={(e) => e.stopPropagation()}>
         <div className="gb-modal-head">
           <span className="card-eyebrow">Shared expense</span>
           <button type="button" className="gb-modal-x" onClick={onClose} aria-label="Close">✕</button>
@@ -733,12 +765,47 @@ export function ExpenseModal({ expense, members, currency, currencies, defaultCu
                   >
                     <Avatar member={m} idx={i} size={26} />
                     <span className="gb-split-name">{m.name}</span>
-                    <span className="gb-split-basis">equal</span>
-                    <span className="gb-split-amt">{fmt(on ? perHead : 0, cur)}</span>
+                    {interactive && on ? (
+                      <>
+                        <span className="gb-split-basis">
+                          {customAmts[m.id] !== undefined ? "exact" : "rest"}
+                        </span>
+                        <input
+                          className="gb-split-inp"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          value={customAmts[m.id] ?? ""}
+                          placeholder={String(Math.round(autoShare * 100) / 100)}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setCustomAmts((prev) => {
+                              const next = { ...prev };
+                              if (v === "") delete next[m.id];
+                              else next[m.id] = v;
+                              return next;
+                            });
+                          }}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <span className="gb-split-basis">equal</span>
+                        <span className="gb-split-amt">{fmt(on ? shareOf(m.id) : 0, cur)}</span>
+                      </>
+                    )}
                   </div>
                 );
               })}
             </div>
+            {splitMode === "custom" && (
+              <div className={`gb-split-sum${splitMismatch ? " off-total" : ""}`}>
+                {splitMismatch
+                  ? `Assigned ${fmt(assigned, cur)} of ${fmt(amt, cur)} — adjust the amounts`
+                  : `Assigned ${fmt(assigned, cur)} of ${fmt(amt, cur)}`}
+              </div>
+            )}
           </div>
         </div>
         <div className="gb-modal-foot">

@@ -35,6 +35,9 @@ export interface BudgetExpense {
   splitAmong: string[];
   basis?: BudgetSplitBasis;
   customWeights?: Record<string, number>;
+  /** Reconciliation statement: a settle-up payment (paidBy → splitAmong[0]).
+   *  Moves balances but is NOT spending — excluded from trip totals. */
+  settlement?: boolean;
   note?: string;
   receipt?: string;
   createdAt: string;
@@ -101,6 +104,7 @@ export function normBudgetExpense(o: any): BudgetExpense | null {
       o.customWeights && typeof o.customWeights === "object" && !Array.isArray(o.customWeights)
         ? o.customWeights
         : undefined,
+    settlement: o.settlement === true ? true : undefined,
     note: typeof o.note === "string" ? o.note : undefined,
     receipt: typeof o.receipt === "string" ? o.receipt : undefined,
     createdAt: typeof o.createdAt === "string" ? o.createdAt : nowIso,

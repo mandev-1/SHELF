@@ -12,7 +12,7 @@ export default function Home() {
           with gutters far wider than the design's 16px, so it's subsumed (and px
           would otherwise shrink the box below 760). Mobile/tablet keep their existing
           padding (px-3 → sm:px-6) and full width. */}
-      <main className="relative z-10 mx-auto min-h-screen w-full max-w-[1640px] px-3 pt-6 pb-24 sm:px-6 min-[900px]:max-w-[760px] min-[900px]:px-0 min-[900px]:pt-14 min-[900px]:pb-10">
+      <main className="relative z-10 mx-auto min-h-screen w-full max-w-[1640px] px-3 pt-6 pb-24 sm:px-6 min-[900px]:max-w-[1260px] min-[900px]:px-0 min-[900px]:pt-14 min-[900px]:pb-10">
         <BudgetView />
       </main>
     </div>

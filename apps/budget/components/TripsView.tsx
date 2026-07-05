@@ -1,11 +1,19 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type * as React from "react";
 import type { BudgetTrip, BudgetMember, BudgetCurrency, BudgetSplitBasis } from "../lib/budget-types";
 import { fmt, initials, AV_HUES } from "../lib/budget-format";
 import { tripStats, tripMembers, tripMetaLabel } from "../lib/trips";
 import { TripModal } from "./TripModal";
 import { TripDetail } from "./TripDetail";
+import { toast } from "../lib/toast";
+import { api } from "../lib/api";
+import {
+  buildTripBackup,
+  downloadTripBackup,
+  tripBackupFilename,
+  type TripBackupLog,
+} from "../lib/trip-backup";
 
 interface TripsViewProps {
   trips: BudgetTrip[];
@@ -46,8 +54,57 @@ export function TripsView({
 }: TripsViewProps) {
   const setSelectedId = (id: string | null) => onSelectTrip?.(id);
   const [modal, setModal] = useState<BudgetTrip | "new" | null>(null);
+  // Admin-only right-click menu (download a per-trip JSON backup, etc.).
+  const [menu, setMenu] = useState<{ x: number; y: number; trip: BudgetTrip } | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const selected = selectedTripId ? trips.find((t) => t.id === selectedTripId) ?? null : null;
+
+  // Close the right-click menu on Escape (outside-click is handled by the catcher).
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menu]);
+
+  const openMenu = (e: React.MouseEvent, trip: BudgetTrip) => {
+    if (!canManage) return; // non-admins keep the browser's native menu
+    e.preventDefault();
+    const W = 224;
+    const H = 96;
+    const PAD = 8;
+    setMenu({
+      x: Math.max(PAD, Math.min(e.clientX, window.innerWidth - W - PAD)),
+      y: Math.max(PAD, Math.min(e.clientY, window.innerHeight - H - PAD)),
+      trip,
+    });
+  };
+
+  const exportTrip = async (trip: BudgetTrip) => {
+    setMenu(null);
+    if (busyId) return;
+    setBusyId(trip.id);
+    try {
+      // Best-effort: fold in the trip's expense audit trail if the API has one.
+      let logs: TripBackupLog[] | undefined;
+      try {
+        logs = await api.get<TripBackupLog[]>(`/logs?tripId=${encodeURIComponent(trip.id)}`);
+      } catch {
+        logs = undefined;
+      }
+      const envelope = await buildTripBackup({ trip, members, logs, exportedBy: actorName });
+      downloadTripBackup(envelope, tripBackupFilename(trip));
+      const n = logs?.length ?? 0;
+      toast(`Backed up “${trip.name}”${n ? ` · ${n} log${n === 1 ? "" : "s"}` : ""}`);
+    } catch {
+      toast("Couldn't build that backup. Try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const modalNode = modal && (
     <TripModal
@@ -111,6 +168,7 @@ export function TripsView({
               className="gb-trip-card"
               style={{ ["--trip-hue" as any]: trip.color || "var(--accent)" } as React.CSSProperties}
               onClick={() => setSelectedId(trip.id)}
+              onContextMenu={(e) => openMenu(e, trip)}
             >
               <div className="gb-trip-cover">
                 {trip.cover && <img className="gb-trip-img" src={trip.cover} data-filled="" alt="" />}
@@ -152,6 +210,37 @@ export function TripsView({
           Plan a trip
         </button>
       </div>
+      {menu && (
+        <>
+          {/* Transparent catcher closes the menu on any outside click / right-click. */}
+          <div
+            className="gb-ctx-catch"
+            onClick={() => setMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu(null);
+            }}
+          />
+          <div className="card gb-ctx-menu" role="menu" style={{ left: menu.x, top: menu.y }}>
+            <div className="gb-ctx-title">
+              {menu.trip.emoji ? `${menu.trip.emoji} ` : ""}
+              {menu.trip.name}
+            </div>
+            <button
+              type="button"
+              role="menuitem"
+              className="gb-ctx-item"
+              disabled={busyId === menu.trip.id}
+              onClick={() => void exportTrip(menu.trip)}
+            >
+              <span aria-hidden style={{ fontSize: 14 }}>
+                ⬇
+              </span>
+              {busyId === menu.trip.id ? "Preparing backup…" : "Download JSON backup"}
+            </button>
+          </div>
+        </>
+      )}
       {modalNode}
     </>
   );

@@ -15,7 +15,7 @@ export function SpendTrend({ trip }: { trip: BudgetTrip }) {
   // cumulative total across the days in date order.
   const byDay = new Map<string, number>();
   for (const e of trip.expenses ?? []) {
-    if (!e.date) continue;
+    if (!e.date || e.settlement) continue; // settlements aren't spend
     byDay.set(e.date, (byDay.get(e.date) ?? 0) + convert(e.amount, e.currency, main));
   }
   const days = [...byDay.keys()].sort();

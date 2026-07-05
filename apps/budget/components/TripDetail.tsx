@@ -9,13 +9,19 @@ import type {
   BudgetSplitBasis,
   BudgetExpense,
 } from "../lib/budget-types";
-import { Avatar, fmt, initials, AV_HUES, nowIso, uid } from "../lib/budget-format";
+import { Avatar, fmt, initials, AV_HUES, nowIso, today, uid } from "../lib/budget-format";
 import { convert, fmtSecondary, tripCurrencyOptions } from "../lib/currency";
 import { tripStats, tripMembers, tripMetaLabel } from "../lib/trips";
 import { ExpenseModal } from "./BudgetPanel";
 import { SpendTrend } from "./SpendTrend";
 import { toast } from "../lib/toast";
 import { api } from "../lib/api";
+import {
+  buildTripBackup,
+  downloadTripBackup,
+  tripBackupFilename,
+  type TripBackupLog,
+} from "../lib/trip-backup";
 
 // Category → dot hue for the "On the road" ledger (handoff 009).
 const CATEGORY_HUE: Record<string, string> = {
@@ -27,6 +33,7 @@ const CATEGORY_HUE: Record<string, string> = {
   Health: "#16b6c8",
   Fees: "#8fa5c4",
   Other: "#5e7698",
+  Settlement: "#2fb46b",
 };
 
 interface TripDetailProps {
@@ -66,7 +73,30 @@ export function TripDetail({
   onUpdate,
 }: TripDetailProps) {
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
+  const [settleModal, setSettleModal] = useState<BudgetExpense | "new" | null>(null);
   const [invite, setInvite] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+
+  // Same per-trip JSON backup as TripsView's right-click menu, as a visible button.
+  const extract = async () => {
+    if (extracting) return;
+    setExtracting(true);
+    try {
+      let logs: TripBackupLog[] | undefined;
+      try {
+        logs = await api.get<TripBackupLog[]>(`/logs?tripId=${encodeURIComponent(trip.id)}`);
+      } catch {
+        logs = undefined;
+      }
+      const envelope = await buildTripBackup({ trip, members, logs, exportedBy: actorName });
+      downloadTripBackup(envelope, tripBackupFilename(trip));
+      toast(`Extracted “${trip.name}”`);
+    } catch {
+      toast("Couldn't build that backup. Try again.");
+    } finally {
+      setExtracting(false);
+    }
+  };
 
   // Guest header CTA opens the Add-Expense modal by bumping addExpenseSignal.
   useEffect(() => {
@@ -100,6 +130,25 @@ export function TripDetail({
     iso
       ? new Date(`${iso}T00:00:00`).toLocaleDateString("en", { day: "numeric", month: "short", year: "numeric" })
       : "";
+  // Ledger day headers ("20th – Saturday"): newest day first, undated last.
+  const dayHeading = (iso?: string) => {
+    if (!iso) return "No date";
+    const d = new Date(`${iso}T00:00:00`);
+    const day = d.getDate();
+    const suffix =
+      day % 10 === 1 && day !== 11 ? "st" : day % 10 === 2 && day !== 12 ? "nd" : day % 10 === 3 && day !== 13 ? "rd" : "th";
+    return `${day}${suffix} – ${d.toLocaleDateString("en", { weekday: "long" })}`;
+  };
+  const expenseDays = (() => {
+    const sorted = [...expenses].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+    const days: { date?: string; items: BudgetExpense[] }[] = [];
+    for (const e of sorted) {
+      const last = days[days.length - 1];
+      if (last && (last.date ?? "") === (e.date ?? "")) last.items.push(e);
+      else days.push({ date: e.date, items: [e] });
+    }
+    return days;
+  })();
   // Handoff 009 Reconcile card: the trip's cover photo behind a near-white scrim.
   const recStyle = trip.cover
     ? {
@@ -124,6 +173,28 @@ export function TripDetail({
     if (budgetId && tMembers[0]) {
       window.open(`${location.origin}/?b=${budgetId}&user=${tMembers[0].id}&trip=${trip.id}`, "_blank");
     }
+  };
+
+  // Shared save/remove used by both the expense and the reconciliation modals.
+  const saveExpense = (e: BudgetExpense) => {
+    const existed = (trip.expenses ?? []).some((x) => x.id === e.id);
+    onUpdate({
+      ...trip,
+      expenses: existed
+        ? (trip.expenses ?? []).map((x) => (x.id === e.id ? e : x))
+        : [e, ...(trip.expenses ?? [])],
+      updatedAt: nowIso(),
+    });
+    logExpense(existed ? "update" : "create", e);
+  };
+  const removeExpense = (id: string) => {
+    const removed = (trip.expenses ?? []).find((x) => x.id === id);
+    onUpdate({
+      ...trip,
+      expenses: (trip.expenses ?? []).filter((x) => x.id !== id),
+      updatedAt: nowIso(),
+    });
+    if (removed) logExpense("delete", removed);
   };
 
   // Audit log: one append-only record per expense CRUD action (fire-and-forget).
@@ -247,8 +318,15 @@ export function TripDetail({
         </div>
       </div>
 
-      {/* Stat tiles */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
+      {/* Stat tiles (+ admin-only Extract button as a fourth, content-hugging cell) */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: canManage ? "repeat(3, 1fr) auto" : "repeat(3, 1fr)",
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
         <div className="card" style={{ padding: "16px 18px" }}>
           <span className="card-eyebrow">TRIP SPEND</span>
           <div
@@ -265,7 +343,10 @@ export function TripDetail({
             {dual(stats.total)}
           </div>
           <div style={{ fontSize: 11.5, color: "var(--dim)" }}>
-            {expenses.length} expense{expenses.length === 1 ? "" : "s"}
+            {(() => {
+              const n = expenses.filter((e) => !e.settlement).length;
+              return `${n} expense${n === 1 ? "" : "s"}`;
+            })()}
           </div>
         </div>
         <div className="card" style={{ padding: "16px 18px" }}>
@@ -311,6 +392,20 @@ export function TripDetail({
             {stats.squared ? "all square" : "to settle"}
           </div>
         </div>
+        {canManage && (
+          <button
+            type="button"
+            className="card tc-extract"
+            onClick={() => void extract()}
+            disabled={extracting}
+            title="Download this trip as a JSON backup"
+          >
+            <span>{extracting ? "Extracting…" : "Extract"}</span>
+            <span className="tc-extract-arrow" aria-hidden>
+              ↓
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Desktop: "Who paid what" + "Settle up" sit side by side; ≤900px they
@@ -325,31 +420,53 @@ export function TripDetail({
             <div className="card-eyebrow">On the road</div>
             <h3 className="card-title">Who paid what</h3>
           </div>
-          <button
-            className="ghost-btn"
-            type="button"
-            onClick={() => setExpenseModal("new")}
-            disabled={tMembers.length === 0}
-          >
-            + Add expense
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button
+              className="ghost-btn"
+              type="button"
+              onClick={() => setSettleModal("new")}
+              disabled={tMembers.length < 2}
+              title="Log a settle-up payment between two people"
+            >
+              + Reconciliation
+            </button>
+            <button
+              className="ghost-btn"
+              type="button"
+              onClick={() => setExpenseModal("new")}
+              disabled={tMembers.length === 0}
+            >
+              + Add expense
+            </button>
+          </div>
         </div>
 
         {expenses.length === 0 ? (
           <div className="gb-empty">No expenses logged yet — add the first one.</div>
         ) : (
           <div className="gb-ledger-body">
-            {expenses.map((e) => {
+            {expenseDays.map((day) => (
+              <div key={day.date || "undated"} className="gb-led-day">
+                <div className="gb-led-dayhead">{dayHeading(day.date)}</div>
+                {day.items.map((e) => {
               const payer = memberById(e.paidBy);
               const ids = e.splitAmong?.length ? e.splitAmong : tMembers.map((m) => m.id);
               const participants = ids.map(memberById).filter(Boolean) as BudgetMember[];
               return (
-                <button key={e.id} className="gb-led-row" type="button" onClick={() => setExpenseModal(e)}>
-                  <span className="gb-led-dot" style={{ background: catHue(e.category) }} />
+                <button
+                  key={e.id}
+                  className="gb-led-row"
+                  type="button"
+                  onClick={() => (e.settlement ? setSettleModal(e) : setExpenseModal(e))}
+                >
+                  <span
+                    className="gb-led-dot"
+                    style={{ background: e.settlement ? CATEGORY_HUE.Settlement : catHue(e.category) }}
+                  />
                   <span className="gb-led-main">
-                    <span className="gb-led-label">{e.title || "Expense"}</span>
+                    <span className="gb-led-label">{e.title || (e.settlement ? "Settlement" : "Expense")}</span>
                     <span className="gb-led-meta">
-                      {e.category || "Other"} · {dateLabel(e.date)}
+                      {e.settlement ? "Settlement" : e.category || "Other"} · {dateLabel(e.date)}
                     </span>
                   </span>
                   <span className="gb-led-split">
@@ -362,7 +479,9 @@ export function TripDetail({
                         {m.name.charAt(0).toUpperCase()}
                       </span>
                     ))}
-                    <span className="gb-led-splitlab">split {participants.length}</span>
+                    <span className="gb-led-splitlab">
+                      {e.settlement ? "received" : `split ${participants.length}`}
+                    </span>
                   </span>
                   <span className="gb-led-paid">
                     {payer && (
@@ -378,7 +497,9 @@ export function TripDetail({
                   <span className="gb-led-amt">{fmt(e.amount, e.currency)}</span>
                 </button>
               );
-            })}
+                })}
+              </div>
+            ))}
           </div>
         )}
       </section>
@@ -446,28 +567,32 @@ export function TripDetail({
           defaultPaidBy={tMembers[0]?.id}
           dateRange={{ start: trip.startDate, end: trip.endDate }}
           onSave={(e) => {
-            const existed = (trip.expenses ?? []).some((x) => x.id === e.id);
-            onUpdate({
-              ...trip,
-              expenses: existed
-                ? (trip.expenses ?? []).map((x) => (x.id === e.id ? e : x))
-                : [e, ...(trip.expenses ?? [])],
-              updatedAt: nowIso(),
-            });
-            logExpense(existed ? "update" : "create", e);
+            saveExpense(e);
             setExpenseModal(null);
           }}
           onRemove={(id) => {
-            const removed = (trip.expenses ?? []).find((x) => x.id === id);
-            onUpdate({
-              ...trip,
-              expenses: (trip.expenses ?? []).filter((x) => x.id !== id),
-              updatedAt: nowIso(),
-            });
-            if (removed) logExpense("delete", removed);
+            removeExpense(id);
             setExpenseModal(null);
           }}
           onClose={() => setExpenseModal(null)}
+        />
+      )}
+
+      {settleModal && (
+        <SettleModal
+          existing={settleModal === "new" ? null : settleModal}
+          members={tMembers}
+          currencies={tripCurrencyOptions(main, secondary)}
+          defaultCurrency={main}
+          onSave={(e) => {
+            saveExpense(e);
+            setSettleModal(null);
+          }}
+          onRemove={(id) => {
+            removeExpense(id);
+            setSettleModal(null);
+          }}
+          onClose={() => setSettleModal(null)}
         />
       )}
 
@@ -518,6 +643,139 @@ export function TripDetail({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Reconciliation statement — logs a settle-up payment ("X paid Y back") as a
+// settlement expense: it shifts balances in the settle-up engine but is
+// excluded from trip-spend totals (see computeBalances).
+function SettleModal({
+  existing,
+  members,
+  currencies,
+  defaultCurrency,
+  onSave,
+  onRemove,
+  onClose,
+}: {
+  existing: BudgetExpense | null;
+  members: BudgetMember[];
+  currencies: BudgetCurrency[];
+  defaultCurrency: BudgetCurrency;
+  onSave: (e: BudgetExpense) => void;
+  onRemove: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [from, setFrom] = useState(existing?.paidBy ?? members[0]?.id ?? "");
+  const [to, setTo] = useState(existing?.splitAmong?.[0] ?? members[1]?.id ?? "");
+  const [amount, setAmount] = useState(existing ? String(existing.amount) : "");
+  const [cur, setCur] = useState<BudgetCurrency>(existing?.currency ?? defaultCurrency);
+  const [date, setDate] = useState(existing?.date ?? today());
+
+  const amt = Number(amount) || 0;
+  const valid = from && to && from !== to && amt > 0;
+  const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? "?";
+
+  const submit = () => {
+    if (!valid) return;
+    onSave({
+      ...(existing ?? { id: uid(), createdAt: nowIso() }),
+      title: `${nameOf(from)} paid ${nameOf(to)}`,
+      amount: amt,
+      currency: cur,
+      category: undefined,
+      date,
+      paidBy: from,
+      splitAmong: [to],
+      customWeights: undefined,
+      settlement: true,
+      updatedAt: nowIso(),
+    } as BudgetExpense);
+  };
+
+  const chipRow = (value: string, set: (id: string) => void, exclude?: string) => (
+    <div className="gb-paidby">
+      {members.map((m, i) => (
+        <button
+          key={m.id}
+          type="button"
+          className={`gb-paid-chip${value === m.id ? " on" : ""}`}
+          disabled={m.id === exclude}
+          style={m.id === exclude ? { opacity: 0.35, cursor: "default" } : undefined}
+          onClick={() => set(m.id)}
+        >
+          <Avatar member={m} idx={i} size={22} /> {m.name}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="gb-modal-backdrop" onClick={onClose}>
+      <div className="gb-modal gb-modal--sm" onClick={(e) => e.stopPropagation()}>
+        <div className="gb-modal-head">
+          <span className="card-eyebrow">Reconciliation</span>
+          <button type="button" className="gb-modal-x" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="gb-modal-body" style={{ display: "block" }}>
+          <h2 className="gb-modal-title">{existing ? "Edit statement" : "Log a settle-up payment"}</h2>
+          <p className="gb-modal-desc">
+            Record money that changed hands. It squares the balances without counting as trip spend.
+          </p>
+
+          <div className="gb-fld" style={{ marginTop: 14 }}>
+            <span className="gb-fld-lab">Who paid</span>
+            {chipRow(from, setFrom, to)}
+          </div>
+
+          <div className="gb-fld">
+            <span className="gb-fld-lab">Who received</span>
+            {chipRow(to, setTo, from)}
+          </div>
+
+          <label className="gb-fld">
+            <span className="gb-fld-lab">Amount</span>
+            <div className="gb-amt">
+              <select className="gb-amt-cur" value={cur} onChange={(e) => setCur(e.target.value as BudgetCurrency)} aria-label="Currency">
+                {currencies.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input
+                className="se-amt-input"
+                type="number"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0"
+                style={{ flex: 1, minWidth: 0, padding: 0, textAlign: "right", fontSize: 16, fontWeight: 700, color: "var(--fg)" }}
+              />
+            </div>
+          </label>
+
+          <label className="gb-fld">
+            <span className="gb-fld-lab">When</span>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </label>
+        </div>
+        <div className="gb-modal-foot">
+          {existing && (
+            <button type="button" className="gb-modal-del" onClick={() => onRemove(existing.id)}>
+              Delete
+            </button>
+          )}
+          <span style={{ flex: 1 }} />
+          <button type="button" className="gb-modal-cancel" onClick={onClose}>Cancel</button>
+          <button
+            type="button"
+            className="gb-settle-btn"
+            style={{ width: "auto", marginTop: 0, padding: "10px 18px" }}
+            disabled={!valid}
+            onClick={submit}
+          >
+            {existing ? "Save changes" : "Log payment"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
