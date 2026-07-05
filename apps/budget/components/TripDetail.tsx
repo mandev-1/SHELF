@@ -8,6 +8,8 @@ import type {
   BudgetCurrency,
   BudgetSplitBasis,
   BudgetExpense,
+  TripReconcile,
+  TripReconcileMode,
 } from "../lib/budget-types";
 import {
   Avatar,
@@ -15,6 +17,7 @@ import {
   fmt,
   initials,
   AV_HUES,
+  CATEGORY_HUE,
   nowIso,
   today,
   uid,
@@ -24,6 +27,7 @@ import { convert, fmtSecondary, tripCurrencyOptions } from "../lib/currency";
 import { tripStats, tripMembers, tripMetaLabel } from "../lib/trips";
 import { ExpenseModal } from "./BudgetPanel";
 import { SpendTrend } from "./SpendTrend";
+import { DailyBars } from "./DailyBars";
 import { toast } from "../lib/toast";
 import { api } from "../lib/api";
 import {
@@ -34,19 +38,6 @@ import {
   tripExpensesCsv,
   type TripBackupLog,
 } from "../lib/trip-backup";
-
-// Category → dot hue for the "On the road" ledger (handoff 009).
-const CATEGORY_HUE: Record<string, string> = {
-  Groceries: "#34c891",
-  Dining: "#e0905a",
-  Transport: "#0070f2",
-  Housing: "#a384df",
-  Fun: "#e07a93",
-  Health: "#16b6c8",
-  Fees: "#8fa5c4",
-  Other: "#5e7698",
-  Settlement: "#2fb46b",
-};
 
 interface TripDetailProps {
   trip: BudgetTrip;
@@ -64,6 +55,10 @@ interface TripDetailProps {
   actorName?: string;
   /** Guest mode: a header CTA opens the Add-Expense modal by bumping this. */
   addExpenseSignal?: number;
+  /** How this trip settles up (shared, from BudgetState.tripSettings). */
+  reconcile?: TripReconcile;
+  /** When set, the settle-up plan is changeable from the Reconcile card. */
+  onReconcileChange?: (r: TripReconcile) => void;
   onBack: () => void;
   onEdit: () => void;
   onUpdate: (trip: BudgetTrip) => void; // persist expense add/edit, cover, etc.
@@ -80,6 +75,8 @@ export function TripDetail({
   actorId,
   actorName,
   addExpenseSignal,
+  reconcile,
+  onReconcileChange,
   onBack,
   onEdit,
   onUpdate,
@@ -87,6 +84,7 @@ export function TripDetail({
   const [expenseModal, setExpenseModal] = useState<BudgetExpense | "new" | null>(null);
   const [settleModal, setSettleModal] = useState<BudgetExpense | "new" | null>(null);
   const [txDetail, setTxDetail] = useState<Transfer | null>(null);
+  const [pairFor, setPairFor] = useState<BudgetMember | null>(null);
   const [invite, setInvite] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [extractDlg, setExtractDlg] = useState(false);
@@ -125,8 +123,52 @@ export function TripDetail({
   }, [addExpenseSignal]);
 
   const tMembers = tripMembers(trip, members);
-  const stats = tripStats(trip, members, splitBasis);
+  const stats = tripStats(trip, members, splitBasis, reconcile);
   const expenses = trip.expenses ?? [];
+
+  // Settle-up plan (how the transfer suggestions are built). Payment rules
+  // ("I will only pay Mark and Petra") take precedence over any preset mode.
+  const planMode: TripReconcileMode = reconcile?.mode ?? "min";
+  const planHub = reconcile?.hubId ? members.find((m) => m.id === reconcile.hubId) : undefined;
+  const hasRules = !!reconcile?.payTo && Object.keys(reconcile.payTo).length > 0;
+  const planLabel = hasRules
+    ? "Custom rules"
+    : planMode === "hub" && planHub
+      ? `Via ${planHub.name}`
+      : planMode === "pairs"
+        ? "Pair by pair"
+        : "Fewest payments";
+  const [planDlg, setPlanDlg] = useState(false);
+
+  // Payment-rule edits. No stored rule = pays anyone; an EMPTY list = pays no
+  // one (their debt stays open in the plan).
+  const saveRules = (payTo: Record<string, string[]>) => {
+    onReconcileChange?.({
+      ...reconcile,
+      mode: undefined,
+      hubId: undefined,
+      payTo: Object.keys(payTo).length ? payTo : undefined,
+    });
+  };
+  const togglePay = (payerId: string, targetId: string) => {
+    const all = tMembers.filter((x) => x.id !== payerId).map((x) => x.id);
+    const cur = reconcile?.payTo?.[payerId];
+    const eff = cur === undefined ? all : cur.filter((id) => all.includes(id));
+    const next = eff.includes(targetId)
+      ? eff.filter((id) => id !== targetId)
+      : [...eff, targetId];
+    const payTo = { ...(reconcile?.payTo ?? {}) };
+    if (next.length === all.length) delete payTo[payerId];
+    else payTo[payerId] = next;
+    saveRules(payTo);
+  };
+  const togglePaysNoone = (payerId: string) => {
+    const cur = reconcile?.payTo?.[payerId];
+    const payTo = { ...(reconcile?.payTo ?? {}) };
+    if (cur !== undefined && cur.length === 0) delete payTo[payerId]; // back to "anyone"
+    else payTo[payerId] = [];
+    saveRules(payTo);
+  };
 
   // Trip totals are shown in the main currency, with the secondary in parens.
   const main = trip.mainCurrency ?? "CZK";
@@ -532,6 +574,8 @@ export function TripDetail({
       </section>
       {/* Desktop-only cumulative spend curve, stacked under "Who paid what". */}
       <SpendTrend trip={trip} />
+      {/* Desktop-only per-day stacked bars (by payer / by expense type). */}
+      <DailyBars trip={trip} members={tMembers} />
       </div>
 
       {/* Reconcile · settle up (handoff 009) — trip cover behind a white scrim */}
@@ -541,6 +585,19 @@ export function TripDetail({
             <div className="tc-eyebrow">Reconcile</div>
             <div className="tc-title">Settle up</div>
           </div>
+          {onReconcileChange ? (
+            <button
+              type="button"
+              className="tc-plan-btn"
+              onClick={() => setPlanDlg(true)}
+              aria-haspopup="dialog"
+              title="Change how the group settles up"
+            >
+              {planLabel} <span aria-hidden>▾</span>
+            </button>
+          ) : (
+            <span className="tc-plan-btn tc-plan-btn--ro">{planLabel}</span>
+          )}
         </div>
 
         <div className="tc-bal-list">
@@ -551,7 +608,13 @@ export function TripDetail({
             const total = Math.max(1, stats.balances.reduce((s, x) => s + Math.abs(x.net), 0));
             const w = Math.min(100, Math.round((Math.abs(b.net) / total) * 100 * stats.balances.length));
             return (
-              <div key={m.id} className="tc-bal">
+              <button
+                key={m.id}
+                type="button"
+                className="tc-bal"
+                onClick={() => setPairFor(m)}
+                title={`See who ${m.name} paid for — and who paid for ${m.name}`}
+              >
                 <span className="tc-av" style={{ backgroundColor: hueOf(m) }}>
                   {m.name.charAt(0).toUpperCase()}
                 </span>
@@ -562,13 +625,26 @@ export function TripDetail({
                   )}
                 </span>
                 <span className={"tc-bal-net" + (pos ? " pos" : neg ? " neg" : "")}>{fmt(b.net, main)}</span>
-              </div>
+                <span className="tc-bal-eye" aria-hidden>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z" />
+                    <circle cx="12" cy="12" r="2.6" />
+                  </svg>
+                </span>
+              </button>
             );
           })}
         </div>
 
         {stats.transfers.length === 0 ? (
-          <div className="tc-clear">✓ This trip is squared up</div>
+          stats.balances.some((b) => Math.abs(b.net) > 0.5) ? (
+            <div className="tc-clear tc-clear--open">
+              No payments planned — the remaining balances stay open under the current payment
+              rules.
+            </div>
+          ) : (
+            <div className="tc-clear">✓ This trip is squared up</div>
+          )
         ) : (
           <div className="tc-tx-list">
             {stats.transfers.map((t, i) => (
@@ -626,6 +702,99 @@ export function TripDetail({
       </section>
       </div>
 
+      {planDlg && onReconcileChange && (
+        <div className="gb-modal-backdrop" onClick={() => setPlanDlg(false)}>
+          <div
+            className="gb-modal gb-modal--sm"
+            role="dialog"
+            aria-label="How should this trip settle up?"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="gb-modal-head">
+              <span className="card-eyebrow">Reconcile</span>
+              <button type="button" className="gb-modal-x" onClick={() => setPlanDlg(false)} aria-label="Close">
+                ✕
+              </button>
+            </div>
+            <div className="gb-modal-body" style={{ display: "block" }}>
+              <h2 className="gb-modal-title">Who pays whom?</h2>
+              <p className="gb-modal-desc">
+                By default the plan uses the fewest payments. Untick people someone isn’t willing
+                to pay (e.g. “I will only pay Mark and Petra”) and the plan reroutes around it —
+                everyone sees the same plan.
+              </p>
+              {tMembers.map((m) => {
+                const targets = tMembers.filter((x) => x.id !== m.id);
+                const list = reconcile?.payTo?.[m.id];
+                const paysNoone = list !== undefined && list.length === 0;
+                const isOn = (id: string) => (list === undefined ? true : list.includes(id));
+                return (
+                  <div className="gb-fld" key={m.id} style={{ marginTop: 12 }}>
+                    <span className="gb-fld-lab">{m.name} pays only</span>
+                    <div className="gb-paidby">
+                      {targets.map((x) => (
+                        <button
+                          key={x.id}
+                          type="button"
+                          className={`gb-paid-chip${isOn(x.id) ? " on" : ""}`}
+                          aria-pressed={isOn(x.id)}
+                          onClick={() => togglePay(m.id, x.id)}
+                        >
+                          <Avatar member={x} idx={members.indexOf(x)} size={22} /> {x.name}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className={`gb-paid-chip gb-paid-chip--none${paysNoone ? " on" : ""}`}
+                        aria-pressed={paysNoone}
+                        title={`${m.name} makes no payments — their balance stays open`}
+                        onClick={() => togglePaysNoone(m.id)}
+                      >
+                        🚫 No one
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="gb-modal-foot">
+              <button
+                type="button"
+                className="gb-modal-cancel"
+                onClick={() => onReconcileChange({})}
+                disabled={!hasRules}
+              >
+                Reset rules
+              </button>
+              <span style={{ flex: 1 }} />
+              <button
+                type="button"
+                className="gb-settle-btn"
+                style={{ width: "auto", marginTop: 0, padding: "10px 18px" }}
+                onClick={() => setPlanDlg(false)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pairFor && tMembers.length > 1 && (
+        <PairModal
+          person={pairFor}
+          members={tMembers}
+          expenses={expenses.map((e) => ({
+            ...e,
+            amount: convert(e.amount, e.currency, main),
+            currency: main,
+          }))}
+          splitBasis={splitBasis}
+          main={main}
+          onClose={() => setPairFor(null)}
+        />
+      )}
+
       {txDetail && (() => {
         // Line-by-line settle-up math, all in the trip's main currency — the same
         // conversion + share function (expenseShares) the engine itself uses.
@@ -674,7 +843,7 @@ export function TripDetail({
                       </div>
                       {lines.map((l) => (
                         <div key={l.e.id} className="txd-line">
-                          <span className="txd-title">
+                          <span className={`txd-title${l.e.settlement ? " txd-title--stmt" : ""}`}>
                             {l.e.title || (l.e.settlement ? "Settlement" : "Expense")}
                             <span className="txd-meta">
                               {l.e.settlement ? "Settlement" : l.e.category || "Other"} ·{" "}
@@ -704,11 +873,16 @@ export function TripDetail({
                     <span>The match</span>
                   </div>
                   <p className="txd-note">
-                    To square up in the fewest payments, the biggest debt is paired with the biggest
-                    credit until nothing is left: {txDetail.from.name} owes{" "}
-                    {fmt(Math.abs(netOf(txDetail.from.id)), main)}, {txDetail.to.name} is owed{" "}
-                    {fmt(netOf(txDetail.to.id), main)} — so {fmt(txDetail.amount, main)} goes from{" "}
-                    {txDetail.from.name} to {txDetail.to.name}.
+                    {hasRules
+                      ? `This trip uses payment rules (some people only pay certain others), so debts are routed along the allowed pairs — sometimes via a middleman. `
+                      : planMode === "hub" && planHub
+                        ? `This trip settles through ${planHub.name}: whoever owes pays ${planHub.name}, and ${planHub.name} pays out whoever is owed. `
+                        : planMode === "pairs"
+                          ? `This trip settles pair by pair: each pair pays back exactly what one covered for the other. `
+                          : `To square up in the fewest payments, the biggest debt is paired with the biggest credit until nothing is left: `}
+                    {txDetail.from.name} owes {fmt(Math.abs(netOf(txDetail.from.id)), main)},{" "}
+                    {txDetail.to.name} is owed {fmt(netOf(txDetail.to.id), main)} — so{" "}
+                    {fmt(txDetail.amount, main)} goes from {txDetail.from.name} to {txDetail.to.name}.
                   </p>
                   {stats.transfers.map((t, i) => (
                     <div
@@ -990,6 +1164,139 @@ function SettleModal({
           >
             {existing ? "Save changes" : "Log payment"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Pairwise ledger — "who paid for whom" between two people. Answers "how much
+// did Mike pay for me, and did I settle it?". Uses the engine's expenseShares,
+// so amounts match the settle-up exactly; settlements count as direct payments.
+function PairModal({
+  person,
+  members,
+  expenses,
+  splitBasis,
+  main,
+  onClose,
+}: {
+  person: BudgetMember;
+  members: BudgetMember[];
+  /** Trip expenses already converted to the main currency. */
+  expenses: BudgetExpense[];
+  splitBasis: BudgetSplitBasis;
+  main: BudgetCurrency;
+  onClose: () => void;
+}) {
+  const others = members.filter((m) => m.id !== person.id);
+  const [otherId, setOtherId] = useState(others[0]?.id ?? "");
+  const other = others.find((m) => m.id === otherId) ?? others[0];
+
+  const dateLabel = (iso?: string) =>
+    iso
+      ? new Date(`${iso}T00:00:00`).toLocaleDateString("en", { day: "numeric", month: "short", year: "numeric" })
+      : "";
+
+  // Everything `payer` fronted that landed on `beneficiary`'s tab: their share
+  // of expenses the payer covered, plus settlements paid to them.
+  const linesFor = (payer: BudgetMember, beneficiary: BudgetMember) =>
+    expenses
+      .map((e) => ({
+        e,
+        amt: e.paidBy === payer.id ? expenseShares(members, e, splitBasis).get(beneficiary.id) ?? 0 : 0,
+      }))
+      .filter((l) => l.amt > 0.005)
+      .sort((a, b) => (a.e.date ?? "").localeCompare(b.e.date ?? ""));
+
+  const sum = (ls: { amt: number }[]) => ls.reduce((s, l) => s + l.amt, 0);
+  const personForOther = other ? linesFor(person, other) : [];
+  const otherForPerson = other ? linesFor(other, person) : [];
+  const net = sum(otherForPerson) - sum(personForOther); // >0 → person owes other
+
+  const section = (payer: BudgetMember, beneficiary: BudgetMember, lines: { e: BudgetExpense; amt: number }[]) => (
+    <div className="txd-sec">
+      <div className="txd-head">
+        <span>
+          {payer.name} paid for {beneficiary.name}
+        </span>
+        <span>{fmt(sum(lines), main)}</span>
+      </div>
+      {lines.length === 0 ? (
+        <p className="txd-note" style={{ margin: "6px 0 2px" }}>
+          Nothing — {payer.name} hasn’t covered anything for {beneficiary.name}.
+        </p>
+      ) : (
+        lines.map((l) => (
+          <div key={l.e.id} className="txd-line">
+            <span className={`txd-title${l.e.settlement ? " txd-title--stmt" : ""}`}>
+              {l.e.title || (l.e.settlement ? "Settlement" : "Expense")}
+              <span className="txd-meta">
+                {l.e.settlement ? "Settlement" : l.e.category || "Other"} · {dateLabel(l.e.date)}
+              </span>
+            </span>
+            <span className={`txd-net ${l.e.settlement ? "pos" : ""}`}>{fmt(l.amt, main)}</span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+
+  return (
+    <div className="gb-modal-backdrop" onClick={onClose}>
+      <div className="gb-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="gb-modal-head">
+          <span className="card-eyebrow">Between two people</span>
+          <button type="button" className="gb-modal-x" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="gb-modal-body" style={{ display: "block" }}>
+          <h2 className="gb-modal-title">{person.name} — who paid for whom</h2>
+          <p className="gb-modal-desc">
+            Compare {person.name} with one other person. All amounts in {main}; settlements count
+            as money paid straight to the other person.
+          </p>
+
+          <div className="gb-fld" style={{ marginTop: 12 }}>
+            <span className="gb-fld-lab">Compare with</span>
+            <div className="gb-paidby">
+              {others.map((m, i) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={`gb-paid-chip${other?.id === m.id ? " on" : ""}`}
+                  onClick={() => setOtherId(m.id)}
+                >
+                  <Avatar member={m} idx={i} size={22} /> {m.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {other && (
+            <>
+              {section(other, person, otherForPerson)}
+              {section(person, other, personForOther)}
+              <div className="txd-sec txd-verdict">
+                {Math.abs(net) <= 0.5 ? (
+                  <span className="pos">✓ {person.name} and {other.name} are square with each other</span>
+                ) : net > 0 ? (
+                  <span>
+                    <b className="neg">{person.name} still owes {other.name} {fmt(net, main)}</b> to
+                    square up between the two of them
+                  </span>
+                ) : (
+                  <span>
+                    <b className="neg">{other.name} still owes {person.name} {fmt(-net, main)}</b> to
+                    square up between the two of them
+                  </span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+        <div className="gb-modal-foot">
+          <span style={{ flex: 1 }} />
+          <button type="button" className="gb-modal-cancel" onClick={onClose}>Close</button>
         </div>
       </div>
     </div>

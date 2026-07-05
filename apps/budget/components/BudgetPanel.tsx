@@ -23,7 +23,7 @@ const BASES: { id: BudgetSplitBasis; label: string }[] = [
   { id: "share", label: "By share" },
   { id: "income", label: "By income" },
 ];
-const CATEGORIES = ["Groceries", "Dining", "Transport", "Housing", "Fun", "Health", "Fees", "Other"];
+const CATEGORIES = ["Groceries", "Dining", "Coffee", "Drinks", "Transport", "Housing", "Fun", "Health", "Fees", "Other"];
 
 // A person is either an admin (full access) or a member scoped to one trip.
 type PersonAccess = { isAdmin: boolean; tripId: string };
@@ -331,6 +331,7 @@ export function BudgetPanel({
           actorId={activeMemberId}
           actorName={activeMember?.name}
           addExpenseSignal={addExpenseSignal}
+          reconcile={budget.tripSettings?.[scopedTrip.id]}
           onBack={() => {}}
           onEdit={() => {}}
           onUpdate={onUpdateTrip}
@@ -414,6 +415,13 @@ export function BudgetPanel({
           selectedTripId={selectedTripId}
           onSelectTrip={setSelectedTripId}
           addExpenseSignal={addExpenseSignal}
+          tripSettings={budget.tripSettings}
+          onReconcileChange={(tripId, r) =>
+            setBudget((p) => ({
+              ...p,
+              tripSettings: { ...(p.tripSettings ?? {}), [tripId]: r },
+            }))
+          }
           onAddTrip={onAddTrip}
           onUpdateTrip={onUpdateTrip}
           onRemoveTrip={onRemoveTrip}

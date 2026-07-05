@@ -1,7 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import type * as React from "react";
-import type { BudgetTrip, BudgetMember, BudgetCurrency, BudgetSplitBasis } from "../lib/budget-types";
+import type {
+  BudgetTrip,
+  BudgetMember,
+  BudgetCurrency,
+  BudgetSplitBasis,
+  TripReconcile,
+} from "../lib/budget-types";
 import { fmt, initials, AV_HUES } from "../lib/budget-format";
 import { tripStats, tripMembers, tripMetaLabel } from "../lib/trips";
 import { TripModal } from "./TripModal";
@@ -31,6 +37,9 @@ interface TripsViewProps {
   onSelectTrip?: (id: string | null) => void;
   /** Bumping this opens the open trip's Add-Expense modal (header CTA). */
   addExpenseSignal?: number;
+  /** Per-trip reconcile preferences (from BudgetState.tripSettings). */
+  tripSettings?: Record<string, TripReconcile>;
+  onReconcileChange?: (tripId: string, r: TripReconcile) => void;
   onAddTrip: (trip: BudgetTrip) => void;
   onUpdateTrip: (trip: BudgetTrip) => void;
   onRemoveTrip: (id: string) => void;
@@ -48,6 +57,8 @@ export function TripsView({
   selectedTripId = null,
   onSelectTrip,
   addExpenseSignal,
+  tripSettings,
+  onReconcileChange,
   onAddTrip,
   onUpdateTrip,
   onRemoveTrip,
@@ -145,6 +156,10 @@ export function TripsView({
           actorId={actorId}
           actorName={actorName}
           addExpenseSignal={addExpenseSignal}
+          reconcile={tripSettings?.[selected.id]}
+          onReconcileChange={
+            onReconcileChange ? (r) => onReconcileChange(selected.id, r) : undefined
+          }
           onBack={() => setSelectedId(null)}
           onEdit={() => setModal(selected)}
           onUpdate={onUpdateTrip}
@@ -158,7 +173,7 @@ export function TripsView({
     <>
       <div className="gb-trips-grid">
         {trips.map((trip) => {
-          const stats = tripStats(trip, members, splitBasis);
+          const stats = tripStats(trip, members, splitBasis, tripSettings?.[trip.id]);
           const tm = tripMembers(trip, members);
           const main = trip.mainCurrency ?? "CZK";
           return (

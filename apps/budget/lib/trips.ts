@@ -5,8 +5,16 @@ import type {
   BudgetTrip,
   BudgetMember,
   BudgetSplitBasis,
+  TripReconcile,
 } from "./budget-types";
-import { computeBalances, type Balance, type Transfer } from "./budget-format";
+import {
+  computeBalances,
+  constrainedTransfers,
+  hubTransfers,
+  pairwiseTransfers,
+  type Balance,
+  type Transfer,
+} from "./budget-format";
 import { convert } from "./currency";
 
 /** Nights between start and end (0 if dates missing/invalid). */
@@ -56,6 +64,8 @@ export function tripStats(
   t: BudgetTrip,
   all: BudgetMember[],
   basis: BudgetSplitBasis,
+  /** How the group settles (from BudgetState.tripSettings). Default: fewest payments. */
+  reconcile?: TripReconcile,
 ): TripStats {
   const members = tripMembers(t, all);
   // Convert every expense into the trip's main currency so mixed-currency spends
@@ -66,7 +76,16 @@ export function tripStats(
     amount: convert(e.amount, e.currency, main),
     currency: main,
   }));
-  const { balances, total, transfers } = computeBalances(members, expenses, basis);
+  const { balances, total, transfers: greedy } = computeBalances(members, expenses, basis);
+  // Any stored key is a rule — an empty list is the explicit "pays no one".
+  const hasRules = !!reconcile?.payTo && Object.keys(reconcile.payTo).length > 0;
+  const transfers = hasRules
+    ? constrainedTransfers(balances, reconcile!.payTo!)
+    : reconcile?.mode === "hub" && reconcile.hubId
+      ? hubTransfers(balances, reconcile.hubId)
+      : reconcile?.mode === "pairs"
+        ? pairwiseTransfers(members, expenses, basis)
+        : greedy;
   const travellers = members.length;
   const perPerson = travellers > 0 ? total / travellers : 0;
   const toSettle = transfers.reduce((s, x) => s + x.amount, 0);

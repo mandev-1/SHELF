@@ -63,6 +63,19 @@ export interface BudgetTrip {
   updatedAt: string;
 }
 
+/** How a trip's settle-up plan is built: fewest transfers (default), everyone
+ *  through one person, or each pair settling directly. */
+export type TripReconcileMode = "min" | "hub" | "pairs";
+export interface TripReconcile {
+  mode?: TripReconcileMode;
+  /** The "banker" everyone settles through when mode is "hub". */
+  hubId?: string;
+  /** Payment rules: member id → the only people they're willing to pay
+   *  ("I will only pay Mark and Petra"). Absent = anyone; an EMPTY array means
+   *  they pay no one (their debt stays open). Takes precedence over `mode`. */
+  payTo?: Record<string, string[]>;
+}
+
 export interface BudgetState {
   currency: BudgetCurrency;
   splitBasis: BudgetSplitBasis;
@@ -71,6 +84,9 @@ export interface BudgetState {
   monthlyBudget?: number;
   settledMonths?: string[];
   trips?: BudgetTrip[];
+  /** Per-trip reconcile preferences, keyed by trip id. Lives in the budget blob
+   *  (raw jsonb passthrough) because the trips table has fixed columns. */
+  tripSettings?: Record<string, TripReconcile>;
 }
 
 export const DEFAULT_BUDGET_STATE: BudgetState = {
@@ -169,5 +185,26 @@ export function normalizeBudget(raw: unknown): BudgetState {
       ? o.settledMonths.filter((x: unknown) => typeof x === "string")
       : undefined,
     trips,
+    tripSettings: (() => {
+      const ts = o.tripSettings;
+      if (!ts || typeof ts !== "object" || Array.isArray(ts)) return undefined;
+      const out: Record<string, TripReconcile> = {};
+      for (const [k, v] of Object.entries(ts as Record<string, any>)) {
+        if (!v || typeof v !== "object") continue;
+        out[k] = {
+          mode: v.mode === "min" || v.mode === "hub" || v.mode === "pairs" ? v.mode : undefined,
+          hubId: typeof v.hubId === "string" ? v.hubId : undefined,
+          payTo:
+            v.payTo && typeof v.payTo === "object" && !Array.isArray(v.payTo)
+              ? Object.fromEntries(
+                  Object.entries(v.payTo as Record<string, any>)
+                    .filter(([, arr]) => Array.isArray(arr))
+                    .map(([pk, arr]) => [pk, arr.filter((s: unknown) => typeof s === "string")]),
+                )
+              : undefined,
+        };
+      }
+      return Object.keys(out).length ? out : undefined;
+    })(),
   };
 }
