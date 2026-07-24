@@ -1,4 +1,5 @@
 import { BudgetView } from "./BudgetView";
+import { AmbientBackground } from "@/components/AmbientBackground";
 
 // No auth — the app opens straight onto the shared budget.
 export default function Home() {
@@ -7,6 +8,8 @@ export default function Home() {
     // max-w-[1640px] matches the extension's budget container width.
     // .notebook-page = handoff 007's summer-notebook background (ported 1:1).
     <div className="notebook-page" style={{ minHeight: "100dvh" }}>
+      {/* Handoff 0001 — ambient aurora glows behind the content (main is z-10). */}
+      <AmbientBackground />
       {/* Desktop (≥900px) matches the design: content capped at 760px and centered,
           56px top / 40px bottom. No side padding at this width — the content centers
           with gutters far wider than the design's 16px, so it's subsumed (and px

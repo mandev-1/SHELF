@@ -292,6 +292,12 @@ export interface BuylistItem {
   addedAt: string;
 }
 
+export interface DirectoryListItem {
+  id: string;
+  title: string;
+  description?: string;
+}
+
 export type SaleStatus = "listed" | "reserved" | "sold";
 export interface SaleItem {
   id: string;
@@ -468,6 +474,8 @@ export interface ShelfBackupData {
   showInventoryTab?: boolean;
   /** Budget tab visibility toggle. */
   showBudgetTab?: boolean;
+  /** Persisted items for the Lists tab. */
+  lists?: DirectoryListItem[];
   /** Per-theme accent color map. */
   accentByTheme?: Record<string, string>;
   /** Obsidian task-log integration config. */

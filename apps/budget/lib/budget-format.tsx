@@ -2,6 +2,7 @@
 // share one settle-up engine, formatting, and avatar. (BudgetPanel keeps its
 // own private copies; these are the canonical versions for new components.)
 
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type {
   BudgetCurrency,
   BudgetMember,
@@ -307,6 +308,31 @@ export function pairwiseTransfers(
     }
   }
   return out.sort((a, b) => b.amount - a.amount);
+}
+
+/** Animated stat number (handoff 0001): eases to new values over 650 ms with a
+ *  cubic ease-out; renders via the caller's formatter so rounding/format is
+ *  unchanged. No animation on first mount — only on value change; a change
+ *  mid-flight restarts from the currently displayed value. */
+export function CountUp({ value, fmt }: { value: number; fmt: (v: number) => ReactNode }) {
+  const [v, setV] = useState(value);
+  const shown = useRef(value);
+  shown.current = v;
+  useEffect(() => {
+    const from = shown.current, to = value;
+    if (from === to) return;
+    const t0 = performance.now();
+    let raf = 0;
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / 650);
+      const e = 1 - Math.pow(1 - k, 3); // cubic ease-out
+      setV(from + (to - from) * e);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <>{fmt(v)}</>;
 }
 
 export function Avatar({

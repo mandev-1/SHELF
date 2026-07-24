@@ -4023,13 +4023,14 @@ function VisualFlowPanelInner({
                   .filter((t): t is ShelfPillarTodoItem => Boolean(t));
                 if (present.length === 0 || (!canEdit && !canDelete)) return null;
                 const anyUndone = present.some((t) => !t.done);
-                const menuH = 400;
-                const top = Math.max(8, Math.min(nodeMenu.y, window.innerHeight - menuH));
+                const margin = 8;
+                const top = Math.max(margin, Math.min(nodeMenu.y, window.innerHeight - 200));
+                const maxHeight = window.innerHeight - top - margin;
                 return (
                   <div
                     ref={menuRef}
                     className="shelf-note-popover fixed z-[200] min-w-[180px] max-w-[220px] rounded-xl border border-emerald-400/20 bg-zinc-900 py-1 shadow-xl"
-                    style={{ left, top }}
+                    style={{ left, top, maxHeight, overflowY: "auto" }}
                   >
                     <div className="px-3 py-1.5 text-[10px] font-medium text-zinc-500">
                       {ids.length} {noun} selected
@@ -4195,8 +4196,12 @@ function VisualFlowPanelInner({
                   },
                 });
               };
-              const menuH = 400;
-              const top = Math.max(8, Math.min(nodeMenu.y, window.innerHeight - menuH));
+              // Fit the menu within the viewport: clamp the top so it starts at
+              // least ~200px above the bottom, then cap its height + scroll (it can
+              // run ~900px tall once the connection picker is shown).
+              const margin = 8;
+              const top = Math.max(margin, Math.min(nodeMenu.y, window.innerHeight - 200));
+              const maxHeight = window.innerHeight - top - margin;
               const layoutSelectValue = currentHandle === "hidden" ? "" : currentHandle;
               // shared checkbox glyph for the Mark-completed / Focused / In-Doing-now cluster
               const checkboxGlyph = (on: boolean) => (
@@ -4210,7 +4215,7 @@ function VisualFlowPanelInner({
                 <div
                   ref={menuRef}
                   className="shelf-note-popover fixed z-[200] min-w-[140px] rounded-xl border border-emerald-400/20 bg-zinc-900 py-1 shadow-xl"
-                  style={{ left, top }}
+                  style={{ left, top, maxHeight, overflowY: "auto" }}
                 >
                   {canEdit && (
                     <button

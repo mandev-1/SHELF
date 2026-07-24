@@ -171,7 +171,7 @@ export function TripsView({
 
   return (
     <>
-      <div className="gb-trips-grid">
+      <div className="gb-trips-grid gb-view-in">
         {trips.map((trip) => {
           const stats = tripStats(trip, members, splitBasis, tripSettings?.[trip.id]);
           const tm = tripMembers(trip, members);

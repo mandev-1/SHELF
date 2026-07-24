@@ -25,12 +25,13 @@ import { BuylistPanel } from "./components/Hopper/BuylistPanel";
 import { StrategiePanel } from "./components/Strategie/StrategiePanel";
 import { InventoryPanel } from "./components/Inventory/InventoryPanel";
 import { BudgetPanel } from "./components/Budget/BudgetPanel";
+import { DirectoryList } from "./components/Lists";
 import { pickCelebrationPhrase } from "./utils/celebration";
 import type { ShelfPillarTodoItem } from "./types/grid";
 
 const DASHBOARD_LAST_TOOL_KEY = "shelf-dashboard-last-tool";
 
-type DashboardView = "shelf" | "visual-flow" | "buylist" | "strategie" | "inventory" | "budget";
+type DashboardView = "shelf" | "visual-flow" | "buylist" | "strategie" | "inventory" | "budget" | "lists";
 type LastTool = "visual-flow" | "llm-console";
 
 /** Render a greeting, styling the word "smile" (case-insensitive) in --accent-bright. */
@@ -168,6 +169,8 @@ export default function FullApp() {
     showBudgetTab,
     budget,
     setBudget,
+    lists,
+    setLists,
   } = useShelfStorage();
 
   // If the user disables the tab they're currently looking at via the settings
@@ -569,6 +572,7 @@ export default function FullApp() {
                 { id: "buylist",     label: "Hopper",      visible: showHopperTab     },
                 { id: "inventory",   label: "Inventory",   visible: showInventoryTab  },
                 { id: "budget",      label: "Budget",      visible: showBudgetTab     },
+                { id: "lists",       label: "Lists",       visible: true              },
               ] as const).filter((t) => t.visible)).map((tab) => {
                 const isActive = dashboardView === tab.id;
                 const isVF = tab.id === "visual-flow";
@@ -582,7 +586,7 @@ export default function FullApp() {
                     onClick={() => {
                       if (isActive) return;
                       // Slide direction: tabs to the right of current slide in from the right
-                      const order: DashboardView[] = ["shelf", "visual-flow", "strategie", "buylist"];
+                      const order: DashboardView[] = ["shelf", "visual-flow", "strategie", "buylist", "inventory", "budget", "lists"];
                       const fromIdx = order.indexOf(dashboardView);
                       const toIdx = order.indexOf(tab.id);
                       setViewSlideDir(toIdx > fromIdx ? "left" : "right");
@@ -677,6 +681,20 @@ export default function FullApp() {
           ) : dashboardView === "budget" ? (
             <div className="max-w-[1640px] mx-auto px-6 py-6">
               <BudgetPanel budget={budget} setBudget={setBudget} />
+            </div>
+          ) : dashboardView === "lists" ? (
+            <div className="max-w-[1640px] mx-auto px-6 py-6">
+              <DirectoryList
+                items={lists}
+                title="Lists"
+                emptyLabel="Create your first list item"
+                onChange={setLists}
+                createItem={(index) => ({
+                  id: crypto.randomUUID(),
+                  title: `Item ${index + 1}`,
+                  description: "",
+                })}
+              />
             </div>
           ) : dashboardView === "visual-flow" ? (
             <div className="w-full">

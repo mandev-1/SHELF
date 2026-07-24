@@ -25,6 +25,19 @@ const BASES: { id: BudgetSplitBasis; label: string }[] = [
 ];
 const CATEGORIES = ["Groceries", "Dining", "Coffee", "Drinks", "Transport", "Housing", "Fun", "Health", "Fees", "Other"];
 
+// Handoff 0001 — quick-fill chips: one tap sets title + category (the handoff
+// maps Drinks → Dining; here Drinks is its own category, so it goes there).
+const QUICK_FILLS: { label: string; title: string; category: string }[] = [
+  { label: "🍽️ Dinner", title: "Dinner", category: "Dining" },
+  { label: "🍻 Drinks", title: "Drinks", category: "Drinks" },
+  { label: "🚕 Taxi", title: "Taxi", category: "Transport" },
+  { label: "🛒 Groceries", title: "Groceries", category: "Groceries" },
+  { label: "⛽ Fuel", title: "Fuel", category: "Transport" },
+  { label: "🎟️ Tickets", title: "Tickets", category: "Fun" },
+  { label: "🎸 Gear rental", title: "Gear rental", category: "Fun" },
+  { label: "🛎️ Hotel", title: "Hotel", category: "Housing" },
+];
+
 // A person is either an admin (full access) or a member scoped to one trip.
 type PersonAccess = { isAdmin: boolean; tripId: string };
 
@@ -280,6 +293,15 @@ export function BudgetPanel({
       ? (budget.trips ?? []).find((t) => (t.memberIds ?? []).includes(activeMember.id))
       : undefined;
   const effectiveScopedTripId = memberTrip ? memberTrip.id : scopedTripId;
+
+  // Handoff 0001 — the ambient background tints to the open trip's accent.
+  const openTripId = effectiveScopedTripId ?? (view === "trips" ? selectedTripId : null);
+  const openTripColor = openTripId
+    ? (budget.trips ?? []).find((t) => t.id === openTripId)?.color
+    : undefined;
+  useEffect(() => {
+    document.documentElement.style.setProperty("--gb-ambient", openTripColor ?? "var(--accent)");
+  }, [openTripColor]);
 
   // Guest mode: a trip-scoped link (?trip=<id>) shows ONLY that trip — no People
   // tab, no other trips, no host actions. (Soft scoping — a UX guardrail.)
@@ -671,6 +693,21 @@ export function ExpenseModal({ expense, members, currency, currencies, defaultCu
               placeholder="e.g. Groceries — Lidl"
             />
           </label>
+          <div className="gb-quickfills">
+            {QUICK_FILLS.map((q) => (
+              <button
+                key={q.label}
+                type="button"
+                className="gb-quickfill"
+                onClick={() => {
+                  setTitle(q.title);
+                  setCategory(q.category);
+                }}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
 
           <label className="gb-fld">
             <span className="gb-fld-lab">Amount</span>

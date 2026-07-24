@@ -4081,3 +4081,115 @@ body.cards-sorting { user-select: none; -webkit-user-select: none; cursor: grabb
   opacity: 0.6;
   cursor: default;
 }
+
+/* ============================================================================
+   Handoff 0001 — elevation pass (ambient background + delight)
+   ========================================================================== */
+
+/* Ambient background — slow-drifting aurora glows tinted by --gb-ambient (the
+   open trip's accent, falling back to the app accent) + a soft vignette. */
+@keyframes gbDriftA {
+  0%, 100% { transform: translate3d(-3%, -2%, 0) scale(1); }
+  50%      { transform: translate3d(4%, 3%, 0) scale(1.1); }
+}
+@keyframes gbDriftB {
+  0%, 100% { transform: translate3d(3%, 2%, 0) scale(1.08); }
+  50%      { transform: translate3d(-4%, -3%, 0) scale(1); }
+}
+
+.gb-ambient { position: fixed; inset: -20%; z-index: 0; pointer-events: none; }
+/* Rendered as direct children of .notebook-page, whose `> *` rule forces
+   position: relative + z-index: 1 — this higher-specificity rule wins it back. */
+.notebook-page > .gb-ambient { position: fixed; z-index: 0; }
+
+/* warm sun, top-right */
+.gb-ambient--sun {
+  background: radial-gradient(38% 32% at 82% 4%, rgba(255, 203, 130, 0.48), transparent 70%);
+  animation: gbDriftA 26s ease-in-out infinite;
+}
+/* accent-tinted glow, mid-left */
+.gb-ambient--accent {
+  background: radial-gradient(36% 32% at 6% 36%,
+    color-mix(in srgb, var(--gb-ambient, var(--accent)) 26%, transparent), transparent 72%);
+  animation: gbDriftB 34s ease-in-out infinite;
+}
+/* accent echo, bottom */
+.gb-ambient--echo {
+  background: radial-gradient(32% 36% at 72% 90%,
+    color-mix(in srgb, var(--gb-ambient, var(--accent)) 17%, transparent), transparent 75%);
+  animation: gbDriftA 42s ease-in-out infinite reverse;
+}
+/* vignette — sits at inset: 0, no animation */
+.gb-ambient--vignette,
+.notebook-page > .gb-ambient--vignette {
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 40%, transparent 62%, rgba(24, 38, 66, 0.08) 100%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .gb-ambient { animation-play-state: paused; }
+}
+
+/* View-in transition — on the root of People / Trips / Trip detail, which
+   remount on navigation so it runs on every view change. */
+@keyframes gbViewIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+.gb-view-in { animation: gbViewIn 0.32s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+
+/* "Where it went" — category breakdown card between the stat tiles and the
+   ledger board (trip detail). Hidden when the trip has no spend. */
+.gb-went {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px 15px;
+  margin-bottom: 16px;
+}
+.gb-went-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.gb-went-lead { font-size: 11.5px; color: var(--dim); text-align: right; }
+.gb-went-bar {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.gb-went-seg { min-width: 4px; transition: width 0.5s cubic-bezier(0.2, 0.7, 0.3, 1); }
+.gb-went-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.gb-went-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.gb-went-swatch { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.gb-went-amt { color: var(--fg); font-weight: 650; font-variant-numeric: tabular-nums; }
+
+/* Quick-fill chips — under the "What was it?" field in the Add-expense modal.
+   One tap sets title + category. */
+.gb-quickfills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.gb-quickfill {
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+  border-radius: 999px; padding: 4px 11px; font-size: 12.5px; cursor: pointer;
+  font-family: inherit;
+}
+.gb-quickfill:hover { border-color: var(--accent); color: var(--accent); }
+
+/* "Copy summary" — secondary button in the Settle-up card head. */
+.tc-copy-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.14s, color 0.14s;
+}
+.tc-copy-btn:hover { border-color: var(--accent); color: var(--accent); }

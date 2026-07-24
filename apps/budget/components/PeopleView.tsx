@@ -31,7 +31,7 @@ export function PeopleView({ balances, currency, budgetId, trips, onEdit, onAdd 
 
   return (
     <>
-    <div className="gb-trips-grid">
+    <div className="gb-trips-grid gb-view-in">
       {balances.map((b, i) => {
         const settled = Math.abs(b.net) < 0.5;
         return (

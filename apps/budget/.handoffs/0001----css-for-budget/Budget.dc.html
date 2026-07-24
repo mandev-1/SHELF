@@ -1,0 +1,1650 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="apps/budget/components/budget.css">
+  <link rel="stylesheet" href="apps/budget/components/notebook-background.css">
+  <link rel="stylesheet" href="apps/budget/components/notebook-add-button.css">
+  <link rel="stylesheet" href="apps/budget/components/trip-cards.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; }
+    body { background: #fbfdff; font-family: var(--font, "DM Sans", system-ui, sans-serif); -webkit-font-smoothing: antialiased; color-scheme: light; }
+    main.budget-main { position: relative; z-index: 10; margin: 0 auto; min-height: 100vh; width: 100%; max-width: 1640px; padding: 24px 12px 96px; }
+    @media (min-width: 640px) { main.budget-main { padding-left: 24px; padding-right: 24px; } }
+    @media (min-width: 900px) { main.budget-main { max-width: 1260px; padding: 56px 0 40px; } }
+    @keyframes budget-toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+    @keyframes gbViewIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    @keyframes gbDriftA { 0%, 100% { transform: translate3d(-3%, -2%, 0) scale(1); } 50% { transform: translate3d(4%, 3%, 0) scale(1.1); } }
+    @keyframes gbDriftB { 0%, 100% { transform: translate3d(3%, 2%, 0) scale(1.08); } 50% { transform: translate3d(-4%, -3%, 0) scale(1); } }
+  </style>
+</helmet>
+<div data-theme="sap" data-density="compact" style="min-height: 100vh" ref="{{ rootRef }}">
+  <div class="notebook-page" ref="{{ paperRef }}" style="min-height: 100vh">
+  <sc-if value="{{ ambientOn }}" hint-placeholder-val="{{ true }}">
+    <div class="bg-diffuse" aria-hidden="true" style="position: fixed; inset: -15%; z-index: 0; pointer-events: none"></div>
+    <div aria-hidden="true" style="position: fixed; inset: -20%; z-index: 0; pointer-events: none; background: radial-gradient(38% 32% at 82% 4%, rgba(255, 203, 130, 0.48), transparent 70%); animation: gbDriftA 26s ease-in-out infinite"></div>
+    <div aria-hidden="true" style="position: fixed; inset: -20%; z-index: 0; pointer-events: none; background: radial-gradient(36% 32% at 6% 36%, color-mix(in srgb, var(--gb-ambient, var(--accent)) 26%, transparent), transparent 72%); animation: gbDriftB 34s ease-in-out infinite"></div>
+    <div aria-hidden="true" style="position: fixed; inset: -20%; z-index: 0; pointer-events: none; background: radial-gradient(32% 36% at 72% 90%, color-mix(in srgb, var(--gb-ambient, var(--accent)) 17%, transparent), transparent 75%); animation: gbDriftA 42s ease-in-out infinite reverse"></div>
+    <div aria-hidden="true" style="position: fixed; inset: 0; z-index: 0; pointer-events: none; background: radial-gradient(120% 90% at 50% 40%, transparent 62%, rgba(24, 38, 66, 0.08) 100%)"></div>
+  </sc-if>
+  <main class="budget-main">
+    <div class="gb">
+
+      <div class="gb-head">
+        <div class="gb-head-l" style="flex-direction: column; align-items: flex-start; gap: 0; flex: 1">
+          <span class="card-eyebrow ink-on-paper" style="display: block; margin-bottom: 2px">STRATEGIE · SHARED BUDGET</span>
+          <h1 class="gb-title ink-on-paper">{{ pageTitle }}</h1>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px">
+            <div class="seg gb-viewseg" role="tablist" aria-label="View">
+              <button type="button" class="seg-btn {{ segPeopleOn }}" onClick="{{ goPeople }}">People</button>
+              <button type="button" class="seg-btn {{ segTripsOn }}" onClick="{{ goTrips }}">Trips<span class="gb-viewseg-n">{{ tripCount }}</span></button>
+            </div>
+            <sc-if value="{{ tripOpen }}" hint-placeholder-val="{{ false }}">
+              <span style="margin-left: auto">
+                <button class="add-expense-btn" type="button" onClick="{{ headerAddExpense }}">
+                  <svg class="ae-plus" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+                    <path d="M16 2.5 C24 2.2 29.6 8 29.5 16 C29.4 24 23.8 29.6 16 29.5 C8.2 29.4 2.5 23.7 2.6 16 C2.7 8.4 8 2.8 16 2.5 Z" stroke="#4a6a92" stroke-width="1.7" fill="none" stroke-linecap="round"></path>
+                    <path d="M16 9.5 L16 22.5 M9.5 16 L22.5 16" stroke="#4a6a92" stroke-width="1.8" stroke-linecap="round"></path>
+                  </svg>
+                  <span class="ae-lab">Add expense</span>
+                </button>
+              </span>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+
+      <sc-if value="{{ showPeople }}" hint-placeholder-val="{{ true }}">
+        <div class="gb-trips-grid" data-screen-label="People" style="animation: gbViewIn 0.32s cubic-bezier(0.2, 0.7, 0.3, 1) both">
+          <sc-for list="{{ people }}" as="p" hint-placeholder-count="4">
+            <div class="card" style="padding: 16px; display: flex; flex-direction: column; gap: 12px; min-height: 148px">
+              <button type="button" onClick="{{ p.edit }}" style="display: flex; align-items: center; gap: 11px; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; font: inherit">
+                <span class="gb-av" style="width: 42px; height: 42px; font-size: 16.8px; background: {{ p.hue }}">{{ p.ini }}</span>
+                <span style="min-width: 0">
+                  <span style="display: block; font-size: 15px; font-weight: 700; color: var(--fg)">{{ p.name }}</span>
+                  <span style="display: block; font-size: 12px; color: {{ p.balColor }}">{{ p.balLabel }}</span>
+                </span>
+              </button>
+              <div class="gb-access-row">
+                <sc-if value="{{ p.fullAccess }}" hint-placeholder-val="{{ true }}">
+                  <span class="gb-access-chip gb-access-full">🔑 Full access</span>
+                </sc-if>
+                <sc-for list="{{ p.tripChips }}" as="c" hint-placeholder-count="0">
+                  <span class="gb-access-chip" style="--chip: {{ c.color }}"><span aria-hidden="true">{{ c.emoji }}</span> {{ c.name }}</span>
+                </sc-for>
+              </div>
+              <div style="display: flex; gap: 8px; margin-top: auto">
+                <button type="button" class="gb-invite-act" onClick="{{ p.edit }}">Edit</button>
+                <button type="button" class="gb-invite-act" onClick="{{ p.copyLink }}">{{ p.copyLabel }}</button>
+                <button type="button" class="gb-invite-act" onClick="{{ p.showQr }}">QR</button>
+              </div>
+            </div>
+          </sc-for>
+          <button type="button" class="gb-trip-card gb-trip-card--add" onClick="{{ addPerson }}">
+            <span class="gb-trip-add-plus">＋</span>
+            Add a person
+          </button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showTripsGrid }}" hint-placeholder-val="{{ false }}">
+        <div class="gb-trips-grid" data-screen-label="Trips gallery" style="animation: gbViewIn 0.32s cubic-bezier(0.2, 0.7, 0.3, 1) both">
+          <sc-for list="{{ tripCards }}" as="t" hint-placeholder-count="3">
+            <button type="button" class="gb-trip-card" style="--trip-hue: {{ t.hue }}" onClick="{{ t.open }}" onContextMenu="{{ t.menu }}">
+              <div class="gb-trip-cover">
+                {{ t.coverImg }}
+                <span class="gb-trip-cover-fallback">{{ t.emoji }}</span>
+                <span class="gb-trip-status {{ t.statusOk }}">{{ t.statusLabel }}</span>
+              </div>
+              <div class="gb-trip-body">
+                <h3 class="gb-trip-name">{{ t.name }}</h3>
+                <div class="gb-trip-meta">{{ t.meta }}</div>
+                <div class="gb-trip-figs">
+                  <span class="gb-trip-total">{{ t.total }}</span>
+                  <span class="gb-trip-per">{{ t.per }} pp</span>
+                </div>
+                <div class="gb-trip-foot">
+                  <div class="gb-trip-faces">
+                    <sc-for list="{{ t.faces }}" as="f" hint-placeholder-count="3">
+                      <span class="gb-av gb-trip-face" style="width: 24px; height: 24px; font-size: 10px; background: {{ f.hue }}">{{ f.ini }}</span>
+                    </sc-for>
+                    <sc-if value="{{ t.hasMore }}" hint-placeholder-val="{{ false }}">
+                      <span class="gb-trip-facemore">+{{ t.more }}</span>
+                    </sc-if>
+                  </div>
+                  <span class="gb-trip-count">{{ t.countLabel }}</span>
+                </div>
+              </div>
+            </button>
+          </sc-for>
+          <button type="button" class="gb-trip-card gb-trip-card--add" onClick="{{ planTrip }}">
+            <span class="gb-trip-add-plus">＋</span>
+            Plan a trip
+          </button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tripOpen }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="Trip detail" style="animation: gbViewIn 0.32s cubic-bezier(0.2, 0.7, 0.3, 1) both">
+          <div class="card gb-trip-hero" style="--trip-hue: {{ heroHue }}; background: linear-gradient(135deg, color-mix(in srgb, var(--trip-hue, var(--accent)) 88%, #000) 0%, var(--trip-hue, var(--accent)) 100%)">
+            {{ heroCoverImg }}
+            <div class="gb-trip-hero-scrim"></div>
+            <button type="button" class="gb-trip-back" onClick="{{ backToTrips }}">← All trips</button>
+            <div class="gb-trip-faces">
+              <sc-for list="{{ heroFaces }}" as="f" hint-placeholder-count="3">
+                <span class="gb-av gb-trip-face" style="width: 28px; height: 28px; font-size: 11px; background: {{ f.hue }}">{{ f.ini }}</span>
+              </sc-for>
+            </div>
+            <div class="gb-trip-hero-body" style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px">
+              <div>
+                <div class="gb-trip-hero-emoji">{{ heroEmoji }}</div>
+                <h1 class="gb-trip-hero-name">{{ heroName }}</h1>
+                <div class="gb-trip-hero-meta">{{ heroMeta }}</div>
+                <div class="gb-trip-hero-actions">
+                  <button type="button" class="gb-hero-btn" onClick="{{ openInvite }}">＋ Invite to reconcile</button>
+                  <button type="button" class="gb-hero-btn ghost" onClick="{{ editOpenTrip }}">Edit trip</button>
+                </div>
+              </div>
+              <label style="cursor: pointer; color: rgba(255,255,255,0.85); text-align: center; font-size: 12px; position: relative; z-index: 3">
+                <div style="font-size: 22px">🖼</div>
+                <div>Drop a cover photo</div>
+                <div style="text-decoration: underline">or browse files</div>
+                <input type="file" accept="image/*" style="display: none" onChange="{{ onCoverFile }}">
+              </label>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 12px; margin-bottom: 16px">
+            <div class="card" style="padding: 16px 18px">
+              <span class="card-eyebrow">TRIP SPEND</span>
+              <div style="font-size: 26px; font-weight: 800; letter-spacing: -0.02em; color: var(--fg); font-variant-numeric: tabular-nums; line-height: 1.1; margin: 4px 0 2px">{{ tileSpendEl }}<span style="font-size: 0.56em; font-weight: 600; color: var(--dim); margin-left: 7px">{{ tileSpendSec }}</span></div>
+              <div style="font-size: 11.5px; color: var(--dim)">{{ tileSpendSub }}</div>
+            </div>
+            <div class="card" style="padding: 16px 18px">
+              <span class="card-eyebrow">PER PERSON</span>
+              <div style="font-size: 26px; font-weight: 800; letter-spacing: -0.02em; color: var(--fg); font-variant-numeric: tabular-nums; line-height: 1.1; margin: 4px 0 2px">{{ tilePerEl }}<span style="font-size: 0.56em; font-weight: 600; color: var(--dim); margin-left: 7px">{{ tilePerSec }}</span></div>
+              <div style="font-size: 11.5px; color: var(--dim)">{{ tilePerSub }}</div>
+            </div>
+            <div class="card" style="padding: 16px 18px; border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--surface))">
+              <span class="card-eyebrow">TO SETTLE</span>
+              <div style="font-size: 26px; font-weight: 800; letter-spacing: -0.02em; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.1; margin: 4px 0 2px">{{ tileSettleEl }}<span style="font-size: 0.56em; font-weight: 600; color: var(--dim); margin-left: 7px">{{ tileSettleSec }}</span></div>
+              <div style="font-size: 11.5px; color: var(--dim)">{{ tileSettleSub }}</div>
+            </div>
+            <button type="button" class="card tc-extract" onClick="{{ openExtract }}" title="Download this trip as a JSON backup">
+              <span>Extract</span>
+              <span class="tc-extract-arrow" aria-hidden="true">↓</span>
+            </button>
+          </div>
+
+          <sc-if value="{{ catShow }}" hint-placeholder-val="{{ false }}">
+            <div class="card" style="padding: 14px 18px 15px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px">
+              <div style="display: flex; align-items: baseline; gap: 10px">
+                <span class="card-eyebrow">WHERE IT WENT</span>
+                <span style="margin-left: auto; font-size: 11.5px; color: var(--dim)">{{ catBiggest }}</span>
+              </div>
+              <div style="display: flex; height: 12px; border-radius: 999px; overflow: hidden; gap: 2px">
+                <sc-for list="{{ catSegs }}" as="c" hint-placeholder-count="4">
+                  <div style="width: {{ c.w }}; background: {{ c.hue }}; min-width: 4px; transition: width 0.5s cubic-bezier(0.2, 0.7, 0.3, 1)" title="{{ c.title }}"></div>
+                </sc-for>
+              </div>
+              <div style="display: flex; gap: 6px 16px; flex-wrap: wrap">
+                <sc-for list="{{ catLegend }}" as="l" hint-placeholder-count="4">
+                  <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--dim)">
+                    <span style="width: 9px; height: 9px; border-radius: 3px; background: {{ l.hue }}; display: inline-block"></span>
+                    {{ l.name }}
+                    <b style="color: var(--fg); font-weight: 650; font-variant-numeric: tabular-nums">{{ l.amt }}</b>
+                  </span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <div class="tc-board">
+            <div class="tc-board-main">
+              <section class="card gb-ledger">
+                <div class="card-head">
+                  <div>
+                    <div class="card-eyebrow">On the road</div>
+                    <h3 class="card-title">Who paid what</h3>
+                  </div>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end">
+                    <button class="ghost-btn" type="button" onClick="{{ openSettleNew }}" disabled="{{ settleBtnDisabled }}" title="Log a settle-up payment between two people">+ Reconciliation</button>
+                    <button class="ghost-btn" type="button" onClick="{{ openExpenseNew }}" disabled="{{ expenseBtnDisabled }}">+ Add expense</button>
+                  </div>
+                </div>
+                <sc-if value="{{ ledgerEmpty }}" hint-placeholder-val="{{ false }}">
+                  <div class="gb-empty">No expenses logged yet — add the first one.</div>
+                </sc-if>
+                <sc-if value="{{ ledgerHasDays }}" hint-placeholder-val="{{ true }}">
+                  <div class="gb-ledger-body">
+                    <sc-for list="{{ ledgerDays }}" as="day" hint-placeholder-count="2">
+                      <div class="gb-led-day">
+                        <div class="gb-led-dayhead">{{ day.head }}</div>
+                        <sc-for list="{{ day.items }}" as="e" hint-placeholder-count="2">
+                          <button class="gb-led-row" type="button" onClick="{{ e.click }}">
+                            <span class="gb-led-dot" style="background: {{ e.dot }}"></span>
+                            <span class="gb-led-main">
+                              <span class="gb-led-label">{{ e.title }}</span>
+                              <span class="gb-led-meta">{{ e.meta }}</span>
+                            </span>
+                            <span class="gb-led-split">
+                              <sc-for list="{{ e.parts }}" as="pp" hint-placeholder-count="2">
+                                <span class="gb-av gb-led-part" style="width: 26px; height: 26px; font-size: 11px; background: {{ pp.hue }}">{{ pp.ch }}</span>
+                              </sc-for>
+                              <span class="gb-led-splitlab">{{ e.splitLab }}</span>
+                            </span>
+                            <span class="gb-led-paid">
+                              <span class="gb-av" style="width: 26px; height: 26px; font-size: 11px; background: {{ e.payerHue }}">{{ e.payerCh }}</span>
+                              <span class="gb-led-paidlab">paid</span>
+                            </span>
+                            <span class="gb-led-amt">{{ e.amt }}</span>
+                          </button>
+                        </sc-for>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </section>
+
+              <sc-if value="{{ spendShow }}" hint-placeholder-val="{{ false }}">
+                <section class="tc-card tc-spend">
+                  <div class="tc-head">
+                    <div>
+                      <div class="tc-eyebrow">Trend</div>
+                      <div class="tc-title">Spend over time</div>
+                    </div>
+                    <div class="tc-spend-total">{{ spendTotal }}</div>
+                  </div>
+                  <div class="tc-spend-chart">
+                    <svg viewBox="0 0 600 150" preserveAspectRatio="none" aria-hidden="true">
+                      <defs>
+                        <linearGradient id="spend-grad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.28"></stop>
+                          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"></stop>
+                        </linearGradient>
+                      </defs>
+                      <path d="{{ spendArea }}" fill="url(#spend-grad)"></path>
+                      <polyline points="{{ spendLine }}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></polyline>
+                    </svg>
+                    <div class="tc-spend-axis">
+                      <span>{{ spendStart }}</span>
+                      <span>{{ spendEnd }}</span>
+                    </div>
+                  </div>
+                </section>
+              </sc-if>
+            </div>
+
+            <section class="tc-card rec" style="{{ recStyle }}">
+              <div class="tc-head" style="display: flex; align-items: center; gap: 10px">
+                <div>
+                  <div class="tc-eyebrow">Reconcile</div>
+                  <div class="tc-title">Settle up</div>
+                </div>
+                <button type="button" onClick="{{ copySummary }}" title="Copy a plain-text settle-up summary for the group chat" style="margin-left: auto; border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap" style-hover="border-color: var(--accent); color: var(--accent)">Copy summary</button>
+              </div>
+              <div class="tc-bal-list">
+                <sc-for list="{{ recBalances }}" as="b" hint-placeholder-count="4">
+                  <div class="tc-bal">
+                    <span class="tc-av" style="background-color: {{ b.hue }}">{{ b.ch }}</span>
+                    <span class="tc-bal-name">{{ b.name }}</span>
+                    <span class="tc-bal-track">
+                      <sc-if value="{{ b.hasFill }}" hint-placeholder-val="{{ false }}">
+                        <span class="tc-bal-fill {{ b.fillCls }}" style="width: {{ b.w }}"></span>
+                      </sc-if>
+                    </span>
+                    <span class="tc-bal-net {{ b.netCls }}">{{ b.net }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <sc-if value="{{ recSquared }}" hint-placeholder-val="{{ false }}">
+                <div class="tc-clear">✓ This trip is squared up</div>
+              </sc-if>
+              <sc-if value="{{ recHasTx }}" hint-placeholder-val="{{ false }}">
+                <div class="tc-tx-list">
+                  <sc-for list="{{ recTransfers }}" as="t" hint-placeholder-count="2">
+                    <button type="button" class="tc-tx" onClick="{{ t.click }}" title="See how this amount was worked out">
+                      <span class="tc-tx-name">{{ t.from }}</span>
+                      <span class="tc-tx-arrow">→</span>
+                      <span class="tc-tx-name">{{ t.to }}</span>
+                      <span class="tc-tx-amt">{{ t.amt }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ stmtShow }}" hint-placeholder-val="{{ false }}">
+                <div class="tc-stmt-list">
+                  <div class="tc-stmt-head">Reconciliation statements</div>
+                  <sc-for list="{{ stmts }}" as="s" hint-placeholder-count="1">
+                    <button type="button" class="tc-stmt" onClick="{{ s.click }}">
+                      <span class="tc-stmt-main">
+                        <span class="tc-stmt-line"><span class="tc-stmt-name" title="{{ s.payerTitle }}">{{ s.payer }}</span> paid <span class="tc-stmt-name tc-stmt-name--payee" title="{{ s.payeeTitle }}">{{ s.payee }}</span></span>
+                        <span class="tc-stmt-meta">{{ s.meta }}</span>
+                      </span>
+                      <span class="tc-stmt-amt">{{ s.amt }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </section>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </main>
+  </div>
+
+  <sc-if value="{{ ctxOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="gb-ctx-catch" onClick="{{ closeCtx }}" onContextMenu="{{ closeCtxPrevent }}"></div>
+    <div class="card gb-ctx-menu" role="menu" style="{{ ctxPos }}">
+      <div class="gb-ctx-title">{{ ctxTitle }}</div>
+      <button type="button" role="menuitem" class="gb-ctx-item" onClick="{{ ctxExport }}">
+        <span aria-hidden="true" style="font-size: 14px">⬇</span>
+        Download JSON backup
+      </button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ emOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="gb-modal-backdrop" onClick="{{ emClose }}" data-screen-label="Expense modal">
+      <div class="gb-modal gb-modal--sm gb-modal--expense" onClick="{{ stopProp }}">
+        <div class="gb-modal-head">
+          <span class="card-eyebrow">Shared expense</span>
+          <button type="button" class="gb-modal-x" onClick="{{ emClose }}" aria-label="Close">✕</button>
+        </div>
+        <div class="gb-modal-body" style="display: block">
+          <h2 class="gb-modal-title">{{ emHeading }}</h2>
+          <p class="gb-modal-desc">Log what was bought, who paid, and how it splits. It feeds the budget and the settle-up.</p>
+
+          <div class="gb-scan-field" style="margin-top: 14px">
+            <sc-if value="{{ emHasReceipt }}" hint-placeholder-val="{{ false }}">
+              <div class="gb-scan-attached">
+                <div class="gb-scan-thumbwrap">{{ emReceiptImg }}</div>
+                <div style="flex: 1">
+                  <div class="gb-scan-main">Receipt attached</div>
+                  <div class="gb-scan-sub">Saved with this expense.</div>
+                </div>
+                <button type="button" class="gb-modal-cancel" onClick="{{ emRemoveReceipt }}">Remove</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ emNoReceipt }}" hint-placeholder-val="{{ true }}">
+              <label class="gb-scan-drop">
+                <div class="gb-scan-ico">📸</div>
+                <div class="gb-scan-main">Scan a receipt</div>
+                <div class="gb-scan-sub">Drop a photo or screenshot — we’ll read the merchant, total and date. Or just type it in below.</div>
+                <input type="file" accept="image/*" style="display: none" onChange="{{ emReceiptFile }}">
+              </label>
+            </sc-if>
+          </div>
+
+          <label class="gb-fld" style="margin-top: 14px">
+            <span class="gb-fld-lab">What was it?</span>
+            <input value="{{ emTitle }}" onChange="{{ emSetTitle }}" placeholder="e.g. Groceries — Lidl">
+          </label>
+
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px">
+            <sc-for list="{{ emQuick }}" as="q" hint-placeholder-count="4">
+              <button type="button" onClick="{{ q.pick }}" style="border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; cursor: pointer; font-family: inherit" style-hover="border-color: var(--accent); color: var(--accent)">{{ q.label }}</button>
+            </sc-for>
+          </div>
+
+          <label class="gb-fld">
+            <span class="gb-fld-lab">Amount</span>
+            <div class="gb-amt">
+              <select class="gb-amt-cur" value="{{ emCur }}" onChange="{{ emSetCur }}" aria-label="Currency">
+                <sc-for list="{{ emCurOptions }}" as="c" hint-placeholder-count="3">
+                  <option value="{{ c.v }}">{{ c.v }}</option>
+                </sc-for>
+              </select>
+              <input class="se-amt-input" type="number" inputMode="decimal" value="{{ emAmount }}" onChange="{{ emSetAmount }}" placeholder="0" style="flex: 1; min-width: 0; padding: 0; text-align: right; font-size: 16px; font-weight: 700; color: var(--fg)">
+            </div>
+          </label>
+
+          <label class="gb-fld">
+            <span class="gb-fld-lab">Category</span>
+            <select value="{{ emCategory }}" onChange="{{ emSetCategory }}">
+              <option value="">—</option>
+              <sc-for list="{{ emCategories }}" as="c" hint-placeholder-count="4">
+                <option value="{{ c.v }}">{{ c.v }}</option>
+              </sc-for>
+            </select>
+          </label>
+
+          <div class="gb-fld">
+            <span class="gb-fld-lab">Which day?</span>
+            <div class="gb-daypick">
+              <sc-for list="{{ emDays }}" as="d" hint-placeholder-count="5">
+                <button type="button" class="gb-day {{ d.on }}" onClick="{{ d.pick }}">
+                  <span class="gb-day-dow">{{ d.dow }}</span>
+                  <span class="gb-day-num">{{ d.num }}</span>
+                  <span class="gb-day-mon">{{ d.mon }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="gb-fld">
+            <span class="gb-fld-lab">Paid by</span>
+            <div class="gb-paidby">
+              <sc-for list="{{ emPaidChips }}" as="m" hint-placeholder-count="4">
+                <button type="button" class="gb-paid-chip {{ m.on }}" onClick="{{ m.pick }}">
+                  <span class="gb-av" style="width: 22px; height: 22px; font-size: 8.8px; background: {{ m.hue }}">{{ m.ini }}</span> {{ m.name }}
+                </button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="gb-fld">
+            <span class="gb-fld-lab">How does it split?</span>
+            <div class="seg gb-splitseg">
+              <button type="button" class="seg-btn {{ emEqOn }}" onClick="{{ emSetEq }}">Split equally</button>
+              <button type="button" class="seg-btn {{ emCuOn }}" onClick="{{ emSetCu }}">Custom split</button>
+              <button type="button" class="seg-btn {{ emMeOn }}" onClick="{{ emSetMe }}">Only me</button>
+            </div>
+            <div class="gb-split-list">
+              <sc-for list="{{ emSplitRows }}" as="r" hint-placeholder-count="4">
+                <div class="gb-split-row {{ r.off }}" style="{{ r.rowStyle }}" onClick="{{ r.toggle }}">
+                  <span class="gb-av" style="width: 26px; height: 26px; font-size: 10.4px; background: {{ r.hue }}">{{ r.ini }}</span>
+                  <span class="gb-split-name">{{ r.name }}</span>
+                  <span class="gb-split-basis">{{ r.basis }}</span>
+                  <sc-if value="{{ r.showInput }}" hint-placeholder-val="{{ false }}">
+                    <input class="gb-split-inp" type="number" inputMode="decimal" min="0" value="{{ r.inputVal }}" placeholder="{{ r.ph }}" onClick="{{ stopProp }}" onChange="{{ r.onAmt }}">
+                  </sc-if>
+                  <sc-if value="{{ r.showAmt }}" hint-placeholder-val="{{ true }}">
+                    <span class="gb-split-amt">{{ r.amt }}</span>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ emShowSum }}" hint-placeholder-val="{{ false }}">
+              <div class="gb-split-sum {{ emSumCls }}">{{ emSumLabel }}</div>
+            </sc-if>
+          </div>
+        </div>
+        <div class="gb-modal-foot">
+          <sc-if value="{{ emIsEdit }}" hint-placeholder-val="{{ false }}">
+            <button type="button" class="gb-modal-del" onClick="{{ emDelete }}">Delete</button>
+          </sc-if>
+          <span style="flex: 1"></span>
+          <button type="button" class="gb-modal-cancel" onClick="{{ emClose }}">Cancel</button>
+          <button type="button" class="gb-settle-btn" style="width: auto; margin-top: 0; padding: 10px 18px" disabled="{{ emInvalid }}" onClick="{{ emSubmit }}">{{ emSubmitLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ smOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="gb-modal-backdrop" onClick="{{ smClose }}" data-screen-label="Reconciliation modal">
+      <div class="gb-modal gb-modal--sm" onClick="{{ stopProp }}">
+        <div class="gb-modal-head">
+          <span class="card-eyebrow">Reconciliation</span>
+          <button type="button" class="gb-modal-x" onClick="{{ smClose }}" aria-label="Close">✕</button>
+        </div>
+        <div class="gb-modal-body" style="display: block">
+          <h2 class="gb-modal-title">{{ smHeading }}</h2>
+          <p class="gb-modal-desc">Record money that changed hands. It squares the balances without counting as trip spend.</p>
+          <div class="gb-fld" style="margin-top: 14px">
+            <span class="gb-fld-lab">Who paid</span>
+            <div class="gb-paidby">
+              <sc-for list="{{ smFromChips }}" as="m" hint-placeholder-count="4">
+                <button type="button" class="gb-paid-chip {{ m.on }}" disabled="{{ m.disabled }}" style="{{ m.style }}" onClick="{{ m.pick }}">
+                  <span class="gb-av" style="width: 22px; height: 22px; font-size: 8.8px; background: {{ m.hue }}">{{ m.ini }}</span> {{ m.name }}
+                </button>
+              </sc-for>
+            </div>
+          </div>
+          <div class="gb-fld">
+            <span class="gb-fld-lab">Who received</span>
+            <div class="gb-paidby">
+              <sc-for list="{{ smToChips }}" as="m" hint-placeholder-count="4">
+                <button type="button" class="gb-paid-chip {{ m.on }}" disabled="{{ m.disabled }}" style="{{ m.style }}" onClick="{{ m.pick }}">
+                  <span class="gb-av" style="width: 22px; height: 22px; font-size: 8.8px; background: {{ m.hue }}">{{ m.ini }}</span> {{ m.name }}
+                </button>
+              </sc-for>
+            </div>
+          </div>
+          <label class="gb-fld">
+            <span class="gb-fld-lab">Amount</span>
+            <div class="gb-amt">
+              <select class="gb-amt-cur" value="{{ smCur }}" onChange="{{ smSetCur }}" aria-label="Currency">
+                <sc-for list="{{ smCurOptions }}" as="c" hint-placeholder-count="3">
+                  <option value="{{ c.v }}">{{ c.v }}</option>
+                </sc-for>
+              </select>
+              <input class="se-amt-input" type="number" inputMode="decimal" value="{{ smAmount }}" onChange="{{ smSetAmount }}" placeholder="0" style="flex: 1; min-width: 0; padding: 0; text-align: right; font-size: 16px; font-weight: 700; color: var(--fg)">
+            </div>
+          </label>
+          <label class="gb-fld">
+            <span class="gb-fld-lab">When</span>
+            <input type="date" value="{{ smDate }}" onChange="{{ smSetDate }}">
+          </label>
+        </div>
+        <div class="gb-modal-foot">
+          <sc-if value="{{ smIsEdit }}" hint-placeholder-val="{{ false }}">
+            <button type="button" class="gb-modal-del" onClick="{{ smDelete }}">Delete</button>
+          </sc-if>
+          <span style="flex: 1"></span>
+          <button type="button" class="gb-modal-cancel" onClick="{{ smClose }}">Cancel</button>
+          <button type="button" class="gb-settle-btn" style="width: auto; margin-top: 0; padding: 10px 18px" disabled="{{ smInvalid }}" onClick="{{ smSubmit }}">{{ smSubmitLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ tmOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="gb-modal-backdrop" onClick="{{ tmClose }}" data-screen-label="Trip modal">
+      <div class="gb-modal" onClick="{{ stopProp }}">
+        <div class="gb-modal-head">
+          <span class="card-eyebrow">TRAVEL EVENT</span>
+          <button type="button" class="gb-modal-x" onClick="{{ tmClose }}" aria-label="Close">✕</button>
+        </div>
+        <div class="gb-modal-body">
+          <div style="grid-column: 1 / -1">
+            <h2 style="font-size: 26px; font-weight: 800; letter-spacing: -0.02em; color: var(--fg); margin: 0">{{ tmHeading }}</h2>
+            <p style="font-size: 13px; color: var(--dim); margin-top: 6px">A trip is its own shared-spend pool — log costs on the road, settle up after.</p>
+          </div>
+          <label class="gb-fld" style="grid-column: 1 / -1">
+            <span class="gb-fld-lab">TRIP NAME</span>
+            <input value="{{ tmName }}" onChange="{{ tmSetName }}" placeholder="e.g. Croatia road trip">
+          </label>
+          <label class="gb-fld" style="grid-column: 1 / -1">
+            <span class="gb-fld-lab">DESTINATION</span>
+            <input value="{{ tmDest }}" onChange="{{ tmSetDest }}" placeholder="Where to?">
+          </label>
+          <label class="gb-fld" style="grid-column: 1 / -1">
+            <span class="gb-fld-lab">START</span>
+            <input type="date" value="{{ tmStart }}" max="{{ tmStartMax }}" onChange="{{ tmSetStart }}">
+          </label>
+          <label class="gb-fld" style="grid-column: 1 / -1">
+            <span class="gb-fld-lab" style="display: flex; align-items: center; justify-content: space-between">END
+              <button type="button" onClick="{{ tmEndToday }}" style="border: 0; background: none; padding: 0; font: inherit; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--accent, #0070f2); cursor: pointer">Set as today</button>
+            </span>
+            <input type="date" value="{{ tmEnd }}" min="{{ tmEndMin }}" max="{{ tmEndMax }}" onChange="{{ tmSetEnd }}">
+          </label>
+          <sc-if value="{{ tmHasErr }}" hint-placeholder-val="{{ false }}">
+            <span class="gb-basis-hint" style="grid-column: 1 / -1; color: var(--gb-neg, #ef6b6b)">{{ tmDateErr }}</span>
+          </sc-if>
+          <div class="gb-fld-row" style="grid-column: 1 / -1">
+            <label class="gb-fld">
+              <span class="gb-fld-lab">Main currency</span>
+              <select value="{{ tmMain }}" onChange="{{ tmSetMain }}">
+                <sc-for list="{{ tmCurrencies }}" as="c" hint-placeholder-count="3">
+                  <option value="{{ c.v }}">{{ c.v }}</option>
+                </sc-for>
+              </select>
+            </label>
+            <label class="gb-fld">
+              <span class="gb-fld-lab">Secondary currency</span>
+              <select value="{{ tmSec }}" onChange="{{ tmSetSec }}">
+                <sc-for list="{{ tmCurrencies }}" as="c" hint-placeholder-count="3">
+                  <option value="{{ c.v }}">{{ c.v }}</option>
+                </sc-for>
+              </select>
+            </label>
+          </div>
+          <div class="gb-fld" style="grid-column: 1 / -1">
+            <span class="gb-fld-lab">COVER ICON</span>
+            <div class="gb-emoji-row">
+              <sc-for list="{{ tmEmojis }}" as="e" hint-placeholder-count="6">
+                <button type="button" class="gb-emoji {{ e.on }}" onClick="{{ e.pick }}">{{ e.e }}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div class="gb-fld" style="grid-column: 1 / -1">
+            <span class="gb-fld-lab">ACCENT</span>
+            <div class="gb-hues">
+              <sc-for list="{{ tmHues }}" as="h" hint-placeholder-count="5">
+                <button type="button" class="gb-hue {{ h.on }}" style="background: {{ h.c }}" onClick="{{ h.pick }}"></button>
+              </sc-for>
+            </div>
+          </div>
+          <div class="gb-fld" style="grid-column: 1 / -1">
+            <span class="gb-fld-lab">WHO'S ON THE TRIP?</span>
+            <div class="gb-paidby">
+              <sc-for list="{{ tmMemberChips }}" as="m" hint-placeholder-count="4">
+                <button type="button" class="gb-paid-chip {{ m.on }}" onClick="{{ m.pick }}">
+                  <span class="gb-av" style="width: 22px; height: 22px; font-size: 8.8px; background: {{ m.hue }}">{{ m.ini }}</span> {{ m.name }}
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <div class="gb-modal-foot">
+          <sc-if value="{{ tmIsEdit }}" hint-placeholder-val="{{ false }}">
+            <button type="button" class="gb-modal-del" onClick="{{ tmRemove }}">Remove</button>
+          </sc-if>
+          <span style="flex: 1"></span>
+          <button type="button" class="gb-modal-cancel" onClick="{{ tmClose }}">Cancel</button>
+          <button type="button" class="gb-settle-btn" style="width: auto; margin-top: 0; padding: 10px 18px" disabled="{{ tmInvalid }}" onClick="{{ tmSubmit }}">{{ tmSubmitLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ pmOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="gb-modal-backdrop" onClick="{{ pmClose }}" data-screen-label="Person modal">
+      <div class="gb-modal gb-modal--sm" onClick="{{ stopProp }}">
+        <div class="gb-modal-head">
+          <span class="card-eyebrow">{{ pmEyebrow }}</span>
+          <button type="button" class="gb-modal-x" onClick="{{ pmClose }}" aria-label="Close">✕</button>
+        </div>
+        <div class="gb-modal-body">
+          <label class="gb-fld" style="grid-column: 1 / -1">
+            <span class="gb-fld-lab">Name</span>
+            <input value="{{ pmName }}" onChange="{{ pmSetName }}" placeholder="e.g. Carl">
+          </label>
+          <sc-if value="{{ pmIsEdit }}" hint-placeholder-val="{{ false }}">
+            <label class="gb-fld" style="grid-column: 1 / -1">
+              <span class="gb-fld-lab">Access</span>
+              <label style="display: flex; align-items: center; gap: 9px; cursor: pointer; font-size: 14px; color: var(--fg)">
+                <input type="checkbox" checked="{{ pmIsAdmin }}" onChange="{{ pmToggleAdmin }}" style="width: 16px; height: 16px; accent-color: var(--accent)">
+                Admin — full access to everything
+              </label>
+            </label>
+            <sc-if value="{{ pmShowTripSel }}" hint-placeholder-val="{{ false }}">
+              <label class="gb-fld" style="grid-column: 1 / -1">
+                <span class="gb-fld-lab">Trip access — the only trip they can open</span>
+                <select value="{{ pmTripId }}" onChange="{{ pmSetTrip }}">
+                  <sc-for list="{{ pmTripOptions }}" as="t" hint-placeholder-count="2">
+                    <option value="{{ t.id }}">{{ t.label }}</option>
+                  </sc-for>
+                </select>
+              </label>
+            </sc-if>
+            <div class="gb-fld" style="grid-column: 1 / -1">
+              <span class="gb-fld-lab">{{ pmLinkLab }}</span>
+              <div style="display: flex; gap: 8px">
+                <input readOnly value="{{ pmShareUrl }}" style="flex: 1">
+                <button type="button" class="gb-settle-btn" style="width: auto; margin-top: 0; padding: 10px 16px; white-space: nowrap" onClick="{{ pmCopy }}">{{ pmCopyLabel }}</button>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+        <div class="gb-modal-foot">
+          <sc-if value="{{ pmIsEdit }}" hint-placeholder-val="{{ false }}">
+            <button type="button" class="gb-modal-del" onClick="{{ pmRemove }}">Remove</button>
+          </sc-if>
+          <span style="flex: 1"></span>
+          <sc-if value="{{ pmIsEdit }}" hint-placeholder-val="{{ false }}">
+            <button type="button" onClick="{{ pmApply }}" disabled="{{ pmInvalid }}" style="font-family: inherit; font-size: 13px; font-weight: 600; color: var(--accent); background: none; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); border-radius: 10px; padding: 9px 16px; cursor: pointer">Apply</button>
+          </sc-if>
+          <sc-if value="{{ pmIsNew }}" hint-placeholder-val="{{ false }}">
+            <button type="button" class="gb-modal-cancel" onClick="{{ pmClose }}">Cancel</button>
+          </sc-if>
+          <button type="button" class="gb-settle-btn" style="width: auto; margin-top: 0; padding: 10px 18px" disabled="{{ pmInvalid }}" onClick="{{ pmSubmit }}">{{ pmSubmitLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ txOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="gb-modal-backdrop" onClick="{{ txClose }}" data-screen-label="Settle-up math">
+      <div class="gb-modal" onClick="{{ stopProp }}">
+        <div class="gb-modal-head">
+          <span class="card-eyebrow">Settle-up math</span>
+          <button type="button" class="gb-modal-x" onClick="{{ txClose }}" aria-label="Close">✕</button>
+        </div>
+        <div class="gb-modal-body" style="display: block">
+          <h2 class="gb-modal-title">{{ txTitle }}</h2>
+          <p class="gb-modal-desc">{{ txDesc }}</p>
+          <sc-for list="{{ txSections }}" as="s" hint-placeholder-count="2">
+            <div class="txd-sec">
+              <div class="txd-head">
+                <span>{{ s.name }}</span>
+                <span class="{{ s.netCls }}">net {{ s.netLab }}</span>
+              </div>
+              <sc-for list="{{ s.lines }}" as="l" hint-placeholder-count="3">
+                <div class="txd-line">
+                  <span class="txd-title">{{ l.title }}<span class="txd-meta">{{ l.meta }}</span></span>
+                  <span class="txd-cols">
+                    <sc-if value="{{ l.hasPaid }}" hint-placeholder-val="{{ false }}"><span class="txd-paid">{{ l.paidLab }}</span></sc-if>
+                    <sc-if value="{{ l.hasShare }}" hint-placeholder-val="{{ false }}"><span class="txd-share">{{ l.shareLab }}</span></sc-if>
+                  </span>
+                  <span class="txd-net {{ l.netCls }}">{{ l.netLab }}</span>
+                </div>
+              </sc-for>
+              <div class="txd-total">paid {{ s.paidSum }} − share {{ s.shareSum }} = <b class="{{ s.netCls }}">{{ s.netLab }}</b></div>
+            </div>
+          </sc-for>
+          <div class="txd-sec">
+            <div class="txd-head"><span>The match</span></div>
+            <p class="txd-note">{{ txNote }}</p>
+            <sc-for list="{{ txMatches }}" as="m" hint-placeholder-count="2">
+              <div class="txd-match-row {{ m.on }}">
+                <span>{{ m.label }}</span>
+                <span style="margin-left: auto; font-variant-numeric: tabular-nums">{{ m.amt }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div class="gb-modal-foot">
+          <span style="flex: 1"></span>
+          <button type="button" class="gb-modal-cancel" onClick="{{ txClose }}">Close</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ exOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="gb-modal-backdrop" onClick="{{ exClose }}" data-screen-label="Extract modal">
+      <div class="gb-modal gb-modal--sm" onClick="{{ stopProp }}">
+        <div class="gb-modal-head">
+          <span class="card-eyebrow">Extract</span>
+          <button type="button" class="gb-modal-x" onClick="{{ exClose }}" aria-label="Close">✕</button>
+        </div>
+        <div class="gb-modal-body" style="display: block">
+          <h2 class="gb-modal-title">{{ exTitle }}</h2>
+          <p class="gb-modal-desc">Choose a format for the download.</p>
+          <div class="gb-extract-opts">
+            <button type="button" class="gb-extract-opt" onClick="{{ exJson }}">
+              <span class="gb-extract-opt-main"><span aria-hidden="true">🗄</span> JSON backup</span>
+              <span class="gb-extract-opt-sub">Full snapshot — trip, people and audit log. Restorable later.</span>
+            </button>
+            <button type="button" class="gb-extract-opt" onClick="{{ exCsv }}">
+              <span class="gb-extract-opt-main"><span aria-hidden="true">📊</span> Excel</span>
+              <span class="gb-extract-opt-sub">Expense table (CSV) — opens straight in Excel, Numbers or Sheets.</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ invOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="gb-modal-backdrop" onClick="{{ invClose }}" data-screen-label="Invite modal">
+      <div class="gb-modal gb-modal--sm" onClick="{{ stopProp }}">
+        <div class="gb-modal-head">
+          <span class="card-eyebrow">RECONCILE</span>
+          <button type="button" class="gb-modal-x" onClick="{{ invClose }}" aria-label="Close">✕</button>
+        </div>
+        <div class="gb-modal-body">
+          <div class="gb-invite-list" style="grid-column: 1 / -1">
+            <sc-for list="{{ invRows }}" as="m" hint-placeholder-count="4">
+              <div class="gb-invite-row">
+                <span class="gb-av" style="width: 26px; height: 26px; font-size: 10.4px; background: {{ m.hue }}">{{ m.ini }}</span>
+                <span class="gb-invite-name">{{ m.name }}</span>
+                <button type="button" class="gb-invite-act" onClick="{{ m.copy }}">Copy link</button>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div class="gb-modal-foot">
+          <span style="flex: 1"></span>
+          <button type="button" class="gb-modal-cancel" onClick="{{ invClose }}">Done</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ qrOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="gb-modal-backdrop" onClick="{{ qrClose }}" data-screen-label="QR modal">
+      <div class="gb-modal gb-modal--sm" onClick="{{ stopProp }}">
+        <div class="gb-modal-head">
+          <span class="card-eyebrow">Invite QR</span>
+          <button type="button" class="gb-modal-x" onClick="{{ qrClose }}" aria-label="Close">✕</button>
+        </div>
+        <div class="gb-modal-body" style="display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center">
+          <h2 class="gb-modal-title" style="margin: 0">{{ qrTitle }}</h2>
+          <p class="gb-modal-desc" style="margin: 0">Point a phone camera at this to open the shared budget as this person.</p>
+          <sc-if value="{{ qrHasImg }}" hint-placeholder-val="{{ false }}">
+            <div style="background: #fff; padding: 16px; border-radius: 16px; box-shadow: var(--sh-2)">
+              {{ qrImgEl }}
+            </div>
+          </sc-if>
+          <div style="display: flex; gap: 8px; width: 100%">
+            <input readOnly value="{{ qrUrl }}" style="flex: 1; min-width: 0; font-size: 13px; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; outline: none">
+            <button type="button" class="gb-settle-btn" style="width: auto; margin-top: 0; padding: 10px 16px; white-space: nowrap" onClick="{{ qrCopy }}">{{ qrCopyLabel }}</button>
+          </div>
+        </div>
+        <div class="gb-modal-foot">
+          <span style="flex: 1"></span>
+          <button type="button" class="gb-modal-cancel" onClick="{{ qrClose }}">Done</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <div style="position: fixed; top: 16px; right: 16px; z-index: 400; display: flex; flex-direction: column; gap: 8px; pointer-events: none">
+    <sc-for list="{{ toasts }}" as="t" hint-placeholder-count="0">
+      <div style="background: var(--fg, #1f2a44); color: #fff; font-size: 13px; font-weight: 600; padding: 10px 16px; border-radius: 10px; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.45); animation: budget-toast-in 0.18s ease-out">{{ t.msg }}</div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 1180, &quot;height&quot;: 860 },
+  &quot;theme&quot;: { &quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;sap&quot;, &quot;day&quot;], &quot;default&quot;: &quot;sap&quot;, &quot;tsType&quot;: &quot;\&quot;sap\&quot; | \&quot;day\&quot;&quot;, &quot;section&quot;: &quot;Appearance&quot; },
+  &quot;notebookPaper&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Appearance&quot; },
+  &quot;ambientGlow&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Appearance&quot; }
+}">
+class Component extends DCLogic {
+  KEY = "strategie-budget-recreation-v2";
+  SEED_VERSION = 4;
+  CURRENCIES = ["CZK", "PLN", "EUR"];
+  CATEGORIES = ["Groceries", "Dining", "Transport", "Housing", "Fun", "Health", "Fees", "Other"];
+  AV_HUES = ["var(--hue-blue)", "var(--hue-rose)", "var(--hue-purple)", "var(--hue-orange)", "var(--hue-green)", "var(--hue-zinc)"];
+  TRIP_ACCENTS = ["var(--accent)", "var(--hue-rose)", "var(--hue-green)", "var(--hue-orange)", "var(--hue-purple)"];
+  TRIP_EMOJIS = ["🏖️", "⛰️", "🎷", "🛶", "🏝️", "🚗", "✈️", "⛺", "🍷", "🎿", "🖼️", "🎡"];
+  CATEGORY_HUE = { Groceries: "#34c891", Dining: "#e0905a", Transport: "#0070f2", Housing: "#a384df", Fun: "#e07a93", Health: "#16b6c8", Fees: "#8fa5c4", Other: "#5e7698", Settlement: "#2fb46b" };
+  PER_EUR = { EUR: 1, CZK: 25, PLN: 4.3 };
+  QUICK_FILLS = [
+    { l: "🍽️ Dinner", t: "Dinner", c: "Dining" },
+    { l: "🍻 Drinks", t: "Drinks", c: "Dining" },
+    { l: "🚕 Taxi", t: "Taxi", c: "Transport" },
+    { l: "🛒 Groceries", t: "Groceries", c: "Groceries" },
+    { l: "⛽ Fuel", t: "Fuel", c: "Transport" },
+    { l: "🎟️ Tickets", t: "Tickets", c: "Fun" },
+    { l: "🎸 Gear rental", t: "Gear rental", c: "Fun" },
+    { l: "🛎️ Hotel", t: "Hotel", c: "Housing" },
+  ];
+
+  get CountUp() {
+    if (!this.constructor._CountUp) {
+      this.constructor._CountUp = class extends React.Component {
+        constructor(p) { super(p); this.state = { v: p.value }; }
+        componentDidUpdate(prev) { if (prev.value !== this.props.value) this.run(this.state.v, this.props.value); }
+        componentWillUnmount() { cancelAnimationFrame(this._raf); }
+        run(from, to) {
+          cancelAnimationFrame(this._raf);
+          const t0 = performance.now(), dur = 650;
+          const step = (t) => {
+            const k = Math.min(1, (t - t0) / dur);
+            const e = 1 - Math.pow(1 - k, 3);
+            this.setState({ v: from + (to - from) * e });
+            if (k < 1) this._raf = requestAnimationFrame(step);
+          };
+          this._raf = requestAnimationFrame(step);
+        }
+        render() { return this.props.fmt(this.state.v); }
+      };
+    }
+    return this.constructor._CountUp;
+  }
+
+  confetti() {
+    try {
+      const host = document.createElement("div");
+      host.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:400;overflow:hidden";
+      document.body.appendChild(host);
+      const hues = ["#0070f2", "#36d399", "#ffb054", "#e07a93", "#a384df", "#ffd166"];
+      for (let i = 0; i < 90; i++) {
+        const p = document.createElement("div");
+        const size = 6 + Math.random() * 8;
+        p.style.cssText = "position:absolute;top:-4%;left:" + Math.random() * 100 + "%;width:" + size + "px;height:" + size * 0.6 + "px;background:" + hues[i % hues.length] + ";border-radius:2px;opacity:0.95";
+        host.appendChild(p);
+        p.animate(
+          [{ transform: "translate3d(0,-20px,0) rotate(0deg)" }, { transform: "translate3d(" + (Math.random() - 0.5) * 30 + "vw,105vh,0) rotate(" + (360 + Math.random() * 720) + "deg)" }],
+          { duration: 1400 + Math.random() * 1400, delay: Math.random() * 500, easing: "cubic-bezier(.2,.6,.3,1)", fill: "forwards" }
+        );
+      }
+      setTimeout(() => { try { document.body.removeChild(host); } catch (e) {} }, 3600);
+    } catch (e) {}
+  }
+  toastSeq = 0;
+  rootRef = React.createRef();
+  paperRef = React.createRef();
+  state = this.boot();
+
+  // ── boot / persistence ────────────────────────────────────────────────
+  boot() {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(this.KEY) || "null"); } catch (e) { saved = null; }
+    const fresh = saved && saved.budget && Array.isArray(saved.budget.members) && saved.budget.__seed === this.SEED_VERSION;
+    const budget = fresh ? saved.budget : this.seed();
+    if (!Array.isArray(budget.trips)) budget.trips = [];
+    if (!Array.isArray(budget.expenses)) budget.expenses = [];
+    return {
+      budget,
+      view: saved && saved.view === "trips" ? "trips" : "people",
+      openTripId: (saved && saved.openTripId) || null,
+      toasts: [], ctxMenu: null,
+      personModal: null, tripModal: null, expenseModal: null, settleModal: null,
+      txDetail: null, invite: false, extractDlg: false, qrFor: null, copiedId: null,
+    };
+  }
+  seed() {
+    const at = (d) => d + "T09:00:00.000Z";
+    const M = (id, name, role) => ({ id, name, role, createdAt: at("2026-05-01") });
+    const E = (id, title, amount, currency, category, date, paidBy, splitAmong, extra) =>
+      Object.assign({ id, title, amount, currency, category, date, paidBy, splitAmong: splitAmong || [], createdAt: at(date), updatedAt: at(date) }, extra || {});
+    return {
+      __seed: this.SEED_VERSION,
+      currency: "CZK", splitBasis: "equal",
+      members: [M("p1", "Adam", "admin"), M("p2", "Bára", "member"), M("p3", "Carl", "member"), M("p4", "Dita", "member")],
+      expenses: [
+        E("g1", "Groceries — Lidl", 2840, "CZK", "Groceries", "2026-07-02", "p1"),
+        E("g2", "Internet + utilities", 1560, "CZK", "Housing", "2026-07-01", "p2"),
+        E("g3", "Cottage cleaning supplies", 640, "CZK", "Other", "2026-06-28", "p3"),
+      ],
+      trips: [
+        { id: "t1", name: "Croatia road trip", emoji: "🏖️", destination: "Split → Dubrovnik", startDate: "2026-06-12", endDate: "2026-06-19", datesTBD: false, color: "var(--accent)", mainCurrency: "EUR", secondaryCurrency: "CZK", memberIds: ["p1", "p2", "p3", "p4"], createdAt: at("2026-05-20"), updatedAt: at("2026-06-19"), expenses: [
+          E("e1", "Ferry tickets — Jadrolinija", 86, "EUR", "Transport", "2026-06-12", "p1"),
+          E("e2", "Groceries for the villa", 64, "EUR", "Groceries", "2026-06-12", "p2"),
+          E("e3", "Konoba dinner in Trogir", 118, "EUR", "Dining", "2026-06-13", "p3"),
+          E("e4", "Krka national park entry", 160, "EUR", "Fun", "2026-06-14", "p1"),
+          E("e5", "Fuel — A1 toll route", 72, "EUR", "Transport", "2026-06-15", "p4"),
+          E("e6", "Apartment — 3 nights", 390, "EUR", "Housing", "2026-06-16", "p1"),
+          E("e7", "Gelato + beach bar", 41, "EUR", "Dining", "2026-06-17", "p2"),
+          E("e8", "Wine tasting — Pelješac", 96, "EUR", "Fun", "2026-06-18", "p3", ["p1", "p2", "p3"]),
+          E("e9", "Dita paid Adam", 120, "EUR", undefined, "2026-06-19", "p4", ["p1"], { settlement: true }),
+        ]},
+        { id: "t2", name: "Tatry ski weekend", emoji: "🎿", destination: "Zakopane", startDate: "2026-01-23", endDate: "2026-01-26", datesTBD: false, color: "var(--hue-green)", mainCurrency: "PLN", secondaryCurrency: "CZK", memberIds: ["p1", "p2", "p3"], createdAt: at("2026-01-02"), updatedAt: at("2026-01-26"), expenses: [
+          E("s1", "Ski passes ×3", 810, "PLN", "Fun", "2026-01-23", "p1"),
+          E("s2", "Chalet — 3 nights", 1240, "PLN", "Housing", "2026-01-23", "p2"),
+          E("s3", "Pierogi night", 186, "PLN", "Dining", "2026-01-24", "p3"),
+          E("s4", "Fuel + vignette", 310, "PLN", "Transport", "2026-01-25", "p1"),
+        ]},
+        { id: "t3", name: "Berlin gig weekend", emoji: "🎷", destination: "Kreuzberg, Berlin", startDate: "2026-07-02", endDate: "2026-07-04", datesTBD: false, color: "var(--hue-purple)", mainCurrency: "EUR", secondaryCurrency: "CZK", memberIds: ["p1", "p2", "p3", "p4"], createdAt: at("2026-06-20"), updatedAt: at("2026-07-04"), expenses: [
+          E("b1", "Backline rental — vintage keys", 260, "EUR", "Fun", "2026-07-02", "p1"),
+          E("b2", "Rehearsal room — Funkhaus, 4h", 180, "EUR", "Fun", "2026-07-02", "p2"),
+          E("b3", "Band dinner — Prater Garten", 112, "EUR", "Dining", "2026-07-03", "p4"),
+          E("b4", "Cabs to soundcheck", 34, "EUR", "Transport", "2026-07-03", "p3"),
+        ] },
+      ],
+    };
+  }
+  persist() {
+    try { localStorage.setItem(this.KEY, JSON.stringify({ budget: this.state.budget, view: this.state.view, openTripId: this.state.openTripId })); } catch (e) {}
+  }
+  componentDidMount() {
+    this.applyChrome();
+    this._esc = (e) => { if (e.key === "Escape") this.closeTop(); };
+    window.addEventListener("keydown", this._esc);
+  }
+  componentWillUnmount() { window.removeEventListener("keydown", this._esc); }
+  componentDidUpdate() { this.persist(); this.applyChrome(); }
+  applyChrome() {
+    const el = this.rootRef.current;
+    if (!el) return;
+    el.setAttribute("data-theme", this.props.theme || "sap");
+    const t = this.state.view === "trips" ? this.openTrip() : null;
+    el.style.setProperty("--gb-ambient", (t && t.color) || "var(--accent)");
+    const paper = this.paperRef.current;
+    if (paper) paper.classList.toggle("notebook-page", this.props.notebookPaper !== false);
+  }
+  closeTop() {
+    const s = this.state;
+    if (s.qrFor) return this.setState({ qrFor: null });
+    if (s.ctxMenu) return this.setState({ ctxMenu: null });
+    if (s.txDetail) return this.setState({ txDetail: null });
+    if (s.extractDlg) return this.setState({ extractDlg: false });
+    if (s.invite) return this.setState({ invite: false });
+    if (s.settleModal) return this.setState({ settleModal: null });
+    if (s.expenseModal) return this.setState({ expenseModal: null });
+    if (s.tripModal) return this.setState({ tripModal: null });
+    if (s.personModal) return this.setState({ personModal: null });
+  }
+
+  // ── shared engine (ported from lib/budget-format + lib/trips + currency) ─
+  uid() { return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : "b" + Math.random().toString(36).slice(2); }
+  nowIso() { return new Date().toISOString(); }
+  today() { return this.localIso(new Date()); }
+  localIso(d) { return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+  fmt(amount, c) {
+    const n = Math.round(amount);
+    if (c === "CZK") return n.toLocaleString() + " Kč";
+    if (c === "PLN") return n.toLocaleString() + " zł";
+    return "€" + n.toLocaleString();
+  }
+  fmtSecondary(amount, c) { return "(" + Math.round(amount).toLocaleString() + " " + c.toLowerCase() + ")"; }
+  convert(amount, from, to) { if (from === to || !amount) return amount; return (amount / this.PER_EUR[from]) * this.PER_EUR[to]; }
+  tripCurrencyOptions(main, secondary) { const out = []; [main, secondary, "EUR"].forEach((c) => { if (!out.includes(c)) out.push(c); }); return out; }
+  initials(name) {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "?";
+    if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  hueOf(m) { const idx = Math.max(0, this.state.budget.members.findIndex((x) => x.id === m.id)); return m.color || this.AV_HUES[idx % this.AV_HUES.length]; }
+  catHue(c) { return (c && this.CATEGORY_HUE[c]) || "#8fa5c4"; }
+  memberWeight(m, basis) {
+    if (basis === "share") return m.share && m.share > 0 ? m.share : 1;
+    if (basis === "income") return m.income && m.income > 0 ? m.income : 0;
+    return 1;
+  }
+  expenseShares(members, e, splitBasis) {
+    const out = new Map();
+    if (e.amount <= 0) return out;
+    const byId = new Map(members.map((m) => [m.id, m]));
+    const among = (e.splitAmong.length ? e.splitAmong : members.map((m) => m.id)).filter((id) => byId.has(id));
+    if (among.length === 0) return out;
+    const basis = e.basis || splitBasis;
+    const cw = e.customWeights;
+    let weights = cw && among.some((id) => typeof cw[id] === "number" && cw[id] > 0)
+      ? among.map((id) => ({ id, w: Math.max(0, cw[id] || 0) }))
+      : among.map((id) => ({ id, w: this.memberWeight(byId.get(id), basis) }));
+    let totalW = weights.reduce((s, x) => s + x.w, 0);
+    if (totalW <= 0) { weights = among.map((id) => ({ id, w: 1 })); totalW = among.length; }
+    for (const wt of weights) out.set(wt.id, (e.amount * wt.w) / totalW);
+    return out;
+  }
+  computeBalances(members, expenses, splitBasis) {
+    const paid = new Map(); const owed = new Map();
+    members.forEach((m) => { paid.set(m.id, 0); owed.set(m.id, 0); });
+    let total = 0;
+    for (const e of expenses) {
+      if (e.amount <= 0) continue;
+      if (!e.settlement) total += e.amount;
+      paid.set(e.paidBy, (paid.get(e.paidBy) || 0) + e.amount);
+      for (const pair of this.expenseShares(members, e, splitBasis)) owed.set(pair[0], (owed.get(pair[0]) || 0) + pair[1]);
+    }
+    const balances = members.map((m) => {
+      const p = paid.get(m.id) || 0; const o = owed.get(m.id) || 0;
+      return { member: m, paid: p, owed: o, net: p - o };
+    });
+    const creditors = balances.filter((b) => b.net > 0.5).map((b) => ({ m: b.member, amt: b.net })).sort((a, b) => b.amt - a.amt);
+    const debtors = balances.filter((b) => b.net < -0.5).map((b) => ({ m: b.member, amt: -b.net })).sort((a, b) => b.amt - a.amt);
+    const transfers = [];
+    let ci = 0, di = 0;
+    while (ci < creditors.length && di < debtors.length) {
+      const give = Math.min(creditors[ci].amt, debtors[di].amt);
+      if (give > 0.5) transfers.push({ from: debtors[di].m, to: creditors[ci].m, amount: give });
+      creditors[ci].amt -= give; debtors[di].amt -= give;
+      if (creditors[ci].amt < 0.5) ci++;
+      if (debtors[di].amt < 0.5) di++;
+    }
+    return { balances, total, transfers };
+  }
+  tripMembers(t) {
+    const all = this.state.budget.members;
+    const ids = t.memberIds && t.memberIds.length ? t.memberIds : all.map((m) => m.id);
+    return all.filter((m) => ids.includes(m.id));
+  }
+  tripStats(t) {
+    const members = this.tripMembers(t);
+    const main = t.mainCurrency || "CZK";
+    const expenses = (t.expenses || []).map((e) => Object.assign({}, e, { amount: this.convert(e.amount, e.currency, main), currency: main }));
+    const r = this.computeBalances(members, expenses, this.state.budget.splitBasis);
+    const travellers = members.length;
+    const perPerson = travellers > 0 ? r.total / travellers : 0;
+    const toSettle = r.transfers.reduce((s, x) => s + x.amount, 0);
+    return { total: r.total, perPerson, toSettle, squared: toSettle < 0.5, travellers, balances: r.balances, transfers: r.transfers };
+  }
+  tripNights(t) {
+    if (!t.startDate || !t.endDate) return 0;
+    const ms = new Date(t.endDate).getTime() - new Date(t.startDate).getTime();
+    return ms > 0 ? Math.round(ms / 86400000) : 0;
+  }
+  tripDateLabel(t) {
+    if (t.datesTBD || !t.startDate || !t.endDate) return "Dates TBD";
+    const a = new Date(t.startDate); const b = new Date(t.endDate);
+    if (isNaN(a.getTime()) || isNaN(b.getTime())) return "Dates TBD";
+    const mon = (d) => d.toLocaleDateString("en", { month: "short" });
+    const range = a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()
+      ? a.getDate() + "–" + b.getDate() + " " + mon(b)
+      : a.getDate() + " " + mon(a) + " – " + b.getDate() + " " + mon(b);
+    const n = this.tripNights(t);
+    return range + " · " + n + " night" + (n === 1 ? "" : "s");
+  }
+  tripMetaLabel(t) { return [t.destination && t.destination.trim(), this.tripDateLabel(t)].filter(Boolean).join(" · "); }
+  eachDayISO(startIso, endIso) {
+    const out = [];
+    let cur = new Date(startIso + "T00:00:00");
+    const end = new Date(endIso + "T00:00:00");
+    if (isNaN(cur.getTime()) || isNaN(end.getTime()) || end.getTime() < cur.getTime()) return out;
+    let guard = 0;
+    while (cur.getTime() <= end.getTime() && guard < 60) { out.push(this.localIso(cur)); cur = new Date(cur.getTime() + 86400000); guard++; }
+    return out;
+  }
+  dateLabel(iso) { return iso ? new Date(iso + "T00:00:00").toLocaleDateString("en", { day: "numeric", month: "short", year: "numeric" }) : ""; }
+  dayHeading(iso) {
+    if (!iso) return "No date";
+    const d = new Date(iso + "T00:00:00");
+    const day = d.getDate();
+    const suffix = day % 10 === 1 && day !== 11 ? "st" : day % 10 === 2 && day !== 12 ? "nd" : day % 10 === 3 && day !== 13 ? "rd" : "th";
+    return day + suffix + " – " + d.toLocaleDateString("en", { weekday: "long" });
+  }
+
+  // ── mutations ─────────────────────────────────────────────────────────
+  setBudget(fn) { this.setState((s) => ({ budget: fn(s.budget) })); }
+  updateTrip(next) { this.setBudget((b) => Object.assign({}, b, { trips: (b.trips || []).map((t) => (t.id === next.id ? next : t)) })); }
+  openTrip() { const b = this.state.budget; return (b.trips || []).find((t) => t.id === this.state.openTripId) || null; }
+  saveTripExpense(trip, e) {
+    const existed = (trip.expenses || []).some((x) => x.id === e.id);
+    this.updateTrip(Object.assign({}, trip, {
+      expenses: existed ? (trip.expenses || []).map((x) => (x.id === e.id ? e : x)) : [e].concat(trip.expenses || []),
+      updatedAt: this.nowIso(),
+    }));
+  }
+  removeTripExpense(trip, id) {
+    this.updateTrip(Object.assign({}, trip, { expenses: (trip.expenses || []).filter((x) => x.id !== id), updatedAt: this.nowIso() }));
+  }
+  updateUser(id, patch) { this.setBudget((b) => Object.assign({}, b, { members: b.members.map((m) => (m.id === id ? Object.assign({}, m, patch) : m)) })); }
+  toast(msg) {
+    const id = ++this.toastSeq;
+    this.setState((s) => ({ toasts: s.toasts.concat([{ id, msg }]) }));
+    setTimeout(() => this.setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), 2200);
+  }
+  copy(text, msg) {
+    const done = () => this.toast(msg);
+    try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done, done); return; } } catch (e) {}
+    try { const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); } catch (e) {}
+    done();
+  }
+  shareUrl(memberId, tripId) { const base = location.origin + location.pathname; return base + "?b=demo-budget&user=" + memberId + (tripId ? "&trip=" + tripId : ""); }
+  download(filename, text, mime) {
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+  }
+  slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "trip"; }
+  stamp() { return this.today().replace(/-/g, ""); }
+  exportTripJson(trip) {
+    const envelope = { format: "shelf-trip-backup", version: 1, exportedAt: this.nowIso(), exportedBy: "Host", trip, members: this.tripMembers(trip) };
+    this.download(this.slug(trip.name) + "-" + this.stamp() + ".json", JSON.stringify(envelope, null, 2), "application/json");
+    this.toast("Backed up “" + trip.name + "”");
+  }
+  exportTripCsv(trip) {
+    const q = (v) => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+    const nameOf = (id) => { const m = this.state.budget.members.find((x) => x.id === id); return m ? m.name : id; };
+    const rows = [["Title", "Amount", "Currency", "Category", "Date", "Paid by", "Split among", "Settlement"].map(q).join(",")];
+    for (const e of trip.expenses || []) {
+      const among = (e.splitAmong && e.splitAmong.length ? e.splitAmong : this.tripMembers(trip).map((m) => m.id)).map(nameOf).join("; ");
+      rows.push([e.title, e.amount, e.currency, e.category || "", e.date, nameOf(e.paidBy), among, e.settlement ? "yes" : ""].map(q).join(","));
+    }
+    this.download(this.slug(trip.name) + "-" + this.stamp() + ".csv", rows.join("\n"), "text/csv");
+    this.toast("Extracted “" + trip.name + "” for Excel");
+  }
+  qrDataUrl(url) {
+    if (this._qrFor === url) return this._qrImg || "";
+    try {
+      if (typeof qrcode === "undefined") return "";
+      const g = qrcode(0, "M"); g.addData(url); g.make();
+      this._qrFor = url; this._qrImg = g.createDataURL(6, 0);
+      return this._qrImg;
+    } catch (e) { return ""; }
+  }
+  fileToDataUrl(ev, cb) {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => cb(reader.result);
+    reader.readAsDataURL(file);
+  }
+
+  // ── modal form builders ───────────────────────────────────────────────
+  blankExpenseForm(trip) {
+    const range = trip.startDate && trip.endDate ? this.eachDayISO(trip.startDate, trip.endDate) : [];
+    const clamp = (iso) => { if (!range.length || range.includes(iso)) return iso; if (iso < range[0]) return range[0]; if (iso > range[range.length - 1]) return range[range.length - 1]; return iso; };
+    const tm = this.tripMembers(trip);
+    return { id: null, title: "", amount: "", cur: trip.mainCurrency || "CZK", category: "", date: clamp(this.today()), paidBy: tm[0] ? tm[0].id : "", among: tm.map((m) => m.id), splitMode: "equal", customAmts: {}, receipt: undefined };
+  }
+  expenseFormFrom(trip, e) {
+    const tm = this.tripMembers(trip);
+    const mode = (() => {
+      if (e.customWeights && Object.keys(e.customWeights).length) return "custom";
+      const sa = e.splitAmong;
+      if (!sa || sa.length === 0 || sa.length === tm.length) return "equal";
+      if (sa.length === 1) return "me";
+      return "custom";
+    })();
+    return { id: e.id, title: e.title || "", amount: String(e.amount), cur: e.currency, category: e.category || "", date: e.date, paidBy: e.paidBy, among: e.splitAmong && e.splitAmong.length ? e.splitAmong.slice() : tm.map((m) => m.id), splitMode: mode, customAmts: e.customWeights ? Object.fromEntries(Object.entries(e.customWeights).map((kv) => [kv[0], String(kv[1])])) : {}, receipt: e.receipt, base: e };
+  }
+  blankSettleForm(trip) { const tm = this.tripMembers(trip); return { id: null, from: tm[0] ? tm[0].id : "", to: tm[1] ? tm[1].id : "", amount: "", cur: trip.mainCurrency || "CZK", date: this.today() }; }
+  settleFormFrom(e) { return { id: e.id, from: e.paidBy, to: (e.splitAmong && e.splitAmong[0]) || "", amount: String(e.amount), cur: e.currency, date: e.date, base: e }; }
+  blankTripForm() { return { id: null, name: "", dest: "", start: this.today(), end: "", emoji: this.TRIP_EMOJIS[0], accent: this.TRIP_ACCENTS[0], main: "CZK", sec: "EUR", memberIds: this.state.budget.members.map((m) => m.id) }; }
+  tripFormFrom(t) { return { id: t.id, name: t.name || "", dest: t.destination || "", start: t.startDate || this.today(), end: t.endDate || "", emoji: t.emoji || this.TRIP_EMOJIS[0], accent: t.color || this.TRIP_ACCENTS[0], main: t.mainCurrency || "CZK", sec: t.secondaryCurrency || "EUR", memberIds: t.memberIds && t.memberIds.length ? t.memberIds.slice() : this.state.budget.members.map((m) => m.id), base: t }; }
+  patchEm(patch) { this.setState((s) => (s.expenseModal ? { expenseModal: Object.assign({}, s.expenseModal, patch) } : null)); }
+  patchSm(patch) { this.setState((s) => (s.settleModal ? { settleModal: Object.assign({}, s.settleModal, patch) } : null)); }
+  patchTm(patch) { this.setState((s) => (s.tripModal ? { tripModal: Object.assign({}, s.tripModal, patch) } : null)); }
+  patchPm(patch) { this.setState((s) => (s.personModal ? { personModal: Object.assign({}, s.personModal, patch) } : null)); }
+
+  // ── renderVals ────────────────────────────────────────────────────────
+  renderVals() {
+    const s = this.state;
+    const trips = s.budget.trips || [];
+    const openTrip = this.openTrip();
+    const tripOpen = s.view === "trips" && !!openTrip;
+    const vals = {
+      rootRef: this.rootRef,
+      stopProp: (e) => e.stopPropagation(),
+      toasts: s.toasts,
+      ambientOn: this.props.ambientGlow !== false,
+      pageTitle: tripOpen ? openTrip.name : s.view === "trips" ? "Trips & travel" : "People",
+      tripCount: trips.length,
+      segPeopleOn: s.view === "people" ? "on" : "",
+      segTripsOn: s.view === "trips" ? "on" : "",
+      goPeople: () => this.setState({ view: "people", openTripId: null }),
+      goTrips: () => this.setState({ view: "trips", openTripId: null }),
+      tripOpen,
+      showPeople: s.view === "people",
+      showTripsGrid: s.view === "trips" && !openTrip,
+      headerAddExpense: () => { if (openTrip) this.setState({ expenseModal: this.blankExpenseForm(openTrip) }); },
+      addPerson: () => this.setState({ personModal: { id: null, name: "", isAdmin: false, tripId: trips[0] ? trips[0].id : "", copied: false } }),
+      planTrip: () => this.setState({ tripModal: this.blankTripForm() }),
+    };
+    Object.assign(vals, this.valsPeople());
+    Object.assign(vals, this.valsTripsGrid());
+    if (tripOpen) Object.assign(vals, this.valsTripDetail(openTrip));
+    Object.assign(vals, this.valsCtx());
+    Object.assign(vals, this.valsExpenseModal());
+    Object.assign(vals, this.valsSettleModal());
+    Object.assign(vals, this.valsTripModal());
+    Object.assign(vals, this.valsPersonModal());
+    Object.assign(vals, this.valsTxDetail());
+    Object.assign(vals, this.valsSmallDialogs(openTrip));
+    return vals;
+  }
+
+  valsPeople() {
+    const s = this.state; const b = s.budget;
+    const bal = this.computeBalances(b.members, b.expenses, b.splitBasis).balances;
+    const trips = b.trips || [];
+    const people = bal.map((row) => {
+      const m = row.member;
+      const settled = Math.abs(row.net) < 0.5;
+      const isAdmin = (m.role || "") === "admin";
+      const pt = trips.filter((t) => (t.memberIds || []).includes(m.id));
+      return {
+        name: m.name, ini: this.initials(m.name), hue: this.hueOf(m),
+        balLabel: settled ? "all settled" : row.net > 0 ? "gets " + this.fmt(row.net, b.currency) : "owes " + this.fmt(-row.net, b.currency),
+        balColor: settled ? "var(--dim)" : row.net > 0 ? "var(--gb-pos)" : "var(--gb-neg)",
+        fullAccess: isAdmin || pt.length === 0,
+        tripChips: isAdmin ? [] : pt.map((t) => ({ emoji: t.emoji || "🏝️", name: t.name, color: t.color || "var(--accent)" })),
+        edit: () => this.openPersonModal(m),
+        copyLink: () => { this.copy(this.shareUrl(m.id), "Link copied"); this.flashCopied(m.id); },
+        copyLabel: s.copiedId === m.id ? "Copied ✓" : "Copy link",
+        showQr: () => this.setState({ qrFor: m.id }),
+      };
+    });
+    return { people };
+  }
+  flashCopied(id) { this.setState({ copiedId: id }); setTimeout(() => this.setState((s) => (s.copiedId === id ? { copiedId: null } : null)), 1500); }
+  openPersonModal(m) {
+    const trips = this.state.budget.trips || [];
+    const mt = trips.filter((t) => (t.memberIds || []).includes(m.id));
+    this.setState({ personModal: { id: m.id, name: m.name, isAdmin: (m.role || "") === "admin", tripId: (mt[0] && mt[0].id) || (trips[0] && trips[0].id) || "", copied: false } });
+  }
+
+  valsTripsGrid() {
+    const trips = this.state.budget.trips || [];
+    const tripCards = trips.map((trip) => {
+      const stats = this.tripStats(trip);
+      const tm = this.tripMembers(trip);
+      const main = trip.mainCurrency || "CZK";
+      const n = (trip.expenses || []).length;
+      return {
+        hue: trip.color || "var(--accent)",
+        open: () => this.setState({ openTripId: trip.id }),
+        menu: (e) => this.openCtxMenu(e, trip),
+        coverImg: trip.cover ? React.createElement("img", { className: "gb-trip-img", src: trip.cover, "data-filled": "", alt: "" }) : null,
+        emoji: trip.emoji || "🏖️",
+        statusOk: stats.squared ? "ok" : "",
+        statusLabel: stats.squared ? "Squared up" : this.fmt(stats.toSettle, main) + " to settle",
+        name: trip.name, meta: this.tripMetaLabel(trip),
+        total: this.fmt(stats.total, main), per: this.fmt(stats.perPerson, main),
+        faces: tm.slice(0, 4).map((m) => ({ hue: this.hueOf(m), ini: this.initials(m.name) })),
+        hasMore: tm.length > 4, more: tm.length - 4,
+        countLabel: n + " expense" + (n === 1 ? "" : "s"),
+      };
+    });
+    return { tripCards };
+  }
+  openCtxMenu(e, trip) {
+    e.preventDefault();
+    const W = 224, H = 96, PAD = 8;
+    this.setState({ ctxMenu: { x: Math.max(PAD, Math.min(e.clientX, window.innerWidth - W - PAD)), y: Math.max(PAD, Math.min(e.clientY, window.innerHeight - H - PAD)), tripId: trip.id } });
+  }
+  valsCtx() {
+    const m = this.state.ctxMenu;
+    const trip = m ? (this.state.budget.trips || []).find((t) => t.id === m.tripId) : null;
+    return {
+      ctxOpen: !!(m && trip),
+      closeCtx: () => this.setState({ ctxMenu: null }),
+      closeCtxPrevent: (e) => { e.preventDefault(); this.setState({ ctxMenu: null }); },
+      ctxPos: m ? { left: m.x, top: m.y } : undefined,
+      ctxTitle: trip ? (trip.emoji ? trip.emoji + " " : "") + trip.name : "",
+      ctxExport: () => { this.setState({ ctxMenu: null }); if (trip) this.exportTripJson(trip); },
+    };
+  }
+
+  valsTripDetail(trip) {
+    const stats = this.tripStats(trip);
+    const tm = this.tripMembers(trip);
+    const main = trip.mainCurrency || "CZK";
+    const secondary = trip.secondaryCurrency || "EUR";
+    const sec = (amt) => (secondary !== main ? this.fmtSecondary(this.convert(amt, main, secondary), secondary) : "");
+    const expenses = trip.expenses || [];
+    const nSpend = expenses.filter((e) => !e.settlement).length;
+    const memberById = (id) => this.state.budget.members.find((m) => m.id === id);
+
+    const sorted = expenses.filter((e) => !e.settlement).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    const days = [];
+    for (const e of sorted) { const last = days[days.length - 1]; if (last && (last.date || "") === (e.date || "")) last.items.push(e); else days.push({ date: e.date, items: [e] }); }
+    const ledgerDays = days.map((day) => ({
+      head: this.dayHeading(day.date),
+      items: day.items.map((e) => {
+        const payer = memberById(e.paidBy);
+        const ids = e.splitAmong && e.splitAmong.length ? e.splitAmong : tm.map((m) => m.id);
+        const parts = ids.map(memberById).filter(Boolean);
+        return {
+          click: () => this.setState(e.settlement ? { settleModal: this.settleFormFrom(e) } : { expenseModal: this.expenseFormFrom(trip, e) }),
+          dot: e.settlement ? this.CATEGORY_HUE.Settlement : this.catHue(e.category),
+          title: e.title || (e.settlement ? "Settlement" : "Expense"),
+          meta: (e.settlement ? "Settlement" : e.category || "Other") + " · " + this.dateLabel(e.date),
+          parts: parts.map((m) => ({ hue: this.hueOf(m), ch: m.name.charAt(0).toUpperCase() })),
+          splitLab: e.settlement ? "received" : "split " + parts.length,
+          payerHue: payer ? this.hueOf(payer) : "var(--hue-zinc)",
+          payerCh: payer ? payer.name.charAt(0).toUpperCase() : "?",
+          amt: this.fmt(e.amount, e.currency),
+        };
+      }),
+    }));
+
+    const settlements = expenses.filter((e) => e.settlement).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    const totalAbs = Math.max(1, stats.balances.reduce((x, y) => x + Math.abs(y.net), 0));
+    const recStyle = trip.cover ? 'background: linear-gradient(180deg, rgba(255,255,255,0.93) 0%, rgba(255,255,255,0.86) 45%, rgba(255,255,255,0.72) 100%), url("' + trip.cover + '") 50% 72% / cover no-repeat, var(--surface)' : "";
+
+    // spend trend
+    const byDay = new Map();
+    for (const e of expenses) { if (!e.date || e.settlement) continue; byDay.set(e.date, (byDay.get(e.date) || 0) + this.convert(e.amount, e.currency, main)); }
+    const dks = Array.from(byDay.keys()).sort();
+    let spendShow = false, spendLine = "", spendArea = "", spendTotal = "", spendStart = "", spendEnd = "";
+    if (dks.length) {
+      let run = 0;
+      const points = dks.map((day) => ({ day, cum: (run += byDay.get(day)) }));
+      const total = run;
+      const startDay = trip.startDate && trip.startDate <= points[0].day ? trip.startDate : points[0].day;
+      const series = [{ day: startDay, cum: 0 }].concat(points);
+      const W = 600, topY = 12, baseline = 140;
+      const tOf = (iso) => new Date(iso + "T00:00:00").getTime();
+      const ts = series.map((p) => tOf(p.day));
+      const tMin = Math.min.apply(null, ts), tMax = Math.max.apply(null, ts);
+      const yMax = total || 1;
+      const xAt = (i, t) => (tMax === tMin ? (series.length === 1 ? W / 2 : (i / (series.length - 1)) * W) : ((t - tMin) / (tMax - tMin)) * W);
+      const yAt = (c) => baseline - (c / yMax) * (baseline - topY);
+      const rd = (n) => Math.round(n * 10) / 10;
+      const xy = series.map((p, i) => [rd(xAt(i, ts[i])), rd(yAt(p.cum))]);
+      spendLine = xy.map((p) => p[0] + "," + p[1]).join(" ");
+      spendArea = "M" + xy[0][0] + "," + baseline + " " + xy.map((p) => "L" + p[0] + "," + p[1]).join(" ") + " L" + xy[xy.length - 1][0] + "," + baseline + " Z";
+      const lab = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en", { day: "numeric", month: "short" });
+      spendStart = lab(series[0].day); spendEnd = lab(points[points.length - 1].day);
+      spendTotal = this.fmt(total, main); spendShow = true;
+    }
+
+    const catTotals = new Map();
+    for (const e of expenses) { if (e.settlement || !(e.amount > 0)) continue; const c = e.category || "Other"; catTotals.set(c, (catTotals.get(c) || 0) + this.convert(e.amount, e.currency, main)); }
+    const catSum = Array.from(catTotals.values()).reduce((a, b) => a + b, 0);
+    const catsSorted = Array.from(catTotals.entries()).sort((a, b) => b[1] - a[1]);
+
+    const recBalances = stats.balances.map((row) => {
+      const m = row.member; const pos = row.net > 0.01; const neg = row.net < -0.01;
+      const w = Math.min(100, Math.round((Math.abs(row.net) / totalAbs) * 100 * stats.balances.length));
+      return { hue: this.hueOf(m), ch: m.name.charAt(0).toUpperCase(), name: m.name, hasFill: pos || neg, fillCls: pos ? "pos" : "neg", w: w + "%", netCls: pos ? "pos" : neg ? "neg" : "", net: this.fmt(row.net, main) };
+    });
+
+    return {
+      heroHue: trip.color || "var(--accent)",
+      heroCoverImg: trip.cover ? React.createElement("img", { className: "gb-trip-hero-img", src: trip.cover, "data-filled": "", alt: "" }) : null,
+      heroEmoji: trip.emoji || "", heroName: trip.name, heroMeta: this.tripMetaLabel(trip),
+      heroFaces: tm.map((m) => ({ hue: this.hueOf(m), ini: this.initials(m.name) })),
+      backToTrips: () => this.setState({ openTripId: null }),
+      openInvite: () => this.setState({ invite: true }),
+      editOpenTrip: () => this.setState({ tripModal: this.tripFormFrom(trip) }),
+      onCoverFile: (ev) => this.fileToDataUrl(ev, (dataUrl) => this.updateTrip(Object.assign({}, trip, { cover: dataUrl, updatedAt: this.nowIso() }))),
+      tileSpendEl: React.createElement(this.CountUp, { value: stats.total, fmt: (v) => this.fmt(v, main) }), tileSpendSec: sec(stats.total), tileSpendSub: nSpend + " expense" + (nSpend === 1 ? "" : "s"),
+      tilePerEl: React.createElement(this.CountUp, { value: stats.perPerson, fmt: (v) => this.fmt(v, main) }), tilePerSec: sec(stats.perPerson), tilePerSub: stats.travellers + " travelling",
+      tileSettleEl: React.createElement(this.CountUp, { value: stats.squared ? 0 : stats.toSettle, fmt: (v) => this.fmt(v, main) }), tileSettleSec: sec(stats.squared ? 0 : stats.toSettle), tileSettleSub: stats.squared ? "all square" : "to settle",
+      catShow: catsSorted.length > 0 && catSum > 0,
+      catBiggest: catsSorted.length && catSum > 0 ? catsSorted[0][0] + " leads · " + Math.round((catsSorted[0][1] / catSum) * 100) + "%" : "",
+      catSegs: catsSorted.map((kv) => ({ w: ((kv[1] / catSum) * 100).toFixed(1) + "%", hue: this.catHue(kv[0]), title: kv[0] + " · " + this.fmt(kv[1], main) })),
+      catLegend: catsSorted.slice(0, 5).map((kv) => ({ hue: this.catHue(kv[0]), name: kv[0], amt: this.fmt(kv[1], main) })),
+      copySummary: () => {
+        const lines = [(trip.emoji ? trip.emoji + " " : "") + trip.name + (trip.destination ? " — " + trip.destination : ""), "Spend " + this.fmt(stats.total, main) + " · " + this.fmt(stats.perPerson, main) + " per person · " + stats.travellers + " travelling"];
+        if (stats.transfers.length) { lines.push("To settle:"); stats.transfers.forEach((t) => lines.push("• " + t.from.name + " → " + t.to.name + ": " + this.fmt(t.amount, main))); }
+        else lines.push("All square ✓");
+        this.copy(lines.join("\n"), "Summary copied — paste it in the group chat");
+      },
+      openExtract: () => this.setState({ extractDlg: true }),
+      openSettleNew: () => this.setState({ settleModal: this.blankSettleForm(trip) }),
+      openExpenseNew: () => this.setState({ expenseModal: this.blankExpenseForm(trip) }),
+      settleBtnDisabled: tm.length < 2, expenseBtnDisabled: tm.length === 0,
+      ledgerEmpty: ledgerDays.length === 0, ledgerHasDays: ledgerDays.length > 0, ledgerDays,
+      spendShow, spendLine, spendArea, spendTotal, spendStart, spendEnd,
+      recStyle, recBalances,
+      recSquared: stats.transfers.length === 0, recHasTx: stats.transfers.length > 0,
+      recTransfers: stats.transfers.map((t) => ({ from: t.from.name, to: t.to.name, amt: this.fmt(t.amount, main), click: () => this.setState({ txDetail: t }) })),
+      stmtShow: settlements.length > 0,
+      stmts: settlements.map((e) => {
+        const payer = memberById(e.paidBy); const payee = memberById((e.splitAmong && e.splitAmong[0]) || "");
+        return { payer: payer ? payer.name : "?", payee: payee ? payee.name : "?", payerTitle: "Payer: " + (payer ? payer.name : "?"), payeeTitle: "Received the money: " + (payee ? payee.name : "?"), meta: "Settlement · " + this.dateLabel(e.date), amt: this.fmt(e.amount, e.currency), click: () => this.setState({ settleModal: this.settleFormFrom(e) }) };
+      }),
+    };
+  }
+
+  valsExpenseModal() {
+    const em = this.state.expenseModal;
+    if (!em) return { emOpen: false };
+    const trip = this.openTrip();
+    const tm = trip ? this.tripMembers(trip) : this.state.budget.members;
+    const main = trip ? (trip.mainCurrency || "CZK") : this.state.budget.currency;
+    const secondary = trip ? (trip.secondaryCurrency || "EUR") : "EUR";
+    const curOptions = trip ? this.tripCurrencyOptions(main, secondary) : this.CURRENCIES;
+    const allIds = tm.map((m) => m.id);
+    const splitIds = em.splitMode === "equal" ? allIds : em.splitMode === "me" ? [em.paidBy] : em.among;
+    const amt = Number(em.amount) || 0;
+    const perHead = splitIds.length ? amt / splitIds.length : 0;
+    const manualSum = splitIds.reduce((s, id) => s + (em.customAmts[id] !== undefined ? Number(em.customAmts[id]) || 0 : 0), 0);
+    const autoIds = splitIds.filter((id) => em.customAmts[id] === undefined);
+    const autoShare = autoIds.length ? Math.max(0, amt - manualSum) / autoIds.length : 0;
+    const shareOf = (id) => (em.splitMode !== "custom" ? perHead : em.customAmts[id] !== undefined ? Number(em.customAmts[id]) || 0 : autoShare);
+    const assigned = splitIds.reduce((s, id) => s + shareOf(id), 0);
+    const mismatch = em.splitMode === "custom" && Math.abs(assigned - amt) > 0.5;
+    const valid = em.title.trim() && amt > 0 && em.paidBy && splitIds.length > 0 && !mismatch;
+
+    const range = trip && trip.startDate && trip.endDate ? this.eachDayISO(trip.startDate, trip.endDate) : null;
+    const dayList = range && range.length ? range : (() => {
+      const selD = new Date(em.date + "T00:00:00"); const t = new Date(this.today() + "T00:00:00");
+      const diff = Math.round((t.getTime() - selD.getTime()) / 86400000);
+      const anchor = diff >= 0 && diff <= 4 ? t : selD;
+      return [4, 3, 2, 1, 0].map((i) => this.localIso(new Date(anchor.getTime() - i * 86400000)));
+    })();
+
+    return {
+      emOpen: true, emIsEdit: !!em.id,
+      emHeading: em.id ? "Edit expense" : "Add an expense",
+      emHasReceipt: !!em.receipt, emNoReceipt: !em.receipt,
+      emReceiptImg: em.receipt ? React.createElement("img", { className: "gb-scan-thumb", src: em.receipt, alt: "receipt" }) : null,
+      emReceiptFile: (ev) => this.fileToDataUrl(ev, (url) => this.patchEm({ receipt: url })),
+      emRemoveReceipt: () => this.patchEm({ receipt: undefined }),
+      emTitle: em.title, emSetTitle: (e) => this.patchEm({ title: e.target.value }),
+      emQuick: this.QUICK_FILLS.map((q) => ({ label: q.l, pick: () => this.patchEm({ title: q.t, category: q.c }) })),
+      emAmount: em.amount, emSetAmount: (e) => this.patchEm({ amount: e.target.value }),
+      emCur: em.cur, emSetCur: (e) => this.patchEm({ cur: e.target.value }), emCurOptions: curOptions.map((v) => ({ v })),
+      emCategory: em.category, emSetCategory: (e) => this.patchEm({ category: e.target.value }), emCategories: this.CATEGORIES.map((v) => ({ v })),
+      emDays: dayList.map((di) => { const d = new Date(di + "T00:00:00"); return { on: di === em.date ? "on" : "", pick: () => this.patchEm({ date: di }), dow: d.toLocaleDateString("en", { weekday: "short" }), num: d.getDate(), mon: d.toLocaleDateString("en", { month: "short" }) }; }),
+      emPaidChips: tm.map((m) => ({ on: em.paidBy === m.id ? "on" : "", pick: () => this.patchEm({ paidBy: m.id }), hue: this.hueOf(m), ini: this.initials(m.name), name: m.name })),
+      emEqOn: em.splitMode === "equal" ? "on" : "", emCuOn: em.splitMode === "custom" ? "on" : "", emMeOn: em.splitMode === "me" ? "on" : "",
+      emSetEq: () => this.patchEm({ splitMode: "equal" }),
+      emSetCu: () => this.setState((s) => (s.expenseModal ? { expenseModal: Object.assign({}, s.expenseModal, { splitMode: "custom", among: s.expenseModal.among.length ? s.expenseModal.among : allIds }) } : null)),
+      emSetMe: () => this.patchEm({ splitMode: "me" }),
+      emSplitRows: tm.map((m) => {
+        const on = splitIds.includes(m.id); const interactive = em.splitMode === "custom";
+        return {
+          off: on ? "" : "off", rowStyle: interactive ? { cursor: "pointer" } : undefined,
+          toggle: interactive ? () => this.toggleAmong(m.id) : undefined,
+          hue: this.hueOf(m), ini: this.initials(m.name), name: m.name,
+          basis: interactive && on ? (em.customAmts[m.id] !== undefined ? "exact" : "rest") : "equal",
+          showInput: interactive && on, inputVal: em.customAmts[m.id] !== undefined ? em.customAmts[m.id] : "",
+          ph: String(Math.round(autoShare * 100) / 100), onAmt: (ev) => this.setCustomAmt(m.id, ev.target.value),
+          showAmt: !(interactive && on), amt: this.fmt(on ? shareOf(m.id) : 0, em.cur),
+        };
+      }),
+      emShowSum: em.splitMode === "custom", emSumCls: mismatch ? "off-total" : "",
+      emSumLabel: mismatch ? "Assigned " + this.fmt(assigned, em.cur) + " of " + this.fmt(amt, em.cur) + " — adjust the amounts" : "Assigned " + this.fmt(assigned, em.cur) + " of " + this.fmt(amt, em.cur),
+      emInvalid: !valid, emSubmitLabel: em.id ? "Save changes" : "Add expense",
+      emSubmit: () => { if (!valid || !trip) return; const base = em.base || { id: this.uid(), createdAt: this.nowIso() }; const e = Object.assign({}, base, { title: em.title.trim(), amount: amt, currency: em.cur, category: em.category || undefined, date: em.date, paidBy: em.paidBy, splitAmong: splitIds, customWeights: em.splitMode === "custom" ? Object.fromEntries(splitIds.map((id) => [id, Math.round(shareOf(id) * 100) / 100])) : undefined, receipt: em.receipt || undefined, updatedAt: this.nowIso() }); this.saveTripExpense(trip, e); this.setState({ expenseModal: null }); },
+      emClose: () => this.setState({ expenseModal: null }),
+      emDelete: () => { if (trip && em.id) this.removeTripExpense(trip, em.id); this.setState({ expenseModal: null }); },
+    };
+  }
+  toggleAmong(id) { this.setState((s) => { const em = s.expenseModal; if (!em) return null; const has = em.among.includes(id); return { expenseModal: Object.assign({}, em, { among: has ? em.among.filter((x) => x !== id) : em.among.concat([id]) }) }; }); }
+  setCustomAmt(id, v) { this.setState((s) => { const em = s.expenseModal; if (!em) return null; const next = Object.assign({}, em.customAmts); if (v === "") delete next[id]; else next[id] = v; return { expenseModal: Object.assign({}, em, { customAmts: next }) }; }); }
+
+  valsSettleModal() {
+    const sm = this.state.settleModal;
+    if (!sm) return { smOpen: false };
+    const trip = this.openTrip();
+    const tm = trip ? this.tripMembers(trip) : this.state.budget.members;
+    const main = trip ? (trip.mainCurrency || "CZK") : this.state.budget.currency;
+    const secondary = trip ? (trip.secondaryCurrency || "EUR") : "EUR";
+    const curOptions = trip ? this.tripCurrencyOptions(main, secondary) : this.CURRENCIES;
+    const amt = Number(sm.amount) || 0;
+    const valid = sm.from && sm.to && sm.from !== sm.to && amt > 0;
+    const chip = (value, which, exclude) => tm.map((m) => ({ name: m.name, ini: this.initials(m.name), hue: this.hueOf(m), on: value === m.id ? "on" : "", disabled: m.id === exclude, style: m.id === exclude ? { opacity: 0.35, cursor: "default" } : undefined, pick: () => this.patchSm(which === "from" ? { from: m.id } : { to: m.id }) }));
+    return {
+      smOpen: true, smIsEdit: !!sm.id,
+      smHeading: sm.id ? "Edit statement" : "Log a settle-up payment",
+      smFromChips: chip(sm.from, "from", sm.to), smToChips: chip(sm.to, "to", sm.from),
+      smCur: sm.cur, smSetCur: (e) => this.patchSm({ cur: e.target.value }), smCurOptions: curOptions.map((v) => ({ v })),
+      smAmount: sm.amount, smSetAmount: (e) => this.patchSm({ amount: e.target.value }),
+      smDate: sm.date, smSetDate: (e) => this.patchSm({ date: e.target.value }),
+      smInvalid: !valid, smSubmitLabel: sm.id ? "Save changes" : "Log payment",
+      smSubmit: () => { if (!valid || !trip) return; const nameOf = (id) => { const m = tm.find((x) => x.id === id); return m ? m.name : "?"; }; const base = sm.base || { id: this.uid(), createdAt: this.nowIso() }; const e = Object.assign({}, base, { title: nameOf(sm.from) + " paid " + nameOf(sm.to), amount: amt, currency: sm.cur, category: undefined, date: sm.date, paidBy: sm.from, splitAmong: [sm.to], customWeights: undefined, settlement: true, updatedAt: this.nowIso() }); const wasSquared = this.tripStats(trip).squared; this.saveTripExpense(trip, e); const nextExpenses = (trip.expenses || []).some((x) => x.id === e.id) ? (trip.expenses || []).map((x) => (x.id === e.id ? e : x)) : [e].concat(trip.expenses || []); if (!wasSquared && this.tripStats(Object.assign({}, trip, { expenses: nextExpenses })).squared) { this.confetti(); this.toast("All square 🎉"); } this.setState({ settleModal: null }); },
+      smClose: () => this.setState({ settleModal: null }),
+      smDelete: () => { if (trip && sm.id) this.removeTripExpense(trip, sm.id); this.setState({ settleModal: null }); },
+    };
+  }
+
+  valsTripModal() {
+    const tf = this.state.tripModal;
+    if (!tf) return { tmOpen: false };
+    const members = this.state.budget.members;
+    const dateError = (() => { if (!tf.start || !tf.end) return ""; const sT = new Date(tf.start).getTime(); const eT = new Date(tf.end).getTime(); if (eT < sT) return "End date can't be before the start date."; if ((eT - sT) / 86400000 > 366) return "A trip can't be longer than a year."; return ""; })();
+    const maxEnd = tf.start ? new Date(new Date(tf.start).getTime() + 366 * 86400000).toISOString().slice(0, 10) : undefined;
+    const valid = tf.name.trim().length > 0 && !dateError;
+    return {
+      tmOpen: true, tmIsEdit: !!tf.id, tmHeading: tf.id ? "Edit trip" : "Plan a trip",
+      tmName: tf.name, tmSetName: (e) => this.patchTm({ name: e.target.value }),
+      tmDest: tf.dest, tmSetDest: (e) => this.patchTm({ dest: e.target.value }),
+      tmStart: tf.start, tmStartMax: tf.end || undefined, tmSetStart: (e) => this.patchTm({ start: e.target.value }),
+      tmEnd: tf.end, tmEndMin: tf.start || undefined, tmEndMax: maxEnd, tmSetEnd: (e) => this.patchTm({ end: e.target.value }),
+      tmEndToday: () => this.patchTm({ end: this.today() }),
+      tmHasErr: !!dateError, tmDateErr: dateError,
+      tmMain: tf.main, tmSetMain: (e) => this.patchTm({ main: e.target.value }),
+      tmSec: tf.sec, tmSetSec: (e) => this.patchTm({ sec: e.target.value }), tmCurrencies: this.CURRENCIES.map((v) => ({ v })),
+      tmEmojis: this.TRIP_EMOJIS.map((e) => ({ e, on: tf.emoji === e ? "on" : "", pick: () => this.patchTm({ emoji: e }) })),
+      tmHues: this.TRIP_ACCENTS.map((c) => ({ c, on: tf.accent === c ? "on" : "", pick: () => this.patchTm({ accent: c }) })),
+      tmMemberChips: members.map((m) => ({ name: m.name, ini: this.initials(m.name), hue: this.hueOf(m), on: tf.memberIds.includes(m.id) ? "on" : "", pick: () => this.toggleTmMember(m.id) })),
+      tmInvalid: !valid, tmSubmitLabel: tf.id ? "Save" : "Create trip",
+      tmSubmit: () => { if (valid) this.submitTrip(tf); },
+      tmClose: () => this.setState({ tripModal: null }),
+      tmRemove: tf.id ? () => this.removeTrip(tf.id) : undefined,
+    };
+  }
+  toggleTmMember(id) { this.setState((s) => { const t = s.tripModal; if (!t) return null; const has = t.memberIds.includes(id); return { tripModal: Object.assign({}, t, { memberIds: has ? t.memberIds.filter((x) => x !== id) : t.memberIds.concat([id]) }) }; }); }
+  submitTrip(tf) {
+    const trip = { id: tf.id || this.uid(), name: tf.name.trim(), emoji: tf.emoji, destination: tf.dest.trim() || undefined, startDate: tf.start || undefined, endDate: tf.end || undefined, datesTBD: !tf.start && !tf.end, color: tf.accent, cover: (tf.base && tf.base.cover) || undefined, mainCurrency: tf.main, secondaryCurrency: tf.sec, memberIds: tf.memberIds, expenses: (tf.base && tf.base.expenses) || [], createdAt: (tf.base && tf.base.createdAt) || this.nowIso(), updatedAt: this.nowIso() };
+    if (tf.id) { this.updateTrip(trip); this.setState({ tripModal: null }); }
+    else { this.setBudget((b) => Object.assign({}, b, { trips: (b.trips || []).concat([trip]) })); this.setState({ tripModal: null, view: "trips", openTripId: trip.id }); }
+  }
+  removeTrip(id) { this.setBudget((b) => Object.assign({}, b, { trips: (b.trips || []).filter((t) => t.id !== id) })); this.setState({ tripModal: null, openTripId: null }); }
+
+  valsPersonModal() {
+    const pm = this.state.personModal;
+    if (!pm) return { pmOpen: false };
+    const trips = this.state.budget.trips || [];
+    const isEdit = !!pm.id;
+    const valid = pm.name.trim().length > 0;
+    const scopeTrip = !pm.isAdmin ? trips.find((t) => t.id === pm.tripId) : undefined;
+    const url = isEdit ? this.shareUrl(pm.id, scopeTrip ? scopeTrip.id : undefined) : "";
+    return {
+      pmOpen: true, pmIsEdit: isEdit, pmIsNew: !isEdit, pmEyebrow: isEdit ? "Edit person" : "Add a person",
+      pmName: pm.name, pmSetName: (e) => this.patchPm({ name: e.target.value }),
+      pmIsAdmin: pm.isAdmin, pmToggleAdmin: (e) => this.patchPm({ isAdmin: e.target.checked }),
+      pmShowTripSel: !pm.isAdmin && trips.length > 0,
+      pmTripId: pm.tripId, pmSetTrip: (e) => this.patchPm({ tripId: e.target.value }),
+      pmTripOptions: trips.map((t) => ({ id: t.id, label: (t.emoji ? t.emoji + " " : "") + t.name })),
+      pmLinkLab: scopeTrip ? "Trip link — " + (pm.name || "they") + " can only open “" + scopeTrip.name + "”" : "Personal link — send to " + (pm.name || "them") + " so they can add expenses as themselves",
+      pmShareUrl: url,
+      pmCopy: () => { this.copy(url, scopeTrip ? "Trip link copied" : "Link copied"); this.patchPm({ copied: true }); setTimeout(() => this.patchPm({ copied: false }), 1500); },
+      pmCopyLabel: pm.copied ? "Copied ✓" : "Copy link",
+      pmInvalid: !valid, pmSubmitLabel: isEdit ? "Save" : "Add person",
+      pmSubmit: () => { if (valid) this.savePerson(pm); },
+      pmApply: () => { if (valid) this.applyPerson(pm); },
+      pmClose: () => this.setState({ personModal: null }),
+      pmRemove: isEdit ? () => this.removePerson(pm.id) : undefined,
+    };
+  }
+  savePerson(pm) {
+    const name = pm.name.trim();
+    if (!name) return;
+    if (!pm.id) { const m = { id: this.uid(), name, role: "member", createdAt: this.nowIso() }; this.setBudget((b) => Object.assign({}, b, { members: b.members.concat([m]) })); this.openPersonModal(m); return; }
+    this.persistAccess(pm.id, name, { isAdmin: pm.isAdmin, tripId: pm.tripId });
+    this.setState({ personModal: null });
+  }
+  applyPerson(pm) { const name = pm.name.trim(); if (!name || !pm.id) return; this.persistAccess(pm.id, name, { isAdmin: pm.isAdmin, tripId: pm.tripId }); this.toast("Changes applied"); }
+  persistAccess(id, name, access) {
+    this.updateUser(id, Object.assign({ name }, access ? { role: access.isAdmin ? "admin" : "member" } : {}));
+    if (access && !access.isAdmin && access.tripId) this.setExclusiveTripMembership(id, access.tripId);
+  }
+  setExclusiveTripMembership(memberId, tripId) {
+    const trips = this.state.budget.trips || [];
+    trips.forEach((trip) => {
+      const ids = trip.memberIds || []; const has = ids.includes(memberId);
+      if (trip.id === tripId && !has) this.updateTrip(Object.assign({}, trip, { memberIds: ids.concat([memberId]), updatedAt: this.nowIso() }));
+      else if (trip.id !== tripId && has) this.updateTrip(Object.assign({}, trip, { memberIds: ids.filter((x) => x !== memberId), updatedAt: this.nowIso() }));
+    });
+  }
+  removePerson(id) { this.setBudget((b) => Object.assign({}, b, { members: b.members.filter((m) => m.id !== id) })); this.setState({ personModal: null }); }
+
+  valsTxDetail() {
+    const tx = this.state.txDetail;
+    if (!tx) return { txOpen: false };
+    const trip = this.openTrip();
+    if (!trip) return { txOpen: false };
+    const tm = this.tripMembers(trip);
+    const main = trip.mainCurrency || "CZK";
+    const splitBasis = this.state.budget.splitBasis;
+    const mainExp = (trip.expenses || []).map((e) => Object.assign({}, e, { amount: this.convert(e.amount, e.currency, main), currency: main }));
+    const stats = this.tripStats(trip);
+    const ledgerOf = (mid) => mainExp.map((e) => { const share = this.expenseShares(tm, e, splitBasis).get(mid) || 0; const paidAmt = e.paidBy === mid ? e.amount : 0; return { e, paid: paidAmt, share, net: paidAmt - share }; }).filter((l) => l.paid > 0.005 || l.share > 0.005);
+    const sgn = (v) => (v < 0 ? "−" : "+") + this.fmt(Math.abs(v), main);
+    const netOf = (mid) => { const bb = stats.balances.find((x) => x.member.id === mid); return bb ? bb.net : 0; };
+    const sections = [tx.from, tx.to].map((m) => {
+      const lines = ledgerOf(m.id);
+      const paidSum = lines.reduce((s, l) => s + l.paid, 0); const shareSum = lines.reduce((s, l) => s + l.share, 0); const net = paidSum - shareSum;
+      return {
+        name: m.name, netCls: net >= 0 ? "pos" : "neg", netLab: sgn(net), paidSum: this.fmt(paidSum, main), shareSum: this.fmt(shareSum, main),
+        lines: lines.map((l) => ({ title: l.e.title || (l.e.settlement ? "Settlement" : "Expense"), meta: (l.e.settlement ? "Settlement" : l.e.category || "Other") + " · " + this.dateLabel(l.e.date), hasPaid: l.paid > 0.005, paidLab: "paid " + this.fmt(l.paid, main), hasShare: l.share > 0.005, shareLab: l.e.settlement ? "received " + this.fmt(l.share, main) : "share −" + this.fmt(l.share, main), netCls: l.net >= 0 ? "pos" : "neg", netLab: sgn(l.net) })),
+      };
+    });
+    return {
+      txOpen: true, txClose: () => this.setState({ txDetail: null }),
+      txTitle: tx.from.name + " → " + tx.to.name + " · " + this.fmt(tx.amount, main),
+      txDesc: "Everything below is in " + main + ". For each expense: what the person paid in, minus their share of it, gives the line's effect on their balance.",
+      txSections: sections,
+      txNote: "To square up in the fewest payments, the biggest debt is paired with the biggest credit until nothing is left: " + tx.from.name + " owes " + this.fmt(Math.abs(netOf(tx.from.id)), main) + ", " + tx.to.name + " is owed " + this.fmt(netOf(tx.to.id), main) + " — so " + this.fmt(tx.amount, main) + " goes from " + tx.from.name + " to " + tx.to.name + ".",
+      txMatches: stats.transfers.map((t) => ({ label: t.from.name + " → " + t.to.name, amt: this.fmt(t.amount, main), on: t.from.id === tx.from.id && t.to.id === tx.to.id ? "on" : "" })),
+    };
+  }
+
+  valsSmallDialogs(openTrip) {
+    const s = this.state;
+    const ex = { exOpen: !!s.extractDlg && !!openTrip, exClose: () => this.setState({ extractDlg: false }), exTitle: openTrip ? "Extract “" + openTrip.name + "”" : "", exJson: () => { this.setState({ extractDlg: false }); if (openTrip) this.exportTripJson(openTrip); }, exCsv: () => { this.setState({ extractDlg: false }); if (openTrip) this.exportTripCsv(openTrip); } };
+    const tm = openTrip ? this.tripMembers(openTrip) : [];
+    const inv = { invOpen: !!s.invite && !!openTrip, invClose: () => this.setState({ invite: false }), invRows: tm.map((m) => ({ name: m.name, ini: this.initials(m.name), hue: this.hueOf(m), copy: () => this.copy(this.shareUrl(m.id, openTrip.id), "Trip link copied") })) };
+    const qm = s.qrFor ? this.state.budget.members.find((m) => m.id === s.qrFor) : null;
+    const qrUrl = qm ? this.shareUrl(qm.id) : "";
+    const qrImg = qm ? this.qrDataUrl(qrUrl) : "";
+    const qr = { qrOpen: !!qm, qrClose: () => this.setState({ qrFor: null }), qrTitle: qm ? qm.name : "", qrUrl, qrHasImg: !!qrImg, qrImgEl: qrImg ? React.createElement("img", { src: qrImg, alt: "QR code", width: 212, height: 212, style: { display: "block", imageRendering: "pixelated" } }) : null, qrCopy: () => { this.copy(qrUrl, "Link copied"); this.setState({ qrCopied: true }); setTimeout(() => this.setState({ qrCopied: false }), 1500); }, qrCopyLabel: s.qrCopied ? "Copied ✓" : "Copy link" };
+    return Object.assign({}, ex, inv, qr);
+  }
+}
+</script>
+</body>
+</html>

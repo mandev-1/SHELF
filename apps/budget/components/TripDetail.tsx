@@ -13,6 +13,7 @@ import type {
 } from "../lib/budget-types";
 import {
   Avatar,
+  CountUp,
   expenseShares,
   fmt,
   initials,
@@ -23,6 +24,7 @@ import {
   uid,
   type Transfer,
 } from "../lib/budget-format";
+import { confettiBurst } from "../lib/confetti";
 import { convert, fmtSecondary, tripCurrencyOptions } from "../lib/currency";
 import { tripStats, tripMembers, tripMetaLabel } from "../lib/trips";
 import { ExpenseModal } from "./BudgetPanel";
@@ -218,6 +220,30 @@ export function TripDetail({
     }
     return days;
   })();
+  // Handoff 0001 "Where it went": per-category totals in the main currency,
+  // settlements excluded. Drives the stacked bar + top-5 legend.
+  const catTotals = (() => {
+    const map = new Map<string, number>();
+    for (const e of expenses) {
+      if (e.settlement || e.amount <= 0) continue;
+      const c = e.category || "Other";
+      map.set(c, (map.get(c) ?? 0) + convert(e.amount, e.currency, main));
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  })();
+  const catSum = catTotals.reduce((s, [, v]) => s + v, 0);
+
+  // Handoff 0001 "Copy summary": plain-text settle-up digest for the group chat.
+  const copySummary = () => {
+    const head = `${trip.emoji ? trip.emoji + " " : ""}${trip.name}${trip.destination?.trim() ? ` — ${trip.destination.trim()}` : ""}`;
+    const spend = `Spend ${fmt(stats.total, main)} · ${fmt(stats.perPerson, main)} per person · ${stats.travellers} travelling`;
+    const settle = stats.transfers.length
+      ? ["To settle:", ...stats.transfers.map((t) => `• ${t.from.name} → ${t.to.name}: ${fmt(t.amount, main)}`)].join("\n")
+      : "All square ✓";
+    navigator.clipboard.writeText([head, spend, settle].join("\n"));
+    toast("Summary copied — paste it in the group chat");
+  };
+
   // Handoff 009 Reconcile card: the trip's cover photo behind a near-white scrim.
   const recStyle = trip.cover
     ? {
@@ -283,7 +309,7 @@ export function TripDetail({
   };
 
   return (
-    <div>
+    <div className="gb-view-in">
       {/* Hero */}
       <div className="card gb-trip-hero" style={heroStyle}>
         {trip.cover && (
@@ -409,7 +435,7 @@ export function TripDetail({
               margin: "4px 0 2px",
             }}
           >
-            {dual(stats.total)}
+            <CountUp value={stats.total} fmt={dual} />
           </div>
           <div style={{ fontSize: 11.5, color: "var(--dim)" }}>
             {(() => {
@@ -431,7 +457,7 @@ export function TripDetail({
               margin: "4px 0 2px",
             }}
           >
-            {dual(stats.perPerson)}
+            <CountUp value={stats.perPerson} fmt={dual} />
           </div>
           <div style={{ fontSize: 11.5, color: "var(--dim)" }}>{stats.travellers} travelling</div>
         </div>
@@ -455,7 +481,7 @@ export function TripDetail({
               margin: "4px 0 2px",
             }}
           >
-            {dual(stats.squared ? 0 : stats.toSettle)}
+            <CountUp value={stats.squared ? 0 : stats.toSettle} fmt={dual} />
           </div>
           <div style={{ fontSize: 11.5, color: "var(--dim)" }}>
             {stats.squared ? "all square" : "to settle"}
@@ -476,6 +502,36 @@ export function TripDetail({
           </button>
         )}
       </div>
+
+      {/* Where it went — category breakdown (handoff 0001); hidden with no spend */}
+      {catSum > 0 && (
+        <section className="card gb-went">
+          <div className="gb-went-head">
+            <span className="card-eyebrow">WHERE IT WENT</span>
+            <span className="gb-went-lead">
+              {catTotals[0][0]} leads · {Math.round((catTotals[0][1] / catSum) * 100)}%
+            </span>
+          </div>
+          <div className="gb-went-bar">
+            {catTotals.map(([c, amt]) => (
+              <span
+                key={c}
+                className="gb-went-seg"
+                style={{ width: `${(amt / catSum) * 100}%`, background: catHue(c) }}
+                title={`${c} · ${fmt(amt, main)}`}
+              />
+            ))}
+          </div>
+          <div className="gb-went-legend">
+            {catTotals.slice(0, 5).map(([c, amt]) => (
+              <span key={c} className="gb-went-item">
+                <span className="gb-went-swatch" style={{ background: catHue(c) }} />
+                {c} <span className="gb-went-amt">{fmt(amt, main)}</span>
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Desktop: "Who paid what" + "Settle up" sit side by side; ≤900px they
           fall back to the stacked phone layout (.tc-board glue in budget.css). */}
@@ -585,6 +641,14 @@ export function TripDetail({
             <div className="tc-eyebrow">Reconcile</div>
             <div className="tc-title">Settle up</div>
           </div>
+          <button
+            type="button"
+            className="tc-copy-btn"
+            onClick={copySummary}
+            title="Copy a plain-text settle-up summary for the group chat"
+          >
+            Copy summary
+          </button>
           {onReconcileChange ? (
             <button
               type="button"
@@ -975,8 +1039,21 @@ export function TripDetail({
           currencies={tripCurrencyOptions(main, secondary)}
           defaultCurrency={main}
           onSave={(e) => {
+            // Confetti fires only on the unsettled → squared transition caused
+            // by this payment — computed on the would-be list before committing.
+            const existed = (trip.expenses ?? []).some((x) => x.id === e.id);
+            const nextExpenses = existed
+              ? (trip.expenses ?? []).map((x) => (x.id === e.id ? e : x))
+              : [e, ...(trip.expenses ?? [])];
+            const willSquare =
+              !stats.squared &&
+              tripStats({ ...trip, expenses: nextExpenses }, members, splitBasis, reconcile).squared;
             saveExpense(e);
             setSettleModal(null);
+            if (willSquare) {
+              confettiBurst();
+              toast("All square 🎉");
+            }
           }}
           onRemove={(id) => {
             removeExpense(id);
