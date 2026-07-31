@@ -39,12 +39,13 @@ import {
   type BudgetMember,
   type BudgetExpense,
   type BudgetTrip,
-  type DirectoryListItem,
   normalizeStrategie,
   normalizeVfGoals,
   DEFAULT_BUDGET_STATE,
   SAVINGS_PLAN_HUES,
 } from "../types/grid";
+import { emptyListsState, type ListsState } from "../types/lists";
+import { normalizeListsState } from "../utils/listsMigration";
 void (undefined as unknown as SaleStatus);
 void (undefined as unknown as InvCategory);
 
@@ -176,23 +177,6 @@ const STRATEGIE_KEY = "shelf-strategie";
 const VF_GOALS_KEY = "shelf-vf-goals";
 const BUDGET_KEY = "shelf-budget";
 const SHOW_BUDGET_TAB_KEY = "shelf-show-budget-tab";
-
-function normalizeDirectoryListItems(raw: unknown): DirectoryListItem[] {
-  if (!Array.isArray(raw)) return [];
-  const out: DirectoryListItem[] = [];
-  for (const r of raw) {
-    if (!r || typeof r !== "object") continue;
-    const o = r as Record<string, unknown>;
-    const title = typeof o.title === "string" ? o.title.trim() : "";
-    if (!title) continue;
-    out.push({
-      id: typeof o.id === "string" && o.id ? o.id : crypto.randomUUID(),
-      title,
-      description: typeof o.description === "string" && o.description.trim() ? o.description.trim() : undefined,
-    });
-  }
-  return out;
-}
 
 function normalizeBuylist(raw: unknown): BuylistItem[] {
   if (!Array.isArray(raw)) return [];
@@ -488,7 +472,7 @@ export function useShelfStorage() {
   const [vfGoals, setVfGoalsState] = useState<VfGoal[]>(() => normalizeVfGoals(undefined));
   const [budgetState, setBudgetState] = useState<BudgetState>(() => normalizeBudget(null));
   const [showBudgetTab, setShowBudgetTabState] = useState(true);
-  const [lists, setListsState] = useState<DirectoryListItem[]>([]);
+  const [lists, setListsState] = useState<ListsState>(() => emptyListsState());
   const [ready, setReady] = useState(false);
 
   const load = useCallback(() => {
@@ -672,7 +656,7 @@ export function useShelfStorage() {
       setShowInventoryTabState(result[SHOW_INVENTORY_TAB_KEY] !== false);
       setShowBudgetTabState   (result[SHOW_BUDGET_TAB_KEY]    !== false);
       setBudgetState(normalizeBudget(result[BUDGET_KEY]));
-      setListsState(normalizeDirectoryListItems(result[LISTS_KEY]));
+      setListsState(normalizeListsState(result[LISTS_KEY]));
       setBuylistState(normalizeBuylist(result[BUYLIST_KEY]));
       setHopperFaceState(result[HOPPER_FACE_KEY] === "sell" ? "sell" : "buy");
       setSaleItemsState(normalizeSaleItems(result[SALE_ITEMS_KEY]));
@@ -1475,10 +1459,10 @@ export function useShelfStorage() {
     getStorage()?.set({ [SHOW_BUDGET_TAB_KEY]: next });
   }, []);
 
-  const setLists = useCallback((next: DirectoryListItem[] | ((prev: DirectoryListItem[]) => DirectoryListItem[])) => {
+  const setLists = useCallback((next: ListsState | ((prev: ListsState) => ListsState)) => {
     setListsState((prev) => {
-      const value = typeof next === "function" ? (next as (p: DirectoryListItem[]) => DirectoryListItem[])(prev) : next;
-      const normalized = normalizeDirectoryListItems(value);
+      const value = typeof next === "function" ? (next as (p: ListsState) => ListsState)(prev) : next;
+      const normalized = normalizeListsState(value);
       getStorage()?.set({ [LISTS_KEY]: normalized });
       return normalized;
     });
@@ -1721,7 +1705,7 @@ export function useShelfStorage() {
     if (Array.isArray(backup.inventory)) setInventory(normalizeInventory(backup.inventory));
     if (Array.isArray(backup.vfGoals)) setVfGoalsState(normalizeVfGoals(backup.vfGoals));
     if (backup.budget) setBudget(normalizeBudget(backup.budget));
-    if (Array.isArray(backup.lists)) setLists(backup.lists as DirectoryListItem[]);
+    if (backup.lists) setLists(normalizeListsState(backup.lists));
 
     const st = getStorage();
     const writePayload = {
@@ -1765,7 +1749,7 @@ export function useShelfStorage() {
       [INVENTORY_KEY]: Array.isArray(backup.inventory) ? normalizeInventory(backup.inventory) : inventoryItems,
       [VF_GOALS_KEY]: Array.isArray(backup.vfGoals) ? normalizeVfGoals(backup.vfGoals) : vfGoals,
       [BUDGET_KEY]: backup.budget ? normalizeBudget(backup.budget) : budgetState,
-      [LISTS_KEY]: Array.isArray(backup.lists) ? backup.lists : lists,
+      [LISTS_KEY]: backup.lists ? normalizeListsState(backup.lists) : lists,
       [SHOW_STRATEGIE_TAB_KEY]: typeof backup.showStrategieTab === "boolean" ? backup.showStrategieTab : showStrategieTab,
       [SHOW_HOPPER_TAB_KEY]: typeof backup.showHopperTab === "boolean" ? backup.showHopperTab : showHopperTab,
       [SHOW_INVENTORY_TAB_KEY]: typeof backup.showInventoryTab === "boolean" ? backup.showInventoryTab : showInventoryTab,

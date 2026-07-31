@@ -25,7 +25,7 @@ import { BuylistPanel } from "./components/Hopper/BuylistPanel";
 import { StrategiePanel } from "./components/Strategie/StrategiePanel";
 import { InventoryPanel } from "./components/Inventory/InventoryPanel";
 import { BudgetPanel } from "./components/Budget/BudgetPanel";
-import { DirectoryList } from "./components/Lists";
+import { ListsPanel } from "./components/Lists";
 import { pickCelebrationPhrase } from "./utils/celebration";
 import type { ShelfPillarTodoItem } from "./types/grid";
 
@@ -684,17 +684,7 @@ export default function FullApp() {
             </div>
           ) : dashboardView === "lists" ? (
             <div className="max-w-[1640px] mx-auto px-6 py-6">
-              <DirectoryList
-                items={lists}
-                title="Lists"
-                emptyLabel="Create your first list item"
-                onChange={setLists}
-                createItem={(index) => ({
-                  id: crypto.randomUUID(),
-                  title: `Item ${index + 1}`,
-                  description: "",
-                })}
-              />
+              <ListsPanel lists={lists} onChange={setLists} />
             </div>
           ) : dashboardView === "visual-flow" ? (
             <div className="w-full">
